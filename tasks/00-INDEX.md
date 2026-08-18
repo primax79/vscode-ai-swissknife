@@ -14,11 +14,11 @@ status.
 | --- | --- | --- | --- | --- | --- |
 | 1 | 01 | [Project scaffold](01-project-scaffold/plan.md) | ✅ done | — | S |
 | 2 | 02 | [Domain types + registry store](02-domain-and-registry/plan.md) | ✅ done | 01 | S |
-| 3 | 03 | [Claude + Kilo adapters (skill+rule)](03-claude-kilo-adapters/plan.md) | partial (03.1 done, 03.2/03.3 open) | 02 | M |
-| 4 | 04 | [Source resolver (git-custom + local-folder)](04-source-resolver/plan.md) | partial (04.1 done, 04.2 open) | 02 | M |
+| 3 | 03 | [Claude + Kilo adapters (skill+rule)](03-claude-kilo-adapters/plan.md) | partial (03.1/03.2 done, 03.3 open) | 02 | M |
+| 4 | 04 | [Source resolver (git-custom + local-folder)](04-source-resolver/plan.md) | ✅ done | 02 | M |
 | 5 | 05 | [Canonical model + translator (skill+rule)](05-translator-skill/plan.md) | open | 03, 04 | M |
 | 6 | 06 | [Install engine (pipeline)](06-install-engine/plan.md) | open | 05 | M |
-| 7 | 07 | [Minimal UI (3 views)](07-minimal-ui/plan.md) | planned, not yet detailed | 06 | M |
+| 7 | 07 | [Minimal UI (3 views)](07-minimal-ui/plan.md) | open | 06 | M |
 
 Everything above is SPEC.md §6 "Phase 1" (see
 [`specs/foundations.md`](specs/foundations.md)). Phase 2 (agent/mcp-server/
