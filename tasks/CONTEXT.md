@@ -16,11 +16,12 @@ model, risk list, and phased roadmap: `../SPEC.md`.
 
 ## Codebase map
 
-No source code exists yet — this repo currently holds only `SPEC.md`,
-`references/` (gitignored, local research material), and this `tasks/`
-tree. Initiative 01 creates the extension scaffold. Once it lands, this
-section must be updated with the real `src/` layout (annotate additions:
-"added by initiative NN").
+Initiatives 01-05 are implemented (`src/domain/`, `src/adapters/`,
+`src/sources/`, `src/translator/`) — **this paragraph is a pointer, not a
+snapshot**: run `find src -name '*.ts' ! -name '*.test.ts'` for the live
+list rather than trusting a hand-maintained tree here, since it drifts
+every time an initiative lands (this is itself I12 from the second Codex
+review, `_inbox/analyzed/codex-analysis-2.md` — don't let it drift again).
 
 ## Reference material already in the repo (don't re-fetch, don't re-clone)
 
@@ -102,15 +103,48 @@ section must be updated with the real `src/` layout (annotate additions:
   *Why:* the user must see the plan (files touched, conflicts, diagnostics)
   before anything is written. See `SPEC.md` §2.
 - **`Source` and the registry both have global + project scope** — a
-  `Source` (and a `ManagedInstallation`) registers either personally
-  (`~/.ai-toolkit/registry.json`) or shared with the team via git
-  (`.ai-toolkit/registry.json` in the workspace); a project-level `Source`
-  must never leak into other workspaces. *Why:* explicit user requirement.
-  See `SPEC.md` §1.
+  `Source` (and a `ManagedInstallation`) registers either personally or
+  shared with the team via git; a project-level `Source` must never leak
+  into other workspaces. *Why:* explicit user requirement. See `SPEC.md`
+  §1. (Exact paths: see the data-directory-rename decision below —
+  `.ai-toolkit` was renamed to `.ai-swissknife`.)
 - **`git-custom` (generic HTTPS/SSH repo, no required manifest) is the
   highest-priority `Source` type** — it's the actual motivating case (§0),
   and must be solved before `git-marketplace`/`remote-url`/
   `git-single-item`. See `SPEC.md` §1 and §6 Phase 1.
+- **Hardening gate inserted before initiative 06** (new, 2026-08-18) — a
+  second Codex review of the actual code (not just the spec) found real
+  contract gaps at the resolver/install/registry boundary: `Artifact` had
+  no way to fetch real content, `CanonicalSkill` only modeled `SKILL.md`
+  and dropped a skill's other files, the registry mixed shareable and
+  machine-local state, `apply` wasn't atomic, untrusted artifact
+  names/paths weren't validated, and "preserve unknown fields verbatim"
+  wasn't actually implemented. *Why:* explicit user decision to fix these
+  before 06/07 lock in a plan/apply/UI contract on top of them — see
+  `SPEC.md` §7 and `_inbox/analyzed/codex-analysis-2.md` for full detail.
+  New initiatives `02.3`/`03.4`/`04.3`/`05.2` close these gaps; `06`/`07`
+  were rewritten (not just extended) since no code existed yet for
+  either.
+- **Data directory renamed `.ai-toolkit` → `.ai-swissknife`** (initiative
+  02.3) — match the product name before any real user has data under the
+  old path; renaming after release would need a migration. *Why:* SPEC.md
+  §7 / Codex review finding I13.
+- **YAML preservation guarantee: semantic, not byte-verbatim** (initiative
+  03.4) — use a real YAML parser (`yaml` npm package) and accept
+  canonical reformatting on write, rather than claiming to preserve the
+  original document verbatim (comments/anchors/quoting style) when the
+  implementation doesn't actually do that. *Why:* SPEC.md §7 / Codex
+  review finding B6 — don't overclaim a guarantee the code doesn't meet.
+- **`rule` is deferred to Phase 2 for the resolver/install/UI path** — the
+  Claude/Kilo `rule` *adapters* stay as already built (dormant, unused by
+  any resolver yet), but no resolver discovers a `rule` `Artifact` and no
+  install-engine/UI task exposes installing one in Phase 1. *Why:* SPEC.md
+  §7 / Codex review finding I7 — installing a rule safely needs a
+  merge/composition policy (a project `CLAUDE.md` is often a pre-existing
+  shared document, not something to overwrite wholesale) that doesn't
+  exist yet; claiming rule as "validated by the vertical slice" when
+  nothing actually exercises it end-to-end would be dishonest about what
+  Phase 1 proved.
 
 ## Conventions
 

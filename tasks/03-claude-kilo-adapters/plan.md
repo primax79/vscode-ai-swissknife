@@ -4,9 +4,10 @@
 
 Tasks (each = one commit; hand one file at a time to a delegated agent):
 
-1. [03.1 — Adapter interface](03.1-adapter-interface.md)
-2. [03.2 — Claude Code adapter](03.2-claude-adapter.md)
-3. [03.3 — Kilo Code adapter](03.3-kilo-adapter.md)
+1. [03.1 — Adapter interface](03.1-adapter-interface.md) — done
+2. [03.2 — Claude Code adapter](03.2-claude-adapter.md) — done
+3. [03.3 — Kilo Code adapter](03.3-kilo-adapter.md) — done
+4. [03.4 — Shared skill codec, path validation, directory payload (hardening)](03.4-hardening.md)
 
 Shared decisions for this initiative that every task must honour:
 
@@ -29,10 +30,16 @@ Shared decisions for this initiative that every task must honour:
     `~/.claude/CLAUDE.md`.
   - Kilo `skill`: project `<projectRoot>/.kilo/skills/<name>/SKILL.md`,
     global `~/.kilo/skills/<name>/SKILL.md` (SPEC.md §1, `paths.ts:21-24`).
-  - Kilo `rule`: Kilo reads `AGENTS.md`/`CLAUDE.md` at project root and
-    `~/.config/kilo/AGENTS.md` globally **natively**, same as Claude's own
-    file — the Kilo adapter's `writeRule` can write the exact same
-    `CLAUDE.md` path Claude's adapter writes (SPEC.md §5 "rule
-    convergence"). Don't invent a separate Kilo-specific rule file for
-    this task.
-- This initiative depends on 02 (needs `src/domain/types.ts`).
+  - Kilo `rule`: **project scope only** shares Claude's exact file —
+    `<projectRoot>/CLAUDE.md`, same path Claude's adapter writes (SPEC.md
+    §5 "rule convergence"), because Kilo reads it natively at that path
+    with no translation needed. **Global scope does NOT share Claude's
+    home** — Kilo's own native global rule file is
+    `~/.config/kilo/AGENTS.md`, not `~/.claude/CLAUDE.md`. (Corrected
+    2026-08-18, second Codex review finding I11 — an earlier version of
+    this bullet said the two paths could be shared unconditionally for
+    both scopes, which contradicted what `03.3` itself correctly
+    implemented for global scope. This is now the single source of
+    truth; `03.3`'s own file matches it.)
+- This initiative depends on 02 (needs `src/domain/types.ts`; `03.4`
+  depends on `02.3` too — read that task's file before starting `03.4`).

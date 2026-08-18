@@ -211,10 +211,13 @@ Core, assistant-agnostic entities:
   same as the Registry below — a project-level `Source` must not "leak"
   into other projects, a global one is visible everywhere.
 - **Registry / Lockfile** — persistence of `ManagedInstallation` and
-  configured `Source`. Two levels: global (a lockfile in
-  `~/.ai-toolkit/registry.json`) and per-project
-  (`.ai-toolkit/registry.json` inside the workspace, versionable in git if
-  the team wants to share it).
+  configured `Source`. Two levels: global (under `~/.ai-swissknife/`) and
+  per-project (`.ai-swissknife/` inside the workspace). **Split into two
+  files per level, not one** (§7 hardening, Codex review finding B3):
+  a shareable `manifest.json` (desired `Source`s + installations,
+  versionable in git — no machine-specific fields) and a machine-local
+  `state.json` (resolved absolute paths, timestamps, content hashes —
+  never committed). Both carry a `schemaVersion` for future migration.
 
 A delicate point to hold firm in the design: **the provenance format is
 orthogonal to the installation target**. An `Artifact` written in "Claude

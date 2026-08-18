@@ -17,14 +17,20 @@ Shared decisions for this initiative that every task must honour:
   `references/agent-hub/package.json`'s `viewsContainers.activitybar`
   entry, but with `id: "ai-swissknife"`) — add this container once, in
   task 07.1, not duplicated across tasks.
-- `projectRoot` for any `scope: 'project'` operation is resolved from
-  `vscode.workspace.workspaceFolders?.[0]?.uri.fsPath` at the UI layer —
-  this is the one place that resolution is allowed to happen (every
-  lower layer takes it as an explicit parameter, per `CONTEXT.md`'s
-  pure-Node constraint). If there's no open workspace folder, project-scope
-  actions must be disabled/hidden in the UI, not silently fall back to
-  global scope.
-- This initiative depends on 06 (install engine) for the Available view's
-  install action, but the Sources view (07.1) only depends on 02 (registry)
-  and can be built and tested before 06 lands if delegated separately —
-  note this when assigning 07.1 vs 07.2/07.3.
+- `projectRoot` for any `scope: 'project'` operation is resolved at the
+  UI layer — this is the one place that resolution is allowed to happen
+  (every lower layer takes it as an explicit parameter, per
+  `CONTEXT.md`'s pure-Node constraint). **Revised (second Codex review,
+  finding I5)**: don't default to `workspaceFolders[0]` — in a
+  multi-root workspace, prompt the user to pick which folder; with zero
+  folders, disable/hide project-scope actions. See `07.1` for the picker
+  this task's other views should reuse rather than duplicate.
+- **Revised (finding I4)**: "refresh" is two different, differently-named
+  actions — `07.1`'s `reloadRegistry` (re-read the manifest file from
+  disk, no network) and `07.2`'s `refreshCatalog` (actually resolve/fetch
+  sources, real network/git activity). Don't conflate them under one
+  "Refresh" command or name.
+- This initiative depends on 06 (install engine, revised — see its
+  `plan.md`) for the Available view's install action, but the Sources
+  view (07.1) only depends on 02 (registry, hardened by 02.3) and can be
+  built and tested before 06 lands if delegated separately.
