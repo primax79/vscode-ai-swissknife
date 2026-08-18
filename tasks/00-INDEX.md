@@ -14,6 +14,18 @@ close those gaps; `06`/`07` were rewritten in place (no code existed for
 either yet) to depend on the hardened contracts instead of the original,
 incomplete ones.
 
+**2026-08-18 — multi-engine review round 001 applied**: before any of
+`02.3`/`03.4`/`04.3`/`05.2`/`06.1`/`06.2`/`07.1`/`07.2` was delegated,
+three independent engines reviewed them and converged on 12 blocking
+fixes — see
+[`_reviews/001-hardening-gate-SUMMARY.md`](_reviews/001-hardening-gate-SUMMARY.md)
+and the per-engine files alongside it. Every one of those eight task
+files has been revised in place to fold in the fixes; **no
+implementation of any hardening-gate task has been delegated yet** —
+round 002 (targeted re-verification against the corrected files) is
+next, per [`_reviews/00-INDEX.md`](_reviews/00-INDEX.md) for the
+engine/model performance log.
+
 ## Initiatives
 
 `#` is the stable id (folder/task prefix); it is NOT reading order —
