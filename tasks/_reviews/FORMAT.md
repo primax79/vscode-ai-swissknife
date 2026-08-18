@@ -38,47 +38,81 @@ This list is the format — update it in place as the practice evolves
 section proves valuable, add it here) rather than pointing at whatever
 past review happened to look good.
 
-## One file per review round
+## One file per engine per round, plus one summary file
 
-`tasks/_reviews/<date>-<target-slug>.md`, e.g.
-`2026-08-18-hardening-gate.md`. A "round" is one target (a spec, a task
-file, or a batch of related task files) reviewed by one or more engines
-at roughly the same time — not one file per engine; put every engine's
-result for that round in the same file so convergence/divergence is easy
-to read at a glance.
+A "round" is one target (a spec, a task file, or a batch of related task
+files) reviewed by one or more engines at roughly the same time. Naming
+is **`NNN-<target-slug>`** — a zero-padded, repo-wide progressive round
+number, not a date: a date alone collides the first time two rounds
+happen on the same day (this has already happened once), and says
+nothing about which commit was actually reviewed. Find the next `NNN` by
+listing existing `tasks/_reviews/NNN-*` prefixes.
+
+Each engine gets its **own file**, written directly by that engine
+whenever it has file-write access — give it the exact path in the
+request (e.g. "write your complete review to
+`tasks/_reviews/003-install-engine-rewrite-codex.md`") instead of asking
+it to return text for the orchestrator to transcribe. This is both less
+work and removes a transcription-error step. Only fall back to
+orchestrator-transcribed text when the engine genuinely has no write
+access in that invocation:
+
+```text
+tasks/_reviews/NNN-<target-slug>-<engine-id>.md   # one per engine, written by that engine when possible
+tasks/_reviews/NNN-<target-slug>-SUMMARY.md        # written by the orchestrator after all engines land
+```
+
+Writing every engine to the same file risks a concurrent-write race when
+rounds are dispatched in parallel (the normal case) — don't do it.
+
+Per-engine file:
 
 ```markdown
 ---
 target: <path(s) reviewed, relative to repo root>
 date: <YYYY-MM-DD>
-engines: [<engine-id>, ...]   # e.g. codex, kilo-gemini
+commit: <full git SHA of HEAD at review time — `git rev-parse HEAD`>
+engine: <engine-id>
+model: <model id if known>
+verdict: <short phrase>
 ---
 
-# Review round: <short title>
+# Review: <short title> — <engine-id>
 
-## <engine-id> — verdict: <approved | needs-changes | blocking-issues>
+<the engine's findings — don't rewrite/summarize away specifics, this
+is the raw record>
+```
 
-<engine's findings, as it returned them — don't rewrite/summarize away
-specifics, this is the raw record>
+Summary file (orchestrator-written, after every engine for the round has
+landed):
 
-## <engine-id-2> — verdict: ...
+```markdown
+---
+target: <same as the per-engine files>
+date: <YYYY-MM-DD>
+commit: <same commit as the per-engine files>
+engines: [<engine-id>, ...]
+---
 
-...
+# Summary: <short title> — convergence and resolution
+
+Individual reviews: [<engine-id>](NNN-<target-slug>-<engine-id>.md), ...
 
 ## Convergence
+- **Triple/double-confirmed**: <findings 2+ engines independently raised>
+- **Novel, single-engine**: <findings only one engine raised, judged
+  real and worth acting on>
+- **Disagreements**: <where engines gave conflicting advice, and how it
+  was resolved — with the user, or by judgment call, stated explicitly>
+- **What this says about the practice**: worth it or not this round, and
+  why — this is the actual meta-tracking data point.
 
-- **Agreed**: <findings 2+ engines independently raised>
-- **Disagreed**: <findings only one engine raised, or where engines gave
-  conflicting advice — and how it was resolved (with the user, or by
-  judgment call, stated explicitly)>
-- **Novel**: <a finding no engine raised that the human/orchestrator
-  caught, if relevant — useful for judging engine coverage>
+## Resolution — locked-in decisions
+<one bullet per decision actually made, so the task-file edits that
+follow don't re-litigate it>
 
-## Resolution
-
-<what was actually done: which findings were acted on, which were
-deferred with a reason, which were rejected with a reason — link to the
-commit(s) if any>
+## What was NOT changed
+<findings deliberately deferred or rejected, with a reason>
 ```
 
 ## Meta-tracking (for judging the practice itself, per this file's purpose)

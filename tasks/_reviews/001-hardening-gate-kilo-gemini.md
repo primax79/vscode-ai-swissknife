@@ -1,25 +1,15 @@
 ---
 target: tasks/02-domain-and-registry/02.3-hardening.md, tasks/03-claude-kilo-adapters/03.4-hardening.md, tasks/04-source-resolver/04.3-hardening.md, tasks/05-translator-skill/05.2-hardening.md, tasks/06-install-engine/06.1-plan-and-preview.md, tasks/06-install-engine/06.2-apply-and-verify.md, tasks/07-minimal-ui/07.1-sources-view.md, tasks/07-minimal-ui/07.2-available-view.md, tasks/07-minimal-ui/07.3-installed-view.md
 date: 2026-08-18
-engines: [kilo-gemini, codex, claude-blind-subagent]
-status: kilo-gemini done; codex pending; claude-blind-subagent pending
+commit: b4e7f92aeca3c9b36a33f5bc53bcc6c12e7481f6
+engine: kilo-gemini
+model: google/gemini-3.1-pro-preview-customtools
+verdict: further correction needed first
 ---
 
-# Review round: hardening gate (pre-delegation)
+# Review: hardening gate (pre-delegation) — kilo-gemini
 
-Context: none of the 9 target task files have been delegated/implemented
-yet — this round happens before any execution, per
-`task-spec-authoring`'s "cross-check before finalizing" step. First round
-run under the old ad-hoc prompting style (each reviewer was pointed at
-`tasks/_inbox/analyzed/codex-analysis-2.md` for format context) — the
-prompting style itself was corrected to be self-contained
-(`tasks/_reviews/FORMAT.md`) partway through this round; the two/three
-requests below were already in flight when that correction landed, so
-they still carry the old framing. Future rounds use `FORMAT.md` only.
-
-## kilo-gemini (model: google/gemini-3.1-pro-preview-customtools) — verdict: further correction needed first
-
-### Executive assessment
+## Executive assessment
 
 The hardening tasks successfully recognize and target the missing links
 identified in the second Codex review. They correctly split the registry
@@ -29,7 +19,7 @@ hardening gate does not yet safely close the gaps because it introduces
 new critical contradictions at the boundary between the `Adapter`
 interface and the new `InstallPlan`/`applyInstall` engine.
 
-### What it gets right
+## What it gets right
 
 - Registry split: 02.3 cleanly separates versionable `manifest.json` from
   machine-local `state.json`.
@@ -40,7 +30,7 @@ interface and the new `InstallPlan`/`applyInstall` engine.
 - Fixture portability: 04.3 fixes the test-grounding issue with a
   checked-in fixture corpus.
 
-### Blocking findings
+## Blocking findings
 
 - **B1 — `Adapter.skillPath` returns a file, but the install engine
   treats it as a directory.** `claude.ts`'s `skillPath` returns
@@ -67,7 +57,7 @@ interface and the new `InstallPlan`/`applyInstall` engine.
   root, but doesn't explicitly call for rejecting `path.isAbsolute(candidate)`
   up front as a first-pass defense before resolving.
 
-### Important non-blocking findings
+## Important non-blocking findings
 
 - **I1** — `02.3`'s "schemaVersion mismatch throws" doesn't define what
   the current constant actually is (e.g. `1`).
@@ -78,7 +68,7 @@ interface and the new `InstallPlan`/`applyInstall` engine.
   icon asset path (SVG/PNG), not a codicon string like `$(extensions)` —
   confirms `07.1`'s own flagged-but-unresolved question.
 
-### Task-by-task recommendations
+## Task-by-task recommendations
 
 02.3: add `installedCommit`/`installedRevision`, define the
 `schemaVersion` constant. 03.4: reject absolute paths explicitly in
@@ -89,22 +79,16 @@ staging to not depend on an unmodified `writeSkill`. 07.1: specify a real
 icon asset. 07.2: define the error-node tree-item type. 07.3: ready to
 delegate.
 
-### Final verdict
+## Final verdict
 
 Further correction needed before delegating 02.3/03.4/06.1/06.2 — 04.3,
 05.2, 07.3 were judged ready as-is.
 
-## codex — pending
+## Method note
 
-## claude-blind-subagent — pending
-
-## Convergence
-
-_To be filled in once codex and claude-blind-subagent land — do not
-resolve/act on findings until this section is complete, per
-`task-spec-authoring`: work through disagreements before finalizing, not
-after acting on the first result alone._
-
-## Resolution
-
-_Pending convergence above._
+Requested via `mcp__kilo-mcp__kilo_implement` with `agent: "explore"`,
+which fell back to the default `code` agent on this Kilo install
+(visible in STDERR) — ran read-only per instructions regardless (no
+files changed, confirmed in its own Final Report). Prompted under the
+pre-`FORMAT.md` ad-hoc style (pointed at `codex-analysis-2.md` for depth
+calibration) — later rounds use `tasks/_reviews/FORMAT.md` directly.
