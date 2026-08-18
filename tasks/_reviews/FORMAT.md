@@ -7,6 +7,11 @@ real record to later judge whether this practice is worth its cost —
 findings caught vs. review time spent, and how often engines actually
 disagree with each other or with the original author.
 
+"Engine" includes a fresh, context-blind subagent instance of the
+authoring model itself (e.g. `engine-id: claude-blind-subagent`) — not
+only a different underlying model. The independence that matters is
+freedom from authorship bias, not model identity.
+
 ## What to ask a reviewing engine for
 
 State this structure **directly in the review request itself** — never
