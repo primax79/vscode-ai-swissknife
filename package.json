@@ -27,7 +27,8 @@
     "build": "node esbuild.config.js",
     "watch": "node esbuild.config.js --watch",
     "lint": "eslint src --ext ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsc && node --test out"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
