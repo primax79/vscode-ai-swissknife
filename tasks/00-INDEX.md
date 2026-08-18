@@ -13,9 +13,9 @@ status.
 | Priority | # | Initiative | Status | Depends on | Size |
 | --- | --- | --- | --- | --- | --- |
 | 1 | 01 | [Project scaffold](01-project-scaffold/plan.md) | ✅ done | — | S |
-| 2 | 02 | [Domain types + registry store](02-domain-and-registry/plan.md) | open | 01 | S |
-| 3 | 03 | [Claude + Kilo adapters (skill+rule)](03-claude-kilo-adapters/plan.md) | open | 02 | M |
-| 4 | 04 | [Source resolver (git-custom + local-folder)](04-source-resolver/plan.md) | open | 02 | M |
+| 2 | 02 | [Domain types + registry store](02-domain-and-registry/plan.md) | ✅ done | 01 | S |
+| 3 | 03 | [Claude + Kilo adapters (skill+rule)](03-claude-kilo-adapters/plan.md) | partial (03.1 done, 03.2/03.3 open) | 02 | M |
+| 4 | 04 | [Source resolver (git-custom + local-folder)](04-source-resolver/plan.md) | partial (04.1 done, 04.2 open) | 02 | M |
 | 5 | 05 | [Canonical model + translator (skill+rule)](05-translator-skill/plan.md) | open | 03, 04 | M |
 | 6 | 06 | [Install engine (pipeline)](06-install-engine/plan.md) | open | 05 | M |
 | 7 | 07 | [Minimal UI (3 views)](07-minimal-ui/plan.md) | planned, not yet detailed | 06 | M |
@@ -41,8 +41,11 @@ validated end to end.
              04 ──┤──► 05 ──► 06 ──► 07
 ```
 
-03 and 04 both depend only on 02 and are independent of each other —
-delegable in parallel once 02 is done.
+03 and 04 both depend only on `02.1` (types), not `02.2` (registry store)
+— verified by re-checking what each initiative's tasks actually import.
+So `02.2`, `03.1`, and `04.1` are mutually independent once `02.1` lands
+and can run in parallel worktrees; only within-initiative order (03.1→
+03.2→03.3, 04.1→04.2) is a real sequential constraint.
 
 ---
 
