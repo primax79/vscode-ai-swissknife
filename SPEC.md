@@ -513,3 +513,85 @@ of phases and their dependencies.
 Dependency order: Phase 0 blocks Phase 1; Phase 1 blocks Phase 2 and Phase
 3 (both start from the validated engine, but are independent of each other
 and delegable in parallel once Phase 1 is closed).
+
+---
+
+## 7. Implementation-hardening considerations (second review, Codex, 2026-08-18)
+
+A second independent review — this time of the actual code produced so
+far (initiatives 01-04, partial 03), not just the spec prose — surfaced
+real contract gaps at the resolver/install/registry boundary. Full
+detail: `tasks/_inbox/analyzed/codex-analysis-2.md`. Recorded here as
+**possibilities to evaluate**, not a mandate to stop and rewrite — the
+product direction and phased roadmap were independently endorsed as
+sound ("major improvement... credible product thesis"); the gaps are at
+the implementation-contract level.
+
+**Most concrete/blocking-shaped** (worth resolving before initiative 06
+locks in a plan/apply contract that has to be redone later):
+
+- **`Artifact` has metadata but no way to fetch its actual content.**
+  `resolveLocalFolder`/`resolveGitCustom` discover a real path
+  (`findSkillDirs`) but discard it when building the `Artifact` — task
+  06.1 currently receives content as an unexplained `unknown` parameter
+  from nowhere. Needs an explicit `ResolvedArtifact<T>` (or a
+  `resolveArtifact(source, artifactId)` operation) before the install
+  engine and Available view (07.2) can actually work end to end.
+- **A skill is a directory, not just a parsed `SKILL.md`.** Real Agent
+  Skills can have `scripts/`, `references/`, templates, assets. The
+  current `CanonicalSkill` only carries name/description/body/
+  extraFields — installing through this pipeline would silently drop
+  every supporting file. `CanonicalSkill` may need a `files:
+  ArtifactFile[]` payload (relative path + content/handle + mode +
+  symlink policy).
+- **Registry conflates shareable and machine-local state.** A
+  project-level `.ai-toolkit/registry.json` "versionable in git"
+  currently stores absolute paths, timestamps, and content hashes —
+  exactly the `LocalState` SPEC.md §1 already said should be kept
+  separate from a `DesiredManifest`, but the implementation doesn't split
+  them yet. Committing the current shape would leak machine-specific
+  facts into a file meant to be shared.
+- **`apply` isn't actually atomic for a multi-file artifact.** Task 06.2
+  writes directly via the adapter's `writeSkill`/`writeRule`; there's no
+  staged-directory-then-atomic-rename, no backup/rollback, and a failed
+  verification can still leave a write in place and a registry entry
+  recorded. Matters more once B2 (multi-file skills) lands.
+- **Untrusted names/paths aren't validated.** Artifact metadata comes
+  from a third-party custom repo; `skill.name` is joined directly into a
+  destination path today with no rejection of `../`, absolute paths,
+  separators, or platform-reserved names — a real path-traversal surface,
+  not a style nit.
+- **"Preserve unknown fields verbatim" isn't actually met.** The minimal
+  frontmatter parser round-trips parsed JS values, not the original YAML
+  — comments, block scalars, quoting style, anchors can all change or be
+  lost. Either commit to semantic preservation (real YAML parser,
+  canonical reformatting accepted) or true verbatim (keep the raw
+  frontmatter block, patch only known fields) and stop calling the
+  current behavior "verbatim."
+- **Test fixtures aren't portable.** Initiative 04's tests assert an
+  exact count (25) against the live, mutable `~/.claude/skills/` on this
+  machine, plus absolute `/Users/Alfredo/...` paths — will break for
+  another contributor, in CI, or the next time a skill is added/removed
+  here. Real-artifact grounding and portability aren't in tension; the
+  fix is a small **committed** fixture corpus with provenance notes, not
+  a switch to synthetic-only fixtures.
+
+**Also flagged, lower urgency**: dot-directory scanning skips legitimate
+layouts like `.claude/skills/` (only `.git`/explicit ignores should be
+skipped, not every dotdir); git provenance should record the resolved
+commit SHA alongside the requested ref, not just the ref; concurrent git
+cache access needs a per-source lock; `rule` is claimed as part of the
+Phase 1 vertical slice but no resolver actually discovers rule artifacts,
+so it isn't really exercised end-to-end yet (candidate: make Phase 1
+strictly skill-only, keep the rule adapter code dormant rather than
+claiming it's validated); the translator's `05.1` task gives
+`translateSkill` explicit `fromAssistant`/`toAssistant` params while
+`05/plan.md` says the translator "does not know about assistants" —
+those two documents currently disagree with each other; the diagnostic
+model is one aggregate value where the spec's own text promises per-field
+diagnostics; `03/plan.md`'s Kilo rule-path guidance briefly contradicts
+task `03.3`'s own (correct) per-scope split before the correction lands.
+
+None of this changes §0-§6 — it's exactly the kind of thing Fase 0/1
+work surfaces once real code exists to review, not a reason to revisit
+the product framing.
