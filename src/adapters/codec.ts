@@ -7,6 +7,7 @@ import type {
   CanonicalSkillFile,
   CanonicalAgent,
   CanonicalCommand,
+  CanonicalMcpServer,
 } from './types';
 
 function toPosixPath(p: string): string {
@@ -252,6 +253,54 @@ export function canonicalCommandHash(cmd: CanonicalCommand): string {
   const extraKeys = Object.keys(cmd.extraFields).sort();
   for (const key of extraKeys) {
     hash.update(`${key}:${JSON.stringify(cmd.extraFields[key])}\n`);
+  }
+
+  return hash.digest('hex');
+}
+
+export function canonicalMcpServerHash(mcp: CanonicalMcpServer): string {
+  const hash = crypto.createHash('sha256');
+
+  hash.update('id:');
+  hash.update(mcp.id);
+  hash.update('\n');
+
+  hash.update('type:');
+  hash.update(mcp.type);
+  hash.update('\n');
+
+  if (mcp.command) {
+    hash.update(`command:${mcp.command}\n`);
+  }
+  if (mcp.args) {
+    hash.update('args:\n');
+    for (const a of mcp.args) {
+      hash.update(`${a}\n`);
+    }
+  }
+  if (mcp.url) {
+    hash.update(`url:${mcp.url}\n`);
+  }
+  if (mcp.env) {
+    hash.update('env:\n');
+    const sortedEnv = Object.keys(mcp.env).sort();
+    for (const k of sortedEnv) {
+      hash.update(`${k}:${mcp.env[k]}\n`);
+    }
+  }
+  if (mcp.headers) {
+    hash.update('headers:\n');
+    const sortedH = Object.keys(mcp.headers).sort();
+    for (const k of sortedH) {
+      hash.update(`${k}:${mcp.headers[k]}\n`);
+    }
+  }
+  if (mcp.extraFields) {
+    hash.update('extraFields:\n');
+    const extraKeys = Object.keys(mcp.extraFields).sort();
+    for (const key of extraKeys) {
+      hash.update(`${key}:${JSON.stringify(mcp.extraFields[key])}\n`);
+    }
   }
 
   return hash.digest('hex');

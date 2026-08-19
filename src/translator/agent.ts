@@ -6,6 +6,16 @@ export function translateAgent(
   source: CanonicalAgent,
   targetAssistant: AssistantId
 ): TranslationResult<CanonicalAgent> {
+  const extraFields = { ...source.extraFields };
+  delete extraFields.tools;
+  delete extraFields.permission;
+  delete extraFields.permissions;
+  delete extraFields.mode;
+  delete extraFields.variant;
+  delete extraFields.name;
+  delete extraFields.description;
+  delete extraFields.model;
+
   if (targetAssistant === 'claude-code') {
     const tools = [...source.tools];
     if (tools.length === 0 && Object.keys(source.permissions).length > 0) {
@@ -24,7 +34,7 @@ export function translateAgent(
         permissions: {},
         ...(source.model ? { model: source.model } : {}),
         body: source.body,
-        extraFields: { ...source.extraFields },
+        extraFields,
       },
       overall: 'lossless',
       diagnostics: [],
@@ -49,7 +59,7 @@ export function translateAgent(
         ...(source.model ? { model: source.model } : {}),
         ...(source.variant ? { variant: source.variant } : {}),
         body: source.body,
-        extraFields: { ...source.extraFields },
+        extraFields,
       },
       overall: 'lossless',
       diagnostics: [],

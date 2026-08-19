@@ -6,6 +6,13 @@ export function translateCommand(
   source: CanonicalCommand,
   targetAssistant: AssistantId
 ): TranslationResult<CanonicalCommand> {
+  const extraFields = { ...source.extraFields };
+  delete extraFields.name;
+  delete extraFields.description;
+  delete extraFields.agent;
+  delete extraFields.model;
+  delete extraFields.subtask;
+
   if (targetAssistant === 'claude-code' || targetAssistant === 'kilo-code') {
     return {
       value: {
@@ -15,7 +22,7 @@ export function translateCommand(
         ...(source.model ? { model: source.model } : {}),
         ...(source.subtask !== undefined ? { subtask: source.subtask } : {}),
         body: source.body,
-        extraFields: { ...source.extraFields },
+        extraFields: targetAssistant === 'kilo-code' ? {} : extraFields,
       },
       overall: 'lossless',
       diagnostics: [],

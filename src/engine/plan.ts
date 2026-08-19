@@ -1,7 +1,12 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
-import type { CanonicalSkill, CanonicalAgent, CanonicalCommand } from '../adapters/types';
+import type {
+  CanonicalSkill,
+  CanonicalAgent,
+  CanonicalCommand,
+  CanonicalMcpServer,
+} from '../adapters/types';
 import type { ResolvedArtifact } from '../domain/types';
 import {
   serializeSkillMarkdown,
@@ -16,12 +21,14 @@ import {
   canonicalSkillHash,
   canonicalAgentHash,
   canonicalCommandHash,
+  canonicalMcpServerHash,
 } from '../adapters/codec';
 import { resolveArtifactContent as resolveLocalFolderContent } from '../sources/localFolder';
 import { resolveArtifactContent as resolveGitCustomContent } from '../sources/gitCustom';
 import { translateSkill } from '../translator/skill';
 import { translateAgent } from '../translator/agent';
 import { translateCommand } from '../translator/command';
+import { translateMcpServer } from '../translator/mcp';
 import type {
   PreparedInstall,
   PlanInstallParams,
@@ -36,7 +43,12 @@ function sha256(data: Uint8Array | string): string {
 export async function planInstall(params: PlanInstallParams): Promise<PreparedInstall> {
   const { source, pkg, artifact, targetAdapter, targetScope, projectRoot, resolverOpts } = params;
 
-  if (artifact.kind !== 'skill' && artifact.kind !== 'agent' && artifact.kind !== 'command') {
+  if (
+    artifact.kind !== 'skill' &&
+    artifact.kind !== 'agent' &&
+    artifact.kind !== 'command' &&
+    artifact.kind !== 'mcp-server'
+  ) {
     return {
       supported: false,
       plan: {
@@ -44,8 +56,120 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
         sourceId: source.id,
         packageId: pkg.id,
         artifactId: artifact.id,
-        reason: `Artifact kind "${artifact.kind}" is not supported (supported kinds: skill, agent, command)`,
+        reason: `Artifact kind "${artifact.kind}" is not supported`,
       },
+    };
+  }
+
+  // --- MCP-SERVER KIND ---
+  if (artifact.kind === 'mcp-server') {
+    let resolvedMcp: ResolvedArtifact<CanonicalMcpServer>;
+    try {
+      if (source.type === 'local-folder') {
+        resolvedMcp = (await resolveLocalFolderContent(source, pkg, artifact)) as ResolvedArtifact<CanonicalMcpServer>;
+      } else if (source.type === 'git-custom') {
+        resolvedMcp = (await resolveGitCustomContent(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalMcpServer>;
+      } else {
+        throw new Error(`Source type "${source.type}" is not yet supported for MCP resolution`);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        supported: false,
+        plan: {
+          supported: false,
+          sourceId: source.id,
+          packageId: pkg.id,
+          artifactId: artifact.id,
+          reason: `MCP content resolution failed: ${msg}`,
+        },
+      };
+    }
+
+    const translation = translateMcpServer(resolvedMcp.content, targetAdapter.assistant);
+    if (translation.overall === 'unsupported') {
+      return {
+        supported: false,
+        plan: {
+          supported: false,
+          sourceId: source.id,
+          packageId: pkg.id,
+          artifactId: artifact.id,
+          reason: `Target assistant "${targetAdapter.assistant}" is not supported for MCP servers`,
+          diagnostics: translation.diagnostics,
+        },
+      };
+    }
+
+    const translatedMcp = translation.value;
+    if (!targetAdapter.mcpConfigPath) {
+      return {
+        supported: false,
+        plan: {
+          supported: false,
+          sourceId: source.id,
+          packageId: pkg.id,
+          artifactId: artifact.id,
+          reason: `Target adapter for "${targetAdapter.assistant}" does not support MCP installation`,
+          diagnostics: translation.diagnostics,
+        },
+      };
+    }
+
+    const targetFilePath = targetAdapter.mcpConfigPath({
+      scope: targetScope,
+      projectRoot,
+    });
+
+    let conflict = false;
+    const existingFiles: ExistingFile[] = [];
+
+    if (targetAdapter.readMcpServer) {
+      try {
+        const existing = await targetAdapter.readMcpServer(translatedMcp.id, {
+          scope: targetScope,
+          projectRoot,
+        });
+        if (existing) {
+          conflict = true;
+          existingFiles.push({
+            path: path.basename(targetFilePath),
+            contentHash: canonicalMcpServerHash(existing),
+          });
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    const contentHash = canonicalMcpServerHash(translatedMcp);
+    const proposedFiles: ProposedFile[] = [
+      {
+        path: path.basename(targetFilePath),
+        contentHash,
+      },
+    ];
+
+    return {
+      supported: true,
+      kind: 'mcp-server',
+      plan: {
+        supported: true,
+        sourceId: source.id,
+        packageId: pkg.id,
+        artifactId: artifact.id,
+        targetAssistant: targetAdapter.assistant,
+        targetScope,
+        targetDir: targetFilePath,
+        projectRoot,
+        sourceRevision: pkg.version,
+        conflict,
+        existingFiles,
+        proposedFiles,
+        diagnostics: translation.diagnostics,
+      },
+      content: translatedMcp,
+      contentHash,
     };
   }
 

@@ -11,6 +11,8 @@ import type {
   CanonicalSkill,
   CanonicalAgent,
   CanonicalCommand,
+  CanonicalMcpServer,
+  LocationRef,
 } from '../adapters/types';
 import type { TranslationDiagnostic } from '../translator/skill';
 
@@ -72,6 +74,13 @@ export type PreparedInstall =
       plan: SupportedInstallPlan;
       content: CanonicalCommand;
       contentHash: string;
+    }
+  | {
+      supported: true;
+      kind: 'mcp-server';
+      plan: SupportedInstallPlan;
+      content: CanonicalMcpServer;
+      contentHash: string;
     };
 
 export type ApplyOutcome =
@@ -89,6 +98,9 @@ export interface PlanInstallParams {
     skillDir(name: string, loc: { scope: Scope; projectRoot?: string }): string;
     agentPath?(name: string, loc: { scope: Scope; projectRoot?: string }): string;
     commandPath?(name: string, loc: { scope: Scope; projectRoot?: string }): string;
+    mcpConfigPath?(loc: LocationRef): string;
+    readMcpServer?(id: string, loc: LocationRef): Promise<CanonicalMcpServer | null>;
+    writeMcpServer?(server: CanonicalMcpServer, loc: LocationRef): Promise<void>;
   };
   targetScope: Scope;
   projectRoot?: string;

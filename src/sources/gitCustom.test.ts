@@ -318,7 +318,7 @@ describe('gitCustom — resolveGitCustom with committed fixtures in dynamic repo
       resolveGitCustom(sourceBranch, { cacheDir: cacheBaseDir }),
     ]);
 
-    assert.strictEqual(resolvedContent.content.name, 'root-skill');
+    assert.strictEqual((resolvedContent.content as CanonicalSkill).name, 'root-skill');
     assert.strictEqual(branchResolution.packages.length, 7);
   });
 
