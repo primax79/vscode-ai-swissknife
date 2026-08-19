@@ -16,7 +16,7 @@ export function translateAgent(
   delete extraFields.description;
   delete extraFields.model;
 
-  if (targetAssistant === 'claude-code') {
+  if (targetAssistant === 'claude-code' || targetAssistant === 'github-copilot') {
     const tools = [...source.tools];
     if (tools.length === 0 && Object.keys(source.permissions).length > 0) {
       for (const [permKey, permVal] of Object.entries(source.permissions)) {

@@ -51,12 +51,19 @@ describe('translateAgent', () => {
     assert.strictEqual(result.value.name, 'kilo-executor');
     assert.ok(result.value.tools.includes('read'));
     assert.ok(result.value.tools.includes('edit'));
-    assert.strictEqual(result.value.tools.includes('bash'), false); // bash was deny
+    assert.strictEqual(result.value.tools.includes('bash'), false);
     assert.deepStrictEqual(result.value.extraFields, { customOpt: 123 });
   });
 
+  it('translates Kilo agent to Copilot agent losslessly', () => {
+    const result = translateAgent(kiloAgent, 'github-copilot');
+    assert.strictEqual(result.overall, 'lossless');
+    assert.strictEqual(result.value.name, 'kilo-executor');
+    assert.ok(result.value.tools.includes('read'));
+  });
+
   it('returns unsupported for non-supported targets', () => {
-    const result = translateAgent(claudeAgent, 'github-copilot');
+    const result = translateAgent(claudeAgent, 'gemini-cli');
     assert.strictEqual(result.overall, 'unsupported');
     assert.strictEqual(result.diagnostics.length, 1);
     assert.strictEqual(result.diagnostics[0].code, 'unsupported-target');

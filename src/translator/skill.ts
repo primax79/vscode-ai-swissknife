@@ -20,7 +20,11 @@ export function translateSkill(
   source: CanonicalSkill,
   targetAssistant: AssistantId
 ): TranslationResult<CanonicalSkill> {
-  if (targetAssistant === 'claude-code' || targetAssistant === 'kilo-code') {
+  if (
+    targetAssistant === 'claude-code' ||
+    targetAssistant === 'kilo-code' ||
+    targetAssistant === 'github-copilot'
+  ) {
     return {
       value: {
         name: source.name,
@@ -57,7 +61,7 @@ export function translateSkill(
         severity: 'error',
         field: 'target',
         impact: 'unsupported',
-        message: `Target assistant "${targetAssistant}" is not supported in Phase 1`,
+        message: `Target assistant "${targetAssistant}" is not supported in Phase 2`,
       },
     ],
   };

@@ -6,7 +6,11 @@ export function translateMcpServer(
   source: CanonicalMcpServer,
   targetAssistant: AssistantId
 ): TranslationResult<CanonicalMcpServer> {
-  if (targetAssistant === 'claude-code' || targetAssistant === 'kilo-code') {
+  if (
+    targetAssistant === 'claude-code' ||
+    targetAssistant === 'kilo-code' ||
+    targetAssistant === 'github-copilot'
+  ) {
     return {
       value: {
         id: source.id,

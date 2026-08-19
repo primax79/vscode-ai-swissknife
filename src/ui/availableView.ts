@@ -8,6 +8,7 @@ import { resolveGitCustom } from '../sources/gitCustom';
 import { resolveGitMarketplace } from '../sources/gitMarketplace';
 import { ClaudeAdapter } from '../adapters/claude';
 import { KiloAdapter } from '../adapters/kilo';
+import { CopilotAdapter } from '../adapters/copilot';
 import { planInstall } from '../engine/plan';
 import { applyInstall } from '../engine/apply';
 import type { PreparedInstall } from '../engine/types';
@@ -153,6 +154,7 @@ export class AvailableTreeDataProvider
   private cachedSourceGroups: AvailableSourceGroupItem[] = [];
   private claudeAdapter = new ClaudeAdapter();
   private kiloAdapter = new KiloAdapter();
+  private copilotAdapter = new CopilotAdapter();
   private onInstalledRefreshCallback?: () => void;
 
   setInstalledRefreshCallback(cb: () => void) {
@@ -328,12 +330,20 @@ export class AvailableTreeDataProvider
 
     const { source, pkg, artifact } = item;
 
-    const assistantPick = await vscode.window.showQuickPick(['claude-code', 'kilo-code'], {
-      placeHolder: 'Select target AI assistant',
-    });
+    const assistantPick = await vscode.window.showQuickPick(
+      ['claude-code', 'kilo-code', 'github-copilot'],
+      {
+        placeHolder: 'Select target AI assistant',
+      }
+    );
     if (!assistantPick) return;
     const targetAssistant = assistantPick as AssistantId;
-    const targetAdapter = targetAssistant === 'claude-code' ? this.claudeAdapter : this.kiloAdapter;
+    const targetAdapter =
+      targetAssistant === 'claude-code'
+        ? this.claudeAdapter
+        : targetAssistant === 'github-copilot'
+        ? this.copilotAdapter
+        : this.kiloAdapter;
 
     const scopePick = await vscode.window.showQuickPick(['project', 'global'], {
       placeHolder: 'Select installation scope (project or global)',
@@ -448,12 +458,20 @@ export class AvailableTreeDataProvider
       return;
     }
 
-    const assistantPick = await vscode.window.showQuickPick(['claude-code', 'kilo-code'], {
-      placeHolder: `Select target AI assistant for ${items.length} item(s)`,
-    });
+    const assistantPick = await vscode.window.showQuickPick(
+      ['claude-code', 'kilo-code', 'github-copilot'],
+      {
+        placeHolder: `Select target AI assistant for ${items.length} item(s)`,
+      }
+    );
     if (!assistantPick) return;
     const targetAssistant = assistantPick as AssistantId;
-    const targetAdapter = targetAssistant === 'claude-code' ? this.claudeAdapter : this.kiloAdapter;
+    const targetAdapter =
+      targetAssistant === 'claude-code'
+        ? this.claudeAdapter
+        : targetAssistant === 'github-copilot'
+        ? this.copilotAdapter
+        : this.kiloAdapter;
 
     const scopePick = await vscode.window.showQuickPick(['project', 'global'], {
       placeHolder: 'Select installation scope (project or global)',

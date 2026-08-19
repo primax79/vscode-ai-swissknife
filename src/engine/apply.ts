@@ -24,6 +24,7 @@ import {
   parseKiloCommandMarkdown,
   kiloAdapter,
 } from '../adapters/kilo';
+import { copilotAdapter } from '../adapters/copilot';
 import { readState, writeState } from '../domain/registry';
 import type { PreparedInstall, ApplyOutcome } from './types';
 
@@ -56,7 +57,12 @@ export async function applyInstall(
       };
     }
 
-    const adapter = plan.targetAssistant === 'claude-code' ? claudeAdapter : kiloAdapter;
+    const adapter =
+      plan.targetAssistant === 'claude-code'
+        ? claudeAdapter
+        : plan.targetAssistant === 'github-copilot'
+        ? copilotAdapter
+        : kiloAdapter;
     const targetFilePath = plan.targetDir;
     const randomId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const backupPath = `${targetFilePath}.backup-${randomId}`;
@@ -248,18 +254,18 @@ export async function applyInstall(
     const backupPath = `${targetFilePath}.backup-${randomId}`;
 
     const serialized =
-      plan.targetAssistant === 'claude-code'
-        ? serializeClaudeCommandMarkdown(cmd)
-        : serializeKiloCommandMarkdown(cmd);
+      plan.targetAssistant === 'kilo-code'
+        ? serializeKiloCommandMarkdown(cmd)
+        : serializeClaudeCommandMarkdown(cmd);
 
     try {
       await fs.promises.mkdir(path.dirname(stagingPath), { recursive: true });
       await fs.promises.writeFile(stagingPath, serialized, 'utf-8');
       const readBack = await fs.promises.readFile(stagingPath, 'utf-8');
       const parsedStaged =
-        plan.targetAssistant === 'claude-code'
-          ? parseClaudeCommandMarkdown(readBack, cmd.name)
-          : parseKiloCommandMarkdown(readBack, cmd.name);
+        plan.targetAssistant === 'kilo-code'
+          ? parseKiloCommandMarkdown(readBack, cmd.name)
+          : parseClaudeCommandMarkdown(readBack, cmd.name);
       if (canonicalCommandHash(parsedStaged) !== prepared.contentHash) {
         throw new Error('Staging command verification hash mismatch');
       }
@@ -485,18 +491,18 @@ export async function applyInstall(
     const backupPath = `${targetFilePath}.backup-${randomId}`;
 
     const serialized =
-      plan.targetAssistant === 'claude-code'
-        ? serializeClaudeAgentMarkdown(agent)
-        : serializeKiloAgentMarkdown(agent);
+      plan.targetAssistant === 'kilo-code'
+        ? serializeKiloAgentMarkdown(agent)
+        : serializeClaudeAgentMarkdown(agent);
 
     try {
       await fs.promises.mkdir(path.dirname(stagingPath), { recursive: true });
       await fs.promises.writeFile(stagingPath, serialized, 'utf-8');
       const readBack = await fs.promises.readFile(stagingPath, 'utf-8');
       const parsedStaged =
-        plan.targetAssistant === 'claude-code'
-          ? parseClaudeAgentMarkdown(readBack)
-          : parseKiloAgentMarkdown(readBack);
+        plan.targetAssistant === 'kilo-code'
+          ? parseKiloAgentMarkdown(readBack)
+          : parseClaudeAgentMarkdown(readBack);
       if (canonicalAgentHash(parsedStaged) !== prepared.contentHash) {
         throw new Error('Staging agent verification hash mismatch');
       }

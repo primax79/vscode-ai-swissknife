@@ -13,7 +13,11 @@ export function translateCommand(
   delete extraFields.model;
   delete extraFields.subtask;
 
-  if (targetAssistant === 'claude-code' || targetAssistant === 'kilo-code') {
+  if (
+    targetAssistant === 'claude-code' ||
+    targetAssistant === 'kilo-code' ||
+    targetAssistant === 'github-copilot'
+  ) {
     return {
       value: {
         name: source.name,
