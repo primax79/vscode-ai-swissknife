@@ -5,7 +5,13 @@ import * as os from 'os';
 import * as path from 'path';
 import { KiloAdapter, kiloAdapter } from './kilo';
 import { ClaudeAdapter, claudeAdapter } from './claude';
-import type { CanonicalRule, CanonicalSkill, CanonicalAgent, CanonicalCommand } from './types';
+import type {
+  CanonicalRule,
+  CanonicalSkill,
+  CanonicalAgent,
+  CanonicalCommand,
+  CanonicalMcpServer,
+} from './types';
 
 describe('KiloAdapter', () => {
   let testTempDir: string;
@@ -125,6 +131,17 @@ describe('KiloAdapter', () => {
         projectPath,
         path.join(testProjectDir, '.kilo', 'command', 'build.md')
       );
+    });
+
+    it('mcpConfigPath returns correct global and project paths', () => {
+      const globalPath = adapter.mcpConfigPath({ scope: 'global' });
+      assert.strictEqual(globalPath, path.join(testHomeDir, '.config', 'kilo', 'mcp.json'));
+
+      const projectPath = adapter.mcpConfigPath({
+        scope: 'project',
+        projectRoot: testProjectDir,
+      });
+      assert.strictEqual(projectPath, path.join(testProjectDir, '.kilo', 'mcp.json'));
     });
 
     it('rulePath returns correct global (~/.config/kilo/AGENTS.md) and project (<root>/CLAUDE.md) paths', () => {
@@ -319,7 +336,6 @@ describe('KiloAdapter', () => {
         subtask: true,
         body: 'npm run build\n',
         extraFields: {
-          // Extra keys must not be emitted in frontmatter
           invalidKey: 'forbidden',
         },
       };
@@ -328,7 +344,6 @@ describe('KiloAdapter', () => {
       const filePath = adapter.commandPath(cmd.name, { scope: 'project', projectRoot: testProjectDir });
       const rawContent = await fs.promises.readFile(filePath, 'utf-8');
 
-      // Verify strict schema: invalidKey and name: are NOT in frontmatter
       assert.strictEqual(rawContent.includes('invalidKey:'), false);
       assert.strictEqual(rawContent.includes('name:'), false);
       assert.ok(rawContent.includes('Build project bundle'));
@@ -347,6 +362,31 @@ describe('KiloAdapter', () => {
 
       const list = await adapter.listCommands({ scope: 'project', projectRoot: testProjectDir });
       assert.deepStrictEqual(list, ['build-project']);
+    });
+  });
+
+  describe('mcpServers', () => {
+    it('Round-trip: writeMcpServer merges server into .kilo/mcp.json and reads back', async () => {
+      const server1: CanonicalMcpServer = {
+        id: 'sqlite',
+        type: 'stdio',
+        command: 'uvx',
+        args: ['mcp-server-sqlite', '--db-path', 'test.db'],
+      };
+
+      await adapter.writeMcpServer(server1, { scope: 'project', projectRoot: testProjectDir });
+      const loaded = await adapter.readMcpServer('sqlite', {
+        scope: 'project',
+        projectRoot: testProjectDir,
+      });
+      assert.ok(loaded);
+      assert.strictEqual(loaded.id, 'sqlite');
+      assert.strictEqual(loaded.type, 'stdio');
+      assert.strictEqual(loaded.command, 'uvx');
+      assert.deepStrictEqual(loaded.args, ['mcp-server-sqlite', '--db-path', 'test.db']);
+
+      const list = await adapter.listMcpServers({ scope: 'project', projectRoot: testProjectDir });
+      assert.deepStrictEqual(list, ['sqlite']);
     });
   });
 

@@ -8,6 +8,7 @@ import type {
   CanonicalSkill,
   CanonicalAgent,
   CanonicalCommand,
+  CanonicalMcpServer,
   LocationRef,
 } from './types';
 import { readSkill as codecReadSkill, writeSkill as codecWriteSkill } from './codec';
@@ -215,7 +216,6 @@ export function parseKiloCommandMarkdown(content: string, defaultName = ''): Can
 /**
  * Serializes a CanonicalCommand into Kilo command markdown.
  * STRICT SCHEMA: Kilo accepts strictly only `description`, `agent`, `model`, `subtask`.
- * Unrecognized keys throw ConfigInvalidError and are stripped from frontmatter.
  */
 export function serializeKiloCommandMarkdown(cmd: CanonicalCommand): string {
   let fm = '---\n';
@@ -470,6 +470,95 @@ export class KiloAdapter implements Adapter {
       }
     }
     return Array.from(commandNames);
+  }
+
+  mcpConfigPath(loc: LocationRef): string {
+    if (loc.scope === 'global') {
+      return path.join(this.getHomedir(), '.config', 'kilo', 'mcp.json');
+    }
+    if (loc.scope === 'project') {
+      if (!loc.projectRoot) {
+        throw new Error('projectRoot is required when scope is "project"');
+      }
+      return path.join(loc.projectRoot, '.kilo', 'mcp.json');
+    }
+    throw new Error(`Unsupported scope: ${(loc as { scope: string }).scope}`);
+  }
+
+  async readMcpServer(id: string, loc: LocationRef): Promise<CanonicalMcpServer | null> {
+    const filePath = this.mcpConfigPath(loc);
+    try {
+      const content = await fs.promises.readFile(filePath, 'utf-8');
+      const parsed = JSON.parse(content);
+      const mcpBlock = parsed.mcp ?? parsed.mcpServers ?? parsed;
+      const conf = mcpBlock[id];
+      if (!conf) return null;
+
+      const type: 'stdio' | 'http' | 'sse' = conf.type ?? (conf.command ? 'stdio' : 'sse');
+      return {
+        id,
+        type,
+        ...(conf.command ? { command: conf.command } : {}),
+        ...(conf.args ? { args: conf.args } : {}),
+        ...(conf.url ? { url: conf.url } : {}),
+        ...(conf.env ? { env: conf.env } : {}),
+        ...(conf.headers ? { headers: conf.headers } : {}),
+        extraFields: { ...conf },
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  async writeMcpServer(server: CanonicalMcpServer, loc: LocationRef): Promise<void> {
+    const filePath = this.mcpConfigPath(loc);
+    let parsed: Record<string, unknown> = {};
+
+    try {
+      const content = await fs.promises.readFile(filePath, 'utf-8');
+      parsed = JSON.parse(content);
+    } catch {
+      parsed = {};
+    }
+
+    if (!parsed.mcp || typeof parsed.mcp !== 'object' || Array.isArray(parsed.mcp)) {
+      parsed.mcp = {};
+    }
+
+    const mcpMap = parsed.mcp as Record<string, unknown>;
+    const entry: Record<string, unknown> = {
+      type: server.type,
+      ...(server.command ? { command: server.command } : {}),
+      ...(server.args ? { args: server.args } : {}),
+      ...(server.url ? { url: server.url } : {}),
+      ...(server.env ? { env: server.env } : {}),
+      ...(server.headers ? { headers: server.headers } : {}),
+    };
+
+    if (server.extraFields) {
+      for (const [k, v] of Object.entries(server.extraFields)) {
+        if (!entry[k] && k !== 'id') {
+          entry[k] = v;
+        }
+      }
+    }
+
+    mcpMap[server.id] = entry;
+
+    await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.promises.writeFile(filePath, JSON.stringify(parsed, null, 2) + '\n', 'utf-8');
+  }
+
+  async listMcpServers(loc: LocationRef): Promise<string[]> {
+    const filePath = this.mcpConfigPath(loc);
+    try {
+      const content = await fs.promises.readFile(filePath, 'utf-8');
+      const parsed = JSON.parse(content);
+      const mcpBlock = parsed.mcp ?? parsed.mcpServers ?? {};
+      return Object.keys(mcpBlock);
+    } catch {
+      return [];
+    }
   }
 
   rulePath(loc: LocationRef): string {
