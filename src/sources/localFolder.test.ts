@@ -1,124 +1,126 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import type { Source, ResolvedArtifact } from '../domain/types';
 import type { CanonicalSkill } from '../adapters/types';
+import type { SourceResolution } from './types';
 import { resolveLocalFolder, resolveArtifactContent } from './localFolder';
 
-describe('localFolder — resolveLocalFolder with real fixtures', () => {
-  const fixture1Path = '/Users/Alfredo/works/ai-coding-tools/agentic-coding-kit/plugins/common-tools/skills/gitignore';
-  const fixture2Path = fs.existsSync(path.resolve(process.cwd(), 'references/cc-swiss-knife/plugins/core/skills/documentation-standards'))
-    ? path.resolve(process.cwd(), 'references/cc-swiss-knife/plugins/core/skills/documentation-standards')
-    : '/Users/Alfredo/works/ai-coding-tools/ai-swissknife/references/cc-swiss-knife/plugins/core/skills/documentation-standards';
-  const fixture3Path = path.join(os.homedir(), '.claude/skills');
+function getFixturesRoot(): string {
+  const candidateOut = path.join(__dirname, '__fixtures__');
+  if (fs.existsSync(candidateOut)) return candidateOut;
+  return path.resolve(__dirname, '../../src/sources/__fixtures__');
+}
 
-  it('resolves fixture 1 to 1 package with 1 skill artifact', async () => {
+describe('localFolder — resolveLocalFolder with committed fixtures', () => {
+  const fixturesRoot = getFixturesRoot();
+  const rootSkillPath = path.join(fixturesRoot, 'root-skill');
+  const nestedSkillsPath = path.join(fixturesRoot, 'nested-skills');
+  const mixedPath = path.join(fixturesRoot, 'mixed');
+
+  it('resolves root-skill fixture to 1 package with 0 diagnostics', async () => {
     const source: Source = {
-      id: 'src-ack-gitignore',
+      id: 'src-root',
       type: 'local-folder',
       scope: 'project',
-      localPath: fixture1Path,
+      localPath: rootSkillPath,
     };
 
-    const packages = await resolveLocalFolder(source);
-    assert.strictEqual(packages.length, 1);
+    const resolution: SourceResolution = await resolveLocalFolder(source);
+    assert.strictEqual(resolution.packages.length, 1);
+    assert.strictEqual(resolution.diagnostics.length, 0);
 
-    const pkg = packages[0];
-    assert.strictEqual(pkg.sourceId, 'src-ack-gitignore');
+    const pkg = resolution.packages[0];
+    assert.strictEqual(pkg.sourceId, 'src-root');
     assert.strictEqual(pkg.nativeFormat, 'claude-skill');
     assert.strictEqual(pkg.artifacts.length, 1);
 
     const artifact = pkg.artifacts[0];
     assert.strictEqual(artifact.kind, 'skill');
-    assert.strictEqual(artifact.name, 'gitignore');
+    assert.strictEqual(artifact.name, 'root-skill');
     assert.strictEqual(artifact.packageId, pkg.id);
-    assert.strictEqual(artifact.nativeFormat, 'claude-skill');
   });
 
-  it('resolves fixture 2 to 1 package with 1 skill artifact', async () => {
+  it('resolves nested-skills fixture to 2 packages deterministically', async () => {
     const source: Source = {
-      id: 'src-cc-swissknife',
+      id: 'src-nested',
       type: 'local-folder',
       scope: 'project',
-      localPath: fixture2Path,
+      localPath: nestedSkillsPath,
     };
 
-    const packages = await resolveLocalFolder(source);
-    assert.strictEqual(packages.length, 1);
+    const resolution1 = await resolveLocalFolder(source);
+    const resolution2 = await resolveLocalFolder(source);
 
-    const pkg = packages[0];
-    assert.strictEqual(pkg.sourceId, 'src-cc-swissknife');
-    assert.strictEqual(pkg.artifacts.length, 1);
+    assert.strictEqual(resolution1.packages.length, 2);
+    assert.strictEqual(resolution2.packages.length, 2);
+    assert.strictEqual(resolution1.diagnostics.length, 0);
 
-    const artifact = pkg.artifacts[0];
-    assert.strictEqual(artifact.kind, 'skill');
-    assert.strictEqual(artifact.name, 'documentation-standards');
-  });
-
-  it('resolves fixture 3 (~/.claude/skills) to 25 packages with deterministic IDs', async () => {
-    const source: Source = {
-      id: 'src-claude-skills',
-      type: 'local-folder',
-      scope: 'global',
-      localPath: fixture3Path,
-    };
-
-    const packagesRun1 = await resolveLocalFolder(source);
-    const packagesRun2 = await resolveLocalFolder(source);
-
-    assert.strictEqual(packagesRun1.length, 25);
-    assert.strictEqual(packagesRun2.length, 25);
-
-    // Verify determinism of package and artifact IDs across resolutions
-    for (let i = 0; i < packagesRun1.length; i++) {
-      assert.strictEqual(packagesRun1[i].id, packagesRun2[i].id);
-      assert.strictEqual(packagesRun1[i].artifacts[0].id, packagesRun2[i].artifacts[0].id);
-      assert.strictEqual(packagesRun1[i].artifacts[0].kind, 'skill');
+    for (let i = 0; i < resolution1.packages.length; i++) {
+      assert.strictEqual(resolution1.packages[i].id, resolution2.packages[i].id);
+      assert.strictEqual(
+        resolution1.packages[i].artifacts[0].id,
+        resolution2.packages[i].artifacts[0].id
+      );
     }
-
-    const artifactNames = packagesRun1.map((p) => p.artifacts[0].name);
-    assert.ok(artifactNames.includes('gitignore'));
-    assert.ok(artifactNames.includes('terraform'));
-    assert.ok(artifactNames.includes('mcp-orchestrator'));
   });
 
-  it('returns empty array when source has no localPath or path does not exist', async () => {
+  it('resolves mixed fixture delivering packages and diagnostics together', async () => {
+    const source: Source = {
+      id: 'src-mixed',
+      type: 'local-folder',
+      scope: 'project',
+      localPath: mixedPath,
+    };
+
+    const resolution = await resolveLocalFolder(source);
+    assert.strictEqual(resolution.packages.length, 2);
+    assert.strictEqual(resolution.diagnostics.length, 1);
+    assert.strictEqual(resolution.diagnostics[0].code, 'invalid-frontmatter');
+  });
+
+  it('returns empty packages and diagnostics when source has no localPath or path does not exist', async () => {
     const emptySource: Source = {
       id: 'src-empty',
       type: 'local-folder',
       scope: 'global',
     };
     const resEmpty = await resolveLocalFolder(emptySource);
-    assert.deepStrictEqual(resEmpty, []);
+    assert.deepStrictEqual(resEmpty, { packages: [], diagnostics: [] });
 
     const nonExistentSource: Source = {
       id: 'src-nonexistent',
       type: 'local-folder',
       scope: 'global',
-      localPath: '/tmp/non-existent-source-' + Date.now(),
+      localPath: path.join(fixturesRoot, 'nonexistent-' + Date.now()),
     };
     const resNonExistent = await resolveLocalFolder(nonExistentSource);
-    assert.deepStrictEqual(resNonExistent, []);
+    assert.deepStrictEqual(resNonExistent, { packages: [], diagnostics: [] });
   });
 
-  it('resolveArtifactContent resolves CanonicalSkill correctly without casts', async () => {
+  it('resolveArtifactContent resolves CanonicalSkill with auxiliary files without casts', async () => {
     const source: Source = {
-      id: 'src-ack-gitignore',
+      id: 'src-nested',
       type: 'local-folder',
       scope: 'project',
-      localPath: fixture1Path,
+      localPath: nestedSkillsPath,
     };
 
-    const packages = await resolveLocalFolder(source);
-    const pkg = packages[0];
-    const artifact = pkg.artifacts[0];
+    const resolution = await resolveLocalFolder(source);
+    const skillBPkg = resolution.packages.find((p) => p.artifacts[0].name === 'nested-skill-b');
+    assert.ok(skillBPkg);
+    const artifact = skillBPkg.artifacts[0];
 
-    const resolved: ResolvedArtifact<CanonicalSkill> = await resolveArtifactContent(source, pkg, artifact);
+    const resolved: ResolvedArtifact<CanonicalSkill> = await resolveArtifactContent(
+      source,
+      skillBPkg,
+      artifact
+    );
     assert.strictEqual(resolved.artifact.id, artifact.id);
-    assert.strictEqual(resolved.content.name, 'gitignore');
-    assert.ok(resolved.content.description.length > 0);
-    assert.ok(Array.isArray(resolved.content.files));
+    assert.strictEqual(resolved.content.name, 'nested-skill-b');
+    assert.strictEqual(resolved.content.description, 'Second nested skill fixture with auxiliary script');
+    assert.strictEqual(resolved.content.files.length, 1);
+    assert.strictEqual(resolved.content.files[0].path, 'scripts/helper.sh');
   });
 });

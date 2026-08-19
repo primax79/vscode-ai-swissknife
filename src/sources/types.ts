@@ -1,3 +1,5 @@
+import type { Package } from '../domain/types';
+
 export interface DetectionDiagnostic {
   severity: 'error' | 'warning';
   path: string;
@@ -13,5 +15,10 @@ export interface DetectedSkillDir {
 
 export interface SkillDetectionResult {
   skills: DetectedSkillDir[];
+  diagnostics: DetectionDiagnostic[];
+}
+
+export interface SourceResolution {
+  packages: Package[];
   diagnostics: DetectionDiagnostic[];
 }
