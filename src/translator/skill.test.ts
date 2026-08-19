@@ -5,7 +5,6 @@ import * as os from 'os';
 import * as path from 'path';
 import { parseSkillMarkdown } from '../adapters/claude';
 import type { CanonicalSkill } from '../adapters/types';
-import type { AssistantId } from '../domain/types';
 import { translateSkill } from './skill';
 
 function getRealSkillFixturePath(): string {
@@ -95,27 +94,18 @@ describe('translateSkill', () => {
     assert.deepStrictEqual(toClaudeResult.diagnostics, []);
     assert.deepStrictEqual(toClaudeResult.value, skillWithExtra);
     assert.deepStrictEqual(toClaudeResult.value.extraFields, skillWithExtra.extraFields);
-    const toCopilotResult = translateSkill(skillWithExtra, 'github-copilot');
+    const toCopilotResult = translateSkill(realCanonicalSkill, 'github-copilot');
     assert.strictEqual(toCopilotResult.overall, 'lossless');
     assert.deepStrictEqual(toCopilotResult.diagnostics, []);
-    assert.deepStrictEqual(toCopilotResult.value, skillWithExtra);
+    assert.deepStrictEqual(toCopilotResult.value, realCanonicalSkill);
   });
 
-  it('returns overall: unsupported for non-Phase-2 assistants with target diagnostic and no exception', () => {
-    const unsupportedTargets: AssistantId[] = ['codex-cli', 'gemini-cli'];
+  it('translates to codex-cli and gemini-cli losslessly', () => {
+    const toCodex = translateSkill(realCanonicalSkill, 'codex-cli');
+    assert.strictEqual(toCodex.overall, 'lossless');
 
-    for (const target of unsupportedTargets) {
-      const result = translateSkill(realCanonicalSkill, target);
-      assert.strictEqual(result.overall, 'unsupported');
-      assert.strictEqual(result.diagnostics.length, 1);
-      assert.strictEqual(result.diagnostics[0].code, 'unsupported-target');
-      assert.strictEqual(result.diagnostics[0].severity, 'error');
-      assert.strictEqual(result.diagnostics[0].impact, 'unsupported');
-      assert.strictEqual(result.diagnostics[0].field, 'target');
-      assert.ok(result.diagnostics[0].message.includes(target));
-      // Content is preserved for inspection
-      assert.strictEqual(result.value.name, realCanonicalSkill.name);
-    }
+    const toGemini = translateSkill(realCanonicalSkill, 'gemini-cli');
+    assert.strictEqual(toGemini.overall, 'lossless');
   });
 
   it('proves caller receives translation.value as the mutated/translated object', () => {

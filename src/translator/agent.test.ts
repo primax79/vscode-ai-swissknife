@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert';
 import type { CanonicalAgent } from '../adapters/types';
+import type { AssistantId } from '../domain/types';
 import { translateAgent } from './agent';
 
 describe('translateAgent', () => {
@@ -63,7 +64,7 @@ describe('translateAgent', () => {
   });
 
   it('returns unsupported for non-supported targets', () => {
-    const result = translateAgent(claudeAgent, 'gemini-cli');
+    const result = translateAgent(claudeAgent, 'cursor' as unknown as AssistantId);
     assert.strictEqual(result.overall, 'unsupported');
     assert.strictEqual(result.diagnostics.length, 1);
     assert.strictEqual(result.diagnostics[0].code, 'unsupported-target');

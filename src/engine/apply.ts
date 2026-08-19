@@ -27,6 +27,8 @@ import {
   kiloAdapter,
 } from '../adapters/kilo';
 import { copilotAdapter } from '../adapters/copilot';
+import { codexAdapter } from '../adapters/codex';
+import { geminiAdapter } from '../adapters/gemini';
 import { readState, writeState } from '../domain/registry';
 import type { PreparedInstall, ApplyOutcome } from './types';
 
@@ -339,6 +341,10 @@ export async function applyInstall(
         ? claudeAdapter
         : plan.targetAssistant === 'github-copilot'
         ? copilotAdapter
+        : plan.targetAssistant === 'codex-cli'
+        ? codexAdapter
+        : plan.targetAssistant === 'gemini-cli'
+        ? geminiAdapter
         : kiloAdapter;
     const targetFilePath = plan.targetDir;
     const randomId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;

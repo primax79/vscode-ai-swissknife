@@ -11,6 +11,8 @@ import { resolveRemoteUrl } from '../sources/remoteUrl';
 import { ClaudeAdapter } from '../adapters/claude';
 import { KiloAdapter } from '../adapters/kilo';
 import { CopilotAdapter } from '../adapters/copilot';
+import { CodexAdapter } from '../adapters/codex';
+import { GeminiAdapter } from '../adapters/gemini';
 import { planInstall } from '../engine/plan';
 import { applyInstall } from '../engine/apply';
 import type { PreparedInstall } from '../engine/types';
@@ -157,6 +159,8 @@ export class AvailableTreeDataProvider
   private claudeAdapter = new ClaudeAdapter();
   private kiloAdapter = new KiloAdapter();
   private copilotAdapter = new CopilotAdapter();
+  private codexAdapter = new CodexAdapter();
+  private geminiAdapter = new GeminiAdapter();
   private onInstalledRefreshCallback?: () => void;
 
   setInstalledRefreshCallback(cb: () => void) {
@@ -341,7 +345,7 @@ export class AvailableTreeDataProvider
     const { source, pkg, artifact } = item;
 
     const assistantPick = await vscode.window.showQuickPick(
-      ['claude-code', 'kilo-code', 'github-copilot'],
+      ['claude-code', 'kilo-code', 'github-copilot', 'codex-cli', 'gemini-cli'],
       {
         placeHolder: 'Select target AI assistant',
       }
@@ -353,6 +357,10 @@ export class AvailableTreeDataProvider
         ? this.claudeAdapter
         : targetAssistant === 'github-copilot'
         ? this.copilotAdapter
+        : targetAssistant === 'codex-cli'
+        ? this.codexAdapter
+        : targetAssistant === 'gemini-cli'
+        ? this.geminiAdapter
         : this.kiloAdapter;
 
     const scopePick = await vscode.window.showQuickPick(['project', 'global'], {
@@ -469,7 +477,7 @@ export class AvailableTreeDataProvider
     }
 
     const assistantPick = await vscode.window.showQuickPick(
-      ['claude-code', 'kilo-code', 'github-copilot'],
+      ['claude-code', 'kilo-code', 'github-copilot', 'codex-cli', 'gemini-cli'],
       {
         placeHolder: `Select target AI assistant for ${items.length} item(s)`,
       }
@@ -481,6 +489,10 @@ export class AvailableTreeDataProvider
         ? this.claudeAdapter
         : targetAssistant === 'github-copilot'
         ? this.copilotAdapter
+        : targetAssistant === 'codex-cli'
+        ? this.codexAdapter
+        : targetAssistant === 'gemini-cli'
+        ? this.geminiAdapter
         : this.kiloAdapter;
 
     const scopePick = await vscode.window.showQuickPick(['project', 'global'], {

@@ -2,6 +2,14 @@ import type { CanonicalCommand } from '../adapters/types';
 import type { AssistantId } from '../domain/types';
 import type { TranslationResult, TranslationDiagnostic } from './skill';
 
+const SUPPORTED_ASSISTANTS: AssistantId[] = [
+  'claude-code',
+  'kilo-code',
+  'github-copilot',
+  'codex-cli',
+  'gemini-cli',
+];
+
 export function translateCommand(
   source: CanonicalCommand,
   targetAssistant: AssistantId
@@ -13,11 +21,7 @@ export function translateCommand(
   delete extraFields.model;
   delete extraFields.subtask;
 
-  if (
-    targetAssistant === 'claude-code' ||
-    targetAssistant === 'kilo-code' ||
-    targetAssistant === 'github-copilot'
-  ) {
+  if (SUPPORTED_ASSISTANTS.includes(targetAssistant)) {
     return {
       value: {
         name: source.name,
@@ -26,7 +30,7 @@ export function translateCommand(
         ...(source.model ? { model: source.model } : {}),
         ...(source.subtask !== undefined ? { subtask: source.subtask } : {}),
         body: source.body,
-        extraFields: targetAssistant === 'kilo-code' ? {} : extraFields,
+        extraFields: targetAssistant === 'kilo-code' || targetAssistant === 'gemini-cli' ? {} : extraFields,
       },
       overall: 'lossless',
       diagnostics: [],
@@ -39,7 +43,7 @@ export function translateCommand(
       severity: 'error',
       field: 'target',
       impact: 'unsupported',
-      message: `Target assistant "${targetAssistant}" is not supported for commands in Phase 2`,
+      message: `Target assistant "${targetAssistant}" is not supported for commands`,
     },
   ];
 

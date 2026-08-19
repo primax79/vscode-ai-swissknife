@@ -9,6 +9,8 @@ import { applyInstall } from '../engine/apply';
 import { ClaudeAdapter } from '../adapters/claude';
 import { KiloAdapter } from '../adapters/kilo';
 import { CopilotAdapter } from '../adapters/copilot';
+import { CodexAdapter } from '../adapters/codex';
+import { GeminiAdapter } from '../adapters/gemini';
 import type { DriftReport } from '../engine/types';
 import { getWorkspaceRoot } from './workspacePicker';
 
@@ -59,6 +61,8 @@ export class InstalledTreeDataProvider
   private claudeAdapter = new ClaudeAdapter();
   private kiloAdapter = new KiloAdapter();
   private copilotAdapter = new CopilotAdapter();
+  private codexAdapter = new CodexAdapter();
+  private geminiAdapter = new GeminiAdapter();
 
   refresh(): void {
     this._onDidChangeTreeData.fire();
@@ -320,6 +324,10 @@ export class InstalledTreeDataProvider
         ? this.claudeAdapter
         : inst.assistant === 'github-copilot'
         ? this.copilotAdapter
+        : inst.assistant === 'codex-cli'
+        ? this.codexAdapter
+        : inst.assistant === 'gemini-cli'
+        ? this.geminiAdapter
         : this.kiloAdapter;
 
     const fakePkg = {
@@ -377,7 +385,7 @@ export class InstalledTreeDataProvider
       item instanceof InstalledInstallationItem ? item.installation : item.observed;
 
     const assistantPick = await vscode.window.showQuickPick(
-      ['claude-code', 'kilo-code', 'github-copilot'],
+      ['claude-code', 'kilo-code', 'github-copilot', 'codex-cli', 'gemini-cli'],
       {
         placeHolder: `Select target assistant to copy "${sourceItem.name}" to`,
       }

@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert';
 import type { CanonicalCommand } from '../adapters/types';
+import type { AssistantId } from '../domain/types';
 import { translateCommand } from './command';
 
 describe('translateCommand', () => {
@@ -40,8 +41,8 @@ describe('translateCommand', () => {
     assert.strictEqual(result.value.description, 'Review PR code');
   });
 
-  it('returns unsupported for non-Phase-2 target assistants', () => {
-    const result = translateCommand(cmd, 'gemini-cli');
+  it('returns unsupported for non-supported target assistants', () => {
+    const result = translateCommand(cmd, 'cursor' as unknown as AssistantId);
     assert.strictEqual(result.overall, 'unsupported');
     assert.strictEqual(result.diagnostics.length, 1);
     assert.strictEqual(result.diagnostics[0].code, 'unsupported-target');

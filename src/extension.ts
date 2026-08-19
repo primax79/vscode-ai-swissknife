@@ -72,7 +72,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (!kindPick) return;
 
       const assistantPick = await vscode.window.showQuickPick(
-        ['claude-code', 'kilo-code', 'github-copilot'],
+        ['claude-code', 'kilo-code', 'github-copilot', 'codex-cli', 'gemini-cli'],
         {
           placeHolder: 'Select target assistant',
         }

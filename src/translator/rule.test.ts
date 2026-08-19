@@ -41,15 +41,10 @@ describe('translateRule', () => {
     assert.deepStrictEqual(kiloResult.value, realCanonicalRule);
   });
 
-  it('returns unsupported for non-Phase-1 target assistants', () => {
-    const unsupportedTargets: AssistantId[] = ['github-copilot', 'codex-cli', 'gemini-cli'];
-
-    for (const target of unsupportedTargets) {
-      const result = translateRule(realCanonicalRule, target);
-      assert.strictEqual(result.overall, 'unsupported');
-      assert.strictEqual(result.diagnostics.length, 1);
-      assert.strictEqual(result.diagnostics[0].code, 'unsupported-target');
-      assert.strictEqual(result.diagnostics[0].severity, 'error');
-    }
+  it('returns unsupported for non-supported target assistants', () => {
+    const res = translateRule(realCanonicalRule, 'cursor' as unknown as AssistantId);
+    assert.strictEqual(res.overall, 'unsupported');
+    assert.strictEqual(res.diagnostics.length, 1);
+    assert.strictEqual(res.diagnostics[0].code, 'unsupported-target');
   });
 });

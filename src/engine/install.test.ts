@@ -3,7 +3,7 @@ import * as assert from 'node:assert';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import type { Source, Package, Artifact, ItemKind } from '../domain/types';
+import type { Source, Package, Artifact, ItemKind, AssistantId } from '../domain/types';
 import { ClaudeAdapter } from '../adapters/claude';
 import { KiloAdapter } from '../adapters/kilo';
 import { CopilotAdapter } from '../adapters/copilot';
@@ -84,8 +84,8 @@ describe('Install Engine — planInstall and applyInstall', () => {
       };
 
       const fakeAdapter = {
-        assistant: 'codex-cli' as const,
-        skillDir: () => path.join(testTempDir, '.codex', 'skills', 'root-skill'),
+        assistant: 'unsupported-assistant' as unknown as AssistantId,
+        skillDir: () => path.join(testTempDir, '.unsupported', 'skills', 'root-skill'),
       };
 
       const prepared = await planInstall({
@@ -98,7 +98,7 @@ describe('Install Engine — planInstall and applyInstall', () => {
       });
 
       assert.strictEqual(prepared.supported, false);
-      assert.ok(prepared.plan.reason.includes('Target assistant "codex-cli" is not supported'));
+      assert.ok(prepared.plan.reason.includes('Target assistant "unsupported-assistant" is not supported'));
       assert.ok(prepared.plan.diagnostics && prepared.plan.diagnostics.length > 0);
     });
 
