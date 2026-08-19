@@ -30,6 +30,12 @@ Shared decisions for this initiative that every task must honour:
   disk, no network) and `07.2`'s `refreshCatalog` (actually resolve/fetch
   sources, real network/git activity). Don't conflate them under one
   "Refresh" command or name.
+- Available catalog leaves retain Source + Package + Artifact, and carry
+  resolver diagnostics to the tree. Every dismissed/cancelled preview or
+  conflict-policy picker aborts; only explicit Install may call apply, once.
+- Source removal checks both machine-local installations and manifest
+  `desiredInstallations`. Confirmed removal also removes dependent desired
+  entries, but never uninstalls files or deletes local state records.
 - This initiative depends on 06 (install engine, revised — see its
   `plan.md`) for the Available view's install action, but the Sources
   view (07.1) only depends on 02 (registry, hardened by 02.3) and can be

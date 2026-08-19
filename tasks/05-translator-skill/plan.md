@@ -1,4 +1,4 @@
-# 05 — Canonical model + translator (skill+rule) — Implementation plan
+# 05 — Canonical model + translator (skill) — Implementation plan
 
 > **Derived from spec:** [../specs/foundations.md](../specs/foundations.md)
 
@@ -19,17 +19,10 @@ Shared decisions for this initiative that every task must honour:
   Claude's flat `tools:` list vs Kilo's `mode`/`permission` block, SPEC.md
   §1) has a working pattern to extend instead of inventing the pipeline
   and debugging a hard translation in the same pass.
-- **Correction (2026-08-18, second Codex review, finding I10)**: an
-  earlier version of this file said the translator "does not know about
-  file paths or assistants at all" — that was aspirational, not what
-  `05.1` actually implements (`translateSkill(source, fromAssistant,
-  toAssistant)` takes both explicitly), and the two documents
-  contradicted each other. Resolved in favor of what's implemented: the
-  translator **does** take assistant identity as an explicit parameter
-  (it needs it to know which target-specific constraints to check, e.g.
-  Copilot's name-length cap in a future phase) — it does not, however,
-  touch the filesystem or know about paths. Don't re-introduce the
-  path-blind-and-assistant-blind framing without changing the code to
-  match it.
-- This initiative depends on 03 (needs `CanonicalSkill`/`CanonicalRule`
-  from `src/adapters/types.ts`) but not on 04.
+- **Locked after hardening round 002**: the translator accepts only the
+  target `AssistantId`; it does not accept or infer a source assistant,
+  because a manifest-less custom repo has no trustworthy source identity.
+  It remains filesystem/path agnostic. Claude/Kilo return lossless output;
+  every other Phase-1 target returns an explicit unsupported diagnostic.
+- This initiative depends on 03.4 for the complete `CanonicalSkill`
+  directory payload but not on 04.

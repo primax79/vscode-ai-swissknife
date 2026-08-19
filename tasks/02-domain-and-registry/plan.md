@@ -21,11 +21,14 @@ Shared decisions for this initiative that every task must honour:
   `~/.ai-swissknife/` (global) / `<workspace>/.ai-swissknife/` (project),
   **not** `.ai-toolkit` — renamed in 02.3 before any real user has data
   under the old name. Each level now holds **two** files, not one:
-  `manifest.json` (shareable, versionable — `Source[]` + `schemaVersion`,
-  no machine-specific fields) and `state.json` (machine-local —
+  `manifest.json` (shareable, versionable — portable `DesiredSource[]` +
+  `desiredInstallations` + `schemaVersion`, no absolute project paths or
+  other machine-specific fields) and `state.json` (machine-local —
   `ManagedInstallation[]` + `schemaVersion`, never committed). See 02.3
   for the exact functions. `ObservedArtifact` is still never persisted in
   either file (SPEC.md §4) — later initiatives (discovery, Phase 3) will
   define its own cache structure.
 - This initiative depends on 01 (needs `tsconfig.json`/`package.json` to
-  exist so the new files typecheck and build).
+  exist so the new files typecheck and build). The open 02.3 hardening
+  task additionally depends on 03.4's shared skill codec; completed 02.1/
+  02.2 remain the domain/store foundation that 03.4 already uses.

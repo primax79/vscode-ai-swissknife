@@ -112,7 +112,7 @@ review, `_inbox/analyzed/codex-analysis-2.md` — don't let it drift again).
   highest-priority `Source` type** — it's the actual motivating case (§0),
   and must be solved before `git-marketplace`/`remote-url`/
   `git-single-item`. See `SPEC.md` §1 and §6 Phase 1.
-- **Hardening gate inserted before initiative 06** (new, 2026-08-18) — a
+- **Hardening gate locked before initiative 06** (2026-08-18/19) — a
   second Codex review of the actual code (not just the spec) found real
   contract gaps at the resolver/install/registry boundary: `Artifact` had
   no way to fetch real content, `CanonicalSkill` only modeled `SKILL.md`
@@ -122,9 +122,15 @@ review, `_inbox/analyzed/codex-analysis-2.md` — don't let it drift again).
   wasn't actually implemented. *Why:* explicit user decision to fix these
   before 06/07 lock in a plan/apply/UI contract on top of them — see
   `SPEC.md` §7 and `_inbox/analyzed/codex-analysis-2.md` for full detail.
-  New initiatives `02.3`/`03.4`/`04.3`/`05.2` close these gaps; `06`/`07`
-  were rewritten (not just extended) since no code existed yet for
-  either.
+  Tasks `02.3`/`03.4`/`04.3`/`05.2` close these gaps; `06`/`07` were
+  rewritten since no code existed yet. Multi-engine rounds 001 and 002
+  are accepted and fully reflected in the current task files. Round 002
+  additionally locks portable `DesiredSource` + `desiredInstallations`,
+  typed `ResolvedArtifact<CanonicalSkill>`, detector diagnostics carried
+  to the UI, one shared Git checkout/read mutex, translated-output
+  payloads, apply-time hash + complete-tree revalidation, staged `chmod`,
+  truthful recovery outcomes, and zero mutation on every dismissed UI
+  path. See `SPEC.md` §7 and `_reviews/002-hardening-gate-SUMMARY.md`.
 - **Data directory renamed `.ai-toolkit` → `.ai-swissknife`** (initiative
   02.3) — match the product name before any real user has data under the
   old path; renaming after release would need a migration. *Why:* SPEC.md
@@ -151,10 +157,9 @@ review, `_inbox/analyzed/codex-analysis-2.md` — don't let it drift again).
 - All code, identifiers, comments, commit messages, and doc files
   (including everything under `tasks/`) are in English, regardless of
   what language the planning conversation happened in.
-- TypeScript, VSCode extension API. No build tooling chosen yet beyond what
-  initiative 01 sets up (grounded in `references/agent-hub/`'s
-  esbuild-based setup — adopt or deviate explicitly, don't invent a third
-  option without a stated reason).
+- TypeScript, VSCode extension API, esbuild, ESLint, and the test runner
+  already configured by initiative 01. Re-read `package.json` for the
+  current commands rather than relying on this summary.
 - Every `ManagedInstallation`-writing task must go through the
   resolve/plan/preview/apply/verify pipeline once it exists (initiative
   "install engine") — don't bypass it with a direct file write, even in an

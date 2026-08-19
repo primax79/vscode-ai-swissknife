@@ -55,6 +55,38 @@ depth came with roughly 2.8x kilo-gemini's latency; whether that
 trade-off is worth it by default or only for higher-stakes rounds is
 worth another data point or two before generalizing.
 
+## Review round 002 (hardening-gate task specs, after round-001 fixes applied)
+
+Targeted re-verification of the same 8 files after the round-001 fixes were
+applied (commit `7e123af`). Codex and `kilo-gemini-3.1-pro` were told to
+read `001-hardening-gate-SUMMARY.md` first (targeted, not blind); the
+planned fourth engine (a fresh Claude subagent, blind) was cancelled before
+producing output — the user asked to stop spending Claude tokens on review
+work mid-round and let Kilo/Codex carry it instead, so round 002 has no
+blind-subagent data point.
+
+| Engine | Model | Duration (dispatching call) | Findings (B / I) | Depth/character |
+| --- | --- | --- | --- | --- |
+| codex | default (via `mcp__codex__codex`) | ~90s, wrote its own file directly (workspace-write sandbox, a first for this project) | 10 B, 7 I | Deepest again: caught that decision 9 was not just "partially reflected" but explicitly reversed (the manifest kept absolute paths and the wrong field name), plus new compile-time-shaped gaps (`ResolvedArtifact.content: unknown` meeting `CanonicalSkill` consumers, `Adapter.assistant: AssistantId` vs. `translateSkill`'s narrower `SupportedAssistant`), a `contentHash` that plan computes but apply never checks, and an overwrite-safety gap for files that appear *after* preview but before apply. |
+| kilo-gemini-3.1-pro | `google/gemini-3.1-pro-preview-customtools` | ~4 min (ran directly in the shared working directory, no isolation) | 3 B, 3 I | Fewer findings but independently caught the same two highest-value bugs codex found (decision 9 reversal; `PreparedInstall.content` storing the translator's *input* instead of `TranslationResult.value`) — the second is a real, silent "translation gets discarded" bug, doubly confirmed. Also found one genuinely novel bug neither codex nor round 001 caught: `06.2`'s staging step never `chmod`s `content.files`, silently dropping executable-bit `mode` that `03.4` explicitly added support for. |
+| kilo-gemini-3.7-flash | `google/gemini-3.7-flash` | first attempt crashed (~1-2 min in, "provider ended the response with an error") before writing anything — likely caused by running concurrently with `kilo-gemini-3.1-pro` in the *same* working directory with no isolation (both dispatches were warned about and appear to have shared one underlying Kilo session); retried with `isolation: 'worktree'` | pending (retry in flight) | First-attempt failure is itself a data point: this tier appears less robust to concurrent/uncoordinated dispatch in the same tree than the pro tier, independent of review quality. |
+
+**Read so far**: round 002 confirms round 001's core lesson at a second
+level — reviewing the *fix* is as valuable as reviewing the original, since
+the fix itself introduced or missed real defects (translator-output vs.
+input being the standout: two of three completed engines caught it
+independently, and it would have shipped a translator that never actually
+translates). It also produced the first `workspace-write`-sandboxed Codex
+review that wrote its own file directly, matching `kilo_implement`'s
+long-standing behavior — worth using non-`read-only` sandbox by default for
+future review rounds when the target is a docs-only tree, purely so the
+orchestrator doesn't have to transcribe. Running two `kilo_implement`
+review dispatches against the same working directory without
+`isolation: 'worktree'` produced a real collision (a crash), not just the
+theoretical race the tool's own warning describes — treat that warning as
+load-bearing even for read-mostly review tasks, not only for tasks that
+edit files.
+
 ## How to extend this log
 
 Append a row (or a new table for a new category of work) after every

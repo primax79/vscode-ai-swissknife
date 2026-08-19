@@ -10,7 +10,8 @@ Tasks (each = one commit; hand one file at a time to a delegated agent):
 
 Shared decisions for this initiative that every task must honour:
 
-- Resolvers only produce `Package[]`/`Artifact[]` (SPEC.md §4) — they
+- Resolvers produce `SourceResolution { packages, diagnostics }` (packages
+  contain `Artifact[]`, SPEC.md §4) — they
   never write to an assistant's config directories (that's the Install
   engine, initiative 06) and never touch the registry (that's initiative
   02's store, used later by 06).
@@ -28,7 +29,7 @@ Shared decisions for this initiative that every task must honour:
   provenance notes — "ground tests in real, provenance-tracked artifacts"
   and "keep tests portable" are not in tension; do not revert to
   asserting against `~/.claude/skills/` in any task after `04.3` lands.
-- This initiative depends on 02 (needs `src/domain/types.ts`; `04.3`
-  additionally depends on `02.3` for `resolveArtifactContent`/
-  `ResolvedRevision`) and can run in parallel with initiative 03 once 02
-  is done — both only depend on 02, not on each other.
+- This initiative depends on completed 02.1 domain types. `04.3` additionally
+  depends on `03.4` for the codec/detector contract and `02.3` for typed
+  `resolveArtifactContent`, `ResolvedRevision`, and the shared Git mutex.
+  It lands after both.

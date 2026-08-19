@@ -32,6 +32,11 @@ Shared decisions for this initiative that every task must honour:
   result in a recorded `ManagedInstallation`.
 - `apply` writes to the **state file** (02.3's `writeState`), never the
   manifest — installations are machine-local.
+- `PreparedInstall` is discriminated: unsupported plans contain no dummy
+  payload. Supported plans carry `TranslationResult.value` plus one shared
+  canonical hash. Apply verifies that hash and the complete target-tree
+  snapshot before mutation, preserves file modes while staging, and reports
+  manual recovery whenever restoration cannot be proven.
 - Only `artifact.kind === 'skill'` is actually supported end-to-end in
   this Phase (rule is deferred, `tasks/CONTEXT.md`) — `plan`/`apply` must
   say so explicitly (`supported: false` / `{status: 'refused'}`) for

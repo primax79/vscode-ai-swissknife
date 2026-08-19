@@ -16,22 +16,24 @@ repository containing loose skills (directories with `SKILL.md`, no
 marketplace manifest required), browse what it contains, and install any
 of them onto **Claude Code** or **Kilo Code**, at global or project scope,
 with a preview step before anything is written and tracked provenance
-afterward. `rule` (CLAUDE.md/AGENTS.md-equivalent) rides along at the same
-time as `skill` because both assistants already converge on it with near
-zero translation (SPEC.md §5 "`rule` convergence").
+afterward. Phase 1 is strictly `skill` end-to-end. The already-implemented
+Claude/Kilo `rule` adapters remain dormant until Phase 2 defines safe
+merge/composition semantics for pre-existing rule files.
 
 This is deliberately **not** the full spec: no `agent`/`mcp-server`/`hook`/
 `command`, no Copilot/Codex/Gemini adapters, no dashboard/form editor/
 bidirectional sync/watchers. Those are Phase 2/3 (SPEC.md §6) and get their
 own specs once this slice ships and is validated end to end.
 
-## Current state (verified 2026-08-18 — re-check before starting)
+## Current state (verified 2026-08-19 — re-check before starting)
 
-- The repo has no source code yet: only `SPEC.md`, `.gitignore`,
-  `references/` (gitignored local research material), and this `tasks/`
-  tree. Confirmed via `ls -la` on 2026-08-18.
-- Git remote is configured: `git@github.com:primax79/vscode-ai-swissknife.git`,
-  on branch `main`, no commits yet.
+- Initiatives 01–05 have implementation under `src/`; 02.3, 03.4, 04.3,
+  and 05.2 remain the pre-06 hardening gate. Inspect `tasks/00-INDEX.md`,
+  `git status`, and the real `src/` tree before starting — this statement
+  is a pointer, not a frozen file list.
+- Git remote is configured as
+  `git@github.com:primax79/vscode-ai-swissknife.git`; inspect the current
+  branch/history rather than assuming the original empty-repo state.
 - Full domain model, the verified per-assistant format table, and every
   open risk live in `../../SPEC.md` — read §1 (domain model + format
   table), §4 (architecture), §5 (risks) before starting any task below.
@@ -41,11 +43,9 @@ own specs once this slice ships and is validated end to end.
 ## Locked-in decisions (scoped to this slice; see `CONTEXT.md` for
 cross-cutting ones)
 
-- **`skill` + `rule` only, Claude Code + Kilo Code only, for this whole
-  spec.** Both kinds are near-zero-translation between the two (see below)
-  — the slice is chosen specifically to validate the pipeline
-  end-to-end without also debugging a hard translation case in the same
-  pass.
+- **`skill` only end-to-end, Claude Code + Kilo Code only, for this
+  slice.** `rule` adapter code exists but is not resolved, translated,
+  installed, or exposed in the Phase-1 UI.
 - **`skill` format is byte-identical between Claude Code and Kilo Code**:
   a directory containing `SKILL.md` with `name`/`description` frontmatter.
   Verified in Kilo's own source: `installer.ts:214` (checks for
@@ -82,21 +82,17 @@ cross-cutting ones)
   (or nested — don't assume a fixed depth, walk and detect). No manifest
   generation should ever be required from the user when the structure is
   unambiguous (SPEC.md §2.2).
-- **Real fixtures, not invented ones**: use this workspace's own existing
-  `SKILL.md` files (e.g. under `agentic-coding-kit/`,
-  `adk-agentic-coding-kit/`, `gcube-ai-toolkit/` — sibling directories in
-  the workspace) as test input for the format detector and skill parser,
-  and `references/cc-swiss-knife/plugins/*/skills/` as a second real
-  source with a different repo shape (plugin-nested, not flat). Do not
-  hand-write synthetic `SKILL.md` fixtures as the *only* test input.
+- **Portable, provenance-tracked fixtures**: derive a small committed
+  corpus from real workspace `SKILL.md` trees and record origin/capture
+  date. Mandatory tests run only against committed disposable fixtures;
+  live sibling repos and `~/.claude/skills` are optional manual smoke
+  inputs, never assumptions of the suite.
 
 ## Non-goals (explicit, don't build these in this slice)
 
-- No `agent`, `mcp-server`, `hook`, `command` kind — even though the
-  domain model (SPEC.md §1) defines all 6, only `skill`+`rule` get an
-  adapter, resolver, and translator implementation here. Stub the
-  `ItemKind` union with all 6 values (types are cheap and shared), but do
-  not implement handling for the other 4.
+- No end-to-end `rule`, `agent`, `mcp-server`, `hook`, or `command` kind.
+  The domain union still declares all 6 and the existing rule adapters
+  remain, but only `skill` gets resolver/translator/install/UI behavior.
 - No GitHub Copilot / Codex CLI / Gemini CLI adapters.
 - No `git-marketplace`, `remote-url`, `git-single-item` Source resolvers.
 - No dashboard webview, no form editor, no bidirectional sync, no file

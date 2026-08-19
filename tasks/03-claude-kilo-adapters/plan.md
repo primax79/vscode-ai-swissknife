@@ -11,7 +11,8 @@ Tasks (each = one commit; hand one file at a time to a delegated agent):
 
 Shared decisions for this initiative that every task must honour:
 
-- Only `skill` and `rule` are implemented — an adapter method for
+- Only `skill` and `rule` adapters are implemented, while only `skill` is
+  exercised by the Phase-1 resolver/install/UI pipeline — an adapter method for
   `agent`/`command`/`mcp-server`/`hook` should not exist yet (not even as
   a stub that throws "not implemented"); add the interface surface for
   those kinds only when a later initiative actually implements them, so
@@ -41,5 +42,6 @@ Shared decisions for this initiative that every task must honour:
     both scopes, which contradicted what `03.3` itself correctly
     implemented for global scope. This is now the single source of
     truth; `03.3`'s own file matches it.)
-- This initiative depends on 02 (needs `src/domain/types.ts`; `03.4`
-  depends on `02.3` too — read that task's file before starting `03.4`).
+- This initiative depends on completed 02.1 domain types. `03.4` is the
+  first open hardening task: its codec is consumed by `02.3`, and its
+  detector result is extended by `04.3`. Land it before both.
