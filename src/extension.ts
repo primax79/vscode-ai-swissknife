@@ -12,6 +12,7 @@ import {
   ObservedArtifactItem,
 } from './ui/installedView';
 import { setupFileWatchers } from './ui/watchers';
+import { DashboardPanel } from './ui/dashboard';
 
 export function activate(context: vscode.ExtensionContext) {
   const sourcesProvider = new SourcesTreeDataProvider();
@@ -55,6 +56,7 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('aiSwissknife.promoteItem', (item?: ObservedArtifactItem) =>
       installedProvider.promoteItem(item)
     ),
+    vscode.commands.registerCommand('aiSwissknife.openDashboard', () => DashboardPanel.render()),
     vscode.commands.registerCommand('aiSwissknife.refreshInstalled', () => installedProvider.refresh())
   );
 }
