@@ -20,7 +20,63 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
-    "commands": []
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "ai-swissknife",
+          "title": "AI Swissknife",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "ai-swissknife": [
+        {
+          "id": "aiSwissknife.sources",
+          "name": "Sources"
+        },
+        {
+          "id": "aiSwissknife.available",
+          "name": "Available"
+        },
+        {
+          "id": "aiSwissknife.installed",
+          "name": "Installed"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "aiSwissknife.addSource",
+        "title": "Add Source",
+        "category": "AI Swissknife"
+      },
+      {
+        "command": "aiSwissknife.removeSource",
+        "title": "Remove Source",
+        "category": "AI Swissknife"
+      },
+      {
+        "command": "aiSwissknife.reloadRegistry",
+        "title": "Reload Manifest",
+        "category": "AI Swissknife"
+      },
+      {
+        "command": "aiSwissknife.refreshCatalog",
+        "title": "Refresh Available Catalog",
+        "category": "AI Swissknife"
+      },
+      {
+        "command": "aiSwissknife.installArtifact",
+        "title": "Install Skill",
+        "category": "AI Swissknife"
+      },
+      {
+        "command": "aiSwissknife.refreshInstalled",
+        "title": "Refresh Installed",
+        "category": "AI Swissknife"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run build",
