@@ -33,8 +33,15 @@ describe('translateCommand', () => {
     assert.strictEqual(result.value.agent, 'qa-engineer');
   });
 
-  it('returns unsupported for non-Phase-2 target assistants', () => {
+  it('translates command to github-copilot losslessly', () => {
     const result = translateCommand(cmd, 'github-copilot');
+    assert.strictEqual(result.overall, 'lossless');
+    assert.strictEqual(result.value.name, 'review');
+    assert.strictEqual(result.value.description, 'Review PR code');
+  });
+
+  it('returns unsupported for non-Phase-2 target assistants', () => {
+    const result = translateCommand(cmd, 'gemini-cli');
     assert.strictEqual(result.overall, 'unsupported');
     assert.strictEqual(result.diagnostics.length, 1);
     assert.strictEqual(result.diagnostics[0].code, 'unsupported-target');

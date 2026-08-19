@@ -95,10 +95,14 @@ describe('translateSkill', () => {
     assert.deepStrictEqual(toClaudeResult.diagnostics, []);
     assert.deepStrictEqual(toClaudeResult.value, skillWithExtra);
     assert.deepStrictEqual(toClaudeResult.value.extraFields, skillWithExtra.extraFields);
+    const toCopilotResult = translateSkill(skillWithExtra, 'github-copilot');
+    assert.strictEqual(toCopilotResult.overall, 'lossless');
+    assert.deepStrictEqual(toCopilotResult.diagnostics, []);
+    assert.deepStrictEqual(toCopilotResult.value, skillWithExtra);
   });
 
-  it('returns overall: unsupported for non-Phase-1 assistants with target diagnostic and no exception', () => {
-    const unsupportedTargets: AssistantId[] = ['github-copilot', 'codex-cli', 'gemini-cli'];
+  it('returns overall: unsupported for non-Phase-2 assistants with target diagnostic and no exception', () => {
+    const unsupportedTargets: AssistantId[] = ['codex-cli', 'gemini-cli'];
 
     for (const target of unsupportedTargets) {
       const result = translateSkill(realCanonicalSkill, target);

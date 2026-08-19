@@ -14,7 +14,7 @@ describe('translateMcpServer', () => {
     },
   };
 
-  it('translates MCP server to claude-code and kilo-code losslessly', () => {
+  it('translates MCP server to claude-code, kilo-code, and github-copilot losslessly', () => {
     const resClaude = translateMcpServer(mcp, 'claude-code');
     assert.strictEqual(resClaude.overall, 'lossless');
     assert.strictEqual(resClaude.value.id, 'sqlite');
@@ -24,6 +24,10 @@ describe('translateMcpServer', () => {
     const resKilo = translateMcpServer(mcp, 'kilo-code');
     assert.strictEqual(resKilo.overall, 'lossless');
     assert.strictEqual(resKilo.value.id, 'sqlite');
+
+    const resCopilot = translateMcpServer(mcp, 'github-copilot');
+    assert.strictEqual(resCopilot.overall, 'lossless');
+    assert.strictEqual(resCopilot.value.id, 'sqlite');
   });
 
   it('returns unsupported for non-Phase-2 target assistants', () => {

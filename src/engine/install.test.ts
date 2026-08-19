@@ -6,6 +6,7 @@ import * as path from 'path';
 import type { Source, Package, Artifact } from '../domain/types';
 import { ClaudeAdapter } from '../adapters/claude';
 import { KiloAdapter } from '../adapters/kilo';
+import { CopilotAdapter } from '../adapters/copilot';
 import { readState } from '../domain/registry';
 import { readSkill } from '../adapters/codec';
 import { planInstall } from './plan';
@@ -24,6 +25,7 @@ describe('Install Engine — planInstall and applyInstall', () => {
   let fixturesRoot: string;
   const claudeAdapter = new ClaudeAdapter();
   const kiloAdapter = new KiloAdapter();
+  const copilotAdapter = new CopilotAdapter();
 
   beforeEach(async () => {
     testTempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ai-swissknife-engine-ws-'));
@@ -82,8 +84,8 @@ describe('Install Engine — planInstall and applyInstall', () => {
       };
 
       const fakeAdapter = {
-        assistant: 'github-copilot' as const,
-        skillDir: () => path.join(testTempDir, '.github', 'skills', 'root-skill'),
+        assistant: 'codex-cli' as const,
+        skillDir: () => path.join(testTempDir, '.codex', 'skills', 'root-skill'),
       };
 
       const prepared = await planInstall({
@@ -96,7 +98,7 @@ describe('Install Engine — planInstall and applyInstall', () => {
       });
 
       assert.strictEqual(prepared.supported, false);
-      assert.ok(prepared.plan.reason.includes('Target assistant "github-copilot" is not supported'));
+      assert.ok(prepared.plan.reason.includes('Target assistant "codex-cli" is not supported'));
       assert.ok(prepared.plan.diagnostics && prepared.plan.diagnostics.length > 0);
     });
 
@@ -351,6 +353,43 @@ describe('Install Engine — planInstall and applyInstall', () => {
         assert.strictEqual(state.installations.length, 1);
         assert.strictEqual(state.installations[0].name, 'nested-skill-b');
         assert.strictEqual(state.installations[0].contentHash, prepared.supported ? prepared.contentHash : '');
+      }
+    });
+
+    it('applies fresh skill install to github-copilot target end-to-end', async () => {
+      const source: Source = {
+        id: 'src-root',
+        type: 'local-folder',
+        scope: 'project',
+        localPath: path.join(fixturesRoot, 'root-skill'),
+      };
+      const pkg: Package = { id: 'src-root:root-skill', sourceId: 'src-root', nativeFormat: 'claude-skill', artifacts: [] };
+      const artifact: Artifact = {
+        id: 'src-root:root-skill:root-skill',
+        packageId: 'src-root:root-skill',
+        kind: 'skill',
+        name: 'root-skill',
+        nativeFormat: 'claude-skill',
+      };
+
+      const prepared: PreparedInstall = await planInstall({
+        source,
+        pkg,
+        artifact,
+        targetAdapter: copilotAdapter,
+        targetScope: 'project',
+        projectRoot: testTempDir,
+      });
+
+      assert.strictEqual(prepared.supported, true);
+
+      const outcome = await applyInstall(prepared, testHomeDir);
+      assert.strictEqual(outcome.status, 'applied');
+
+      if (outcome.status === 'applied') {
+        assert.strictEqual(outcome.installation.name, 'root-skill');
+        assert.strictEqual(outcome.installation.assistant, 'github-copilot');
+        assert.ok(fs.existsSync(path.join(testTempDir, '.github', 'skills', 'root-skill', 'SKILL.md')));
       }
     });
 
