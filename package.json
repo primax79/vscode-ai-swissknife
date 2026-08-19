@@ -49,34 +49,76 @@
       {
         "command": "aiSwissknife.addSource",
         "title": "Add Source",
+        "icon": "$(plus)",
         "category": "AI Swissknife"
       },
       {
         "command": "aiSwissknife.removeSource",
         "title": "Remove Source",
+        "icon": "$(trash)",
         "category": "AI Swissknife"
       },
       {
         "command": "aiSwissknife.reloadRegistry",
         "title": "Reload Manifest",
+        "icon": "$(refresh)",
         "category": "AI Swissknife"
       },
       {
         "command": "aiSwissknife.refreshCatalog",
         "title": "Refresh Available Catalog",
+        "icon": "$(refresh)",
         "category": "AI Swissknife"
       },
       {
         "command": "aiSwissknife.installArtifact",
         "title": "Install Skill",
+        "icon": "$(cloud-download)",
         "category": "AI Swissknife"
       },
       {
         "command": "aiSwissknife.refreshInstalled",
         "title": "Refresh Installed",
+        "icon": "$(refresh)",
         "category": "AI Swissknife"
       }
-    ]
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "aiSwissknife.addSource",
+          "when": "view == aiSwissknife.sources",
+          "group": "navigation@1"
+        },
+        {
+          "command": "aiSwissknife.reloadRegistry",
+          "when": "view == aiSwissknife.sources",
+          "group": "navigation@2"
+        },
+        {
+          "command": "aiSwissknife.refreshCatalog",
+          "when": "view == aiSwissknife.available",
+          "group": "navigation@1"
+        },
+        {
+          "command": "aiSwissknife.refreshInstalled",
+          "when": "view == aiSwissknife.installed",
+          "group": "navigation@1"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "aiSwissknife.installArtifact",
+          "when": "view == aiSwissknife.available && viewItem == availableArtifact",
+          "group": "inline@1"
+        },
+        {
+          "command": "aiSwissknife.removeSource",
+          "when": "view == aiSwissknife.sources && viewItem == sourceItem",
+          "group": "inline@1"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run build",

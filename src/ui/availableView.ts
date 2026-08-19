@@ -154,7 +154,12 @@ export class AvailableTreeDataProvider
     item.description = artifact.description;
     item.tooltip = `Kind: ${artifact.kind}\nSource: ${element.source.id}\nPackage: ${element.pkg.id}`;
     item.contextValue = 'availableArtifact';
-    item.iconPath = new vscode.ThemeIcon('symbol-property');
+    item.iconPath = new vscode.ThemeIcon('tools');
+    item.command = {
+      command: 'aiSwissknife.installArtifact',
+      title: 'Install Skill',
+      arguments: [element],
+    };
     return item;
   }
 
