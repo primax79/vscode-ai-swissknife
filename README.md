@@ -1,6 +1,6 @@
 # AI Swissknife (VS Code Extension)
 
-**AI Swissknife** is a cross-assistant package manager and marketplace extension for AI coding tools (**Claude Code**, **Kilo Code**, and **GitHub Copilot**). It allows you to register custom skill/agent/command/MCP repositories (Git, Marketplace feeds, or local folders), browse available components, translate them losslessly between assistants, and install them transactionally with full rollback safety.
+**AI Swissknife** is a cross-assistant package manager and marketplace extension for AI coding tools (**Claude Code**, **Kilo Code**, and **GitHub Copilot**). It allows you to register custom skill/agent/command/MCP repositories (Git, Marketplace feeds, or local folders), browse available components, translate them losslessly between assistants, install them transactionally with full rollback safety, track local drift/updates, and manage unmanaged artifacts via a dedicated Dashboard.
 
 ---
 
@@ -26,14 +26,22 @@
 
 ## Extension Views & Architecture
 
-The extension adds an **AI Swissknife** container to the Activity Bar (`resources/icon.svg`) containing three Tree Views:
+The extension adds an **AI Swissknife** container to the Activity Bar (`resources/icon.svg`) containing three Tree Views and a Dashboard Webview:
 
 ```text
 AI Swissknife (Activity Bar)
 ├── 📁 Sources      (Manage global & project source manifests)
 ├── 📦 Available    (Browse detected artifacts with folder hierarchy & batch install)
-└── ✅ Installed    (View installed items grouped by Assistant × Scope)
+├── ✅ Installed    (View installed items, drift badges, and unmanaged items)
+└── 📊 Dashboard    (Open visual management dashboard with search and bulk actions)
 ```
+
+### Advanced Management Features (Phase 3)
+
+- **Drift & Update Detection**: Compares installed items against live disk state and remote sources (`up-to-date`, `modified-locally`, `update-available`, `modified-and-update-available`, `missing-on-disk`).
+- **Inventory Discovery & Promotion**: Automatically discovers unmanaged artifacts created manually in assistant folders and allows 1-click promotion to managed installations.
+- **Debounced File Watchers**: Reacts in real time when files in assistant directories are added, modified, or deleted externally.
+- **Management Dashboard**: Visual Webview panel with metrics, search bar, kind filters, drift badges, and action triggers.
 
 ### Persistence Layout
 
@@ -54,7 +62,7 @@ npm run lint
 # Run type checker
 npm run typecheck
 
-# Run full test suite (122 tests covering all adapters, translators, engine, sources, and UI)
+# Run full test suite (127 tests covering all adapters, translators, engine, sources, and UI)
 npm test
 
 # Build extension bundle with esbuild (emits dist/extension.js)
