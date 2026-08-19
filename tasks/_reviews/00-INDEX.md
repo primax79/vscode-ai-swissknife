@@ -69,7 +69,7 @@ blind-subagent data point.
 | --- | --- | --- | --- | --- |
 | codex | default (via `mcp__codex__codex`) | ~90s, wrote its own file directly (workspace-write sandbox, a first for this project) | 10 B, 7 I | Deepest again: caught that decision 9 was not just "partially reflected" but explicitly reversed (the manifest kept absolute paths and the wrong field name), plus new compile-time-shaped gaps (`ResolvedArtifact.content: unknown` meeting `CanonicalSkill` consumers, `Adapter.assistant: AssistantId` vs. `translateSkill`'s narrower `SupportedAssistant`), a `contentHash` that plan computes but apply never checks, and an overwrite-safety gap for files that appear *after* preview but before apply. |
 | kilo-gemini-3.1-pro | `google/gemini-3.1-pro-preview-customtools` | ~4 min (ran directly in the shared working directory, no isolation) | 3 B, 3 I | Fewer findings but independently caught the same two highest-value bugs codex found (decision 9 reversal; `PreparedInstall.content` storing the translator's *input* instead of `TranslationResult.value`) — the second is a real, silent "translation gets discarded" bug, doubly confirmed. Also found one genuinely novel bug neither codex nor round 001 caught: `06.2`'s staging step never `chmod`s `content.files`, silently dropping executable-bit `mode` that `03.4` explicitly added support for. |
-| kilo-gemini-3.7-flash | `google/gemini-3.7-flash` | first attempt crashed (~1-2 min in, "provider ended the response with an error") before writing anything — likely caused by running concurrently with `kilo-gemini-3.1-pro` in the *same* working directory with no isolation (both dispatches were warned about and appear to have shared one underlying Kilo session); retried with `isolation: 'worktree'` | pending (retry in flight) | First-attempt failure is itself a data point: this tier appears less robust to concurrent/uncoordinated dispatch in the same tree than the pro tier, independent of review quality. |
+| kilo-gemini-3.7-flash | `google/gemini-3.7-flash` | first attempt crashed (~1-2 min in, "provider ended the response with an error") before writing anything, running concurrently with `kilo-gemini-3.1-pro` in the same working directory with no isolation; retried with `isolation: 'worktree'`, succeeded in ~3 min | 3 B, 4 I | The retry independently caught the same headline bug as codex/pro (translator input vs. output) plus the same `mode`/`chmod` staging bug pro found, and the same `AssistantId`/`SupportedAssistant` type mismatch codex found (pro missed that one) — strong convergence across all three engines on the two highest-value findings once given a clean run. |
 
 **Read so far**: round 002 confirms round 001's core lesson at a second
 level — reviewing the *fix* is as valuable as reviewing the original, since
@@ -86,6 +86,42 @@ review dispatches against the same working directory without
 theoretical race the tool's own warning describes — treat that warning as
 load-bearing even for read-mostly review tasks, not only for tasks that
 edit files.
+
+## Review round 003 (hardening-gate task specs, after a full round-002 rewrite)
+
+The round-002 correction pass was delivered as a large, from-scratch
+rewrite of all 8 task files (plus `SPEC.md`/`CONTEXT.md`/`foundations.md`/
+six `plan.md` files), not a series of small targeted edits. Round 003
+exists to check whether that rewrite actually preserved every earlier
+decision — the same "reviewing the fix is as valuable as reviewing the
+original" lesson from round 002, one level up.
+
+The user set a standing default of `google/gemini-3.7-flash` for Kilo
+review/analysis tasks after independently testing both tiers (see the
+`feedback_kilo_gemini_model_choice` memory) — dispatched here accordingly,
+alongside codex, with no Claude subagent (standing token-conservation
+instruction from round 002 carries forward).
+
+| Engine | Model | Duration (dispatching call) | Findings (B / I) | Depth/character |
+| --- | --- | --- | --- | --- |
+| codex | default (via `mcp__codex__codex`) | ~2 min, wrote its own file directly (`workspace-write` sandbox) | 4 B, 9 I | Caught a real, serious regression the rewrite introduced: it silently dropped `Adapter.skillDir()` (reopening round 001's headline bug) and silently reversed round-001 decision 7 (uncovered pre-existing files became deletable via a new "full replacement" policy) — both previously multi-engine-confirmed as fixed. Plus two novel findings (unhandled staging residue on one rollback path; `writeState` not specified to preserve unrelated records, risking silently wiping other installations on every successful install). |
+| kilo-gemini-3.7-flash | `google/gemini-3.7-flash` | crashed a second time ("provider ended the response with an error"), this time on a *fully isolated* solo dispatch — not a concurrency issue this time | none (crashed before writing) | Second crash on a long, many-file, `sequentialthinking`-heavy review task in this project. Its recovered partial transcript (10-step plan, reached step 6) had independently reconfirmed round 002's 19 decisions as correctly reflected — aligned with codex up to the crash point — but produced no written findings. Treat as a real reliability limit of this tier on long analytical tasks, not a concurrency artifact and not evidence the batch was clean; don't rely on a single flash dispatch as full coverage for a large round. |
+
+**Read so far**: the biggest finding this round is about *process*, not
+just content — a full rewrite that cites every accepted decision number in
+its headers can still silently drop the *mechanism* behind an earlier
+decision while looking internally consistent. Citing a decision number is
+not evidence its fix survived a rewrite. Going forward, corrections after
+a review round should default to narrow, surgical edits against the
+specific decision list, reserving a full rewrite for cases where the
+structure itself is wrong — and any full rewrite, if one does happen,
+should get its own dedicated re-verification round before being trusted,
+exactly as happened here. Separately, `gemini-3.7-flash` has now crashed
+on two different long review dispatches in this project (once under
+concurrency, once solo) — still the right default for smaller/faster
+review tasks per the user's own testing, but pair it with codex (or expect
+to retry) once a review target grows to a full multi-file batch like this
+one.
 
 ## How to extend this log
 
