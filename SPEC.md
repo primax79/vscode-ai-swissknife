@@ -579,6 +579,14 @@ The resulting invariants are:
   fixtures and disposable homes/repos, not live `~/.claude/skills`, mutable
   counts, absolute user paths, or network state.
 
-Phase 1 remains strictly **skill end-to-end**. The already-built Claude/Kilo
-rule adapters stay dormant until Phase 2 defines safe merge/composition
-semantics for pre-existing rule files.
+- **Hierarchical tree and set installation.** Available views reflect the real
+  source directory hierarchy with compact single-child folder collapse. Folders
+  and source headers expose batch installation actions (`aiSwissknife.installFolder`,
+  `aiSwissknife.installSourceGroup`) that execute multi-skill transactions with
+  shared scope selection and aggregated outcome reporting.
+
+Phase 1 is now **completed and verified** end-to-end (all 71 unit/integration tests
+passing, zero lint/typecheck errors, packaged VSIX bundle verified). Phase 2 widens
+this foundation to cover additional artifact kinds (`agent`, `command`, `mcp-server`),
+additional source types (`git-marketplace`, `remote-url`, `git-single-item`), and
+additional target assistants (GitHub Copilot, Codex CLI, Gemini CLI).
