@@ -1,5 +1,8 @@
+import * as fs from 'fs';
 import * as path from 'path';
-import type { Source, Package, Artifact } from '../domain/types';
+import type { Source, Package, Artifact, ResolvedArtifact } from '../domain/types';
+import type { CanonicalSkill } from '../adapters/types';
+import { readSkill } from '../adapters/codec';
 import { findSkillDirs } from './detect';
 
 /**
@@ -48,4 +51,45 @@ export async function resolveLocalFolder(source: Source): Promise<Package[]> {
 
     return pkg;
   });
+}
+
+/**
+ * Resolves content for a skill artifact from a local-folder source.
+ */
+export async function resolveArtifactContent(
+  source: Source,
+  pkg: Package,
+  artifact: Artifact
+): Promise<ResolvedArtifact<CanonicalSkill>> {
+  if (source.type !== 'local-folder') {
+    throw new Error(`Expected source.type === "local-folder", got "${source.type}"`);
+  }
+  if (pkg.sourceId !== source.id) {
+    throw new Error(`Package sourceId mismatch: expected "${source.id}", got "${pkg.sourceId}"`);
+  }
+  if (artifact.packageId !== pkg.id) {
+    throw new Error(`Artifact packageId mismatch: expected "${pkg.id}", got "${artifact.packageId}"`);
+  }
+  if (artifact.kind !== 'skill') {
+    throw new Error(`Unsupported artifact kind: "${artifact.kind}" (only skill is supported in Phase 1)`);
+  }
+  if (!source.localPath) {
+    throw new Error('Source localPath is required for local-folder content resolution');
+  }
+
+  const prefix = `${source.id}:`;
+  const pathId = pkg.id.startsWith(prefix) ? pkg.id.slice(prefix.length) : '';
+  const candidate1 = path.join(source.localPath, pathId);
+  let skillDir: string;
+
+  if (fs.existsSync(path.join(candidate1, 'SKILL.md'))) {
+    skillDir = candidate1;
+  } else if (fs.existsSync(path.join(source.localPath, 'SKILL.md'))) {
+    skillDir = source.localPath;
+  } else {
+    throw new Error(`Cannot locate skill directory for artifact "${artifact.name}" in "${source.localPath}"`);
+  }
+
+  const content = await readSkill(skillDir);
+  return { artifact, content };
 }

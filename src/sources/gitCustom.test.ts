@@ -4,8 +4,9 @@ import * as child_process from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import type { Source } from '../domain/types';
-import { resolveGitCustom } from './gitCustom';
+import type { Source, ResolvedArtifact } from '../domain/types';
+import type { CanonicalSkill } from '../adapters/types';
+import { resolveGitCustom, resolveArtifactContent, gitCustomMutex } from './gitCustom';
 
 function runGitSync(args: string[], cwd: string): string {
   return child_process
@@ -92,7 +93,7 @@ describe('gitCustom — resolveGitCustom with real local git repository', () => 
     }
   });
 
-  it('resolves default branch to all skills on latest main commit', async () => {
+  it('resolves default branch to all skills on latest main commit with ResolvedRevision', async () => {
     const source: Source = {
       id: 'src-test-default',
       type: 'git-custom',
@@ -110,6 +111,8 @@ describe('gitCustom — resolveGitCustom with real local git repository', () => 
     for (const pkg of packages) {
       assert.strictEqual(pkg.sourceId, 'src-test-default');
       assert.strictEqual(pkg.nativeFormat, 'claude-skill');
+      assert.strictEqual(pkg.version?.commit, secondCommitHash);
+      assert.strictEqual(pkg.version?.requestedRef, undefined);
       assert.strictEqual(pkg.artifacts.length, 1);
       assert.strictEqual(pkg.artifacts[0].kind, 'skill');
       assert.strictEqual(pkg.artifacts[0].packageId, pkg.id);
@@ -129,7 +132,10 @@ describe('gitCustom — resolveGitCustom with real local git repository', () => 
     const packages = await resolveGitCustom(source, { cacheDir: cacheBaseDir });
     assert.strictEqual(packages.length, 1);
     assert.strictEqual(packages[0].artifacts[0].name, 'gitignore');
-    assert.strictEqual(packages[0].version, 'v1.0.0');
+    assert.deepStrictEqual(packages[0].version, {
+      commit: initialCommitHash,
+      requestedRef: 'v1.0.0',
+    });
   });
 
   it('resolves a specific tag pin (v2.0.0) and commit pin for second commit', async () => {
@@ -142,7 +148,10 @@ describe('gitCustom — resolveGitCustom with real local git repository', () => 
     };
     const packagesTag = await resolveGitCustom(sourceTag, { cacheDir: cacheBaseDir });
     assert.strictEqual(packagesTag.length, 2);
-    assert.strictEqual(packagesTag[0].version, 'v2.0.0');
+    assert.deepStrictEqual(packagesTag[0].version, {
+      commit: secondCommitHash,
+      requestedRef: 'v2.0.0',
+    });
 
     const sourceCommit: Source = {
       id: 'src-test-commit-second',
@@ -153,7 +162,10 @@ describe('gitCustom — resolveGitCustom with real local git repository', () => 
     };
     const packagesCommit = await resolveGitCustom(sourceCommit, { cacheDir: cacheBaseDir });
     assert.strictEqual(packagesCommit.length, 2);
-    assert.strictEqual(packagesCommit[0].version, secondCommitHash);
+    assert.deepStrictEqual(packagesCommit[0].version, {
+      commit: secondCommitHash,
+      requestedRef: secondCommitHash,
+    });
   });
 
   it('resolves a specific commit pin resolving an earlier state', async () => {
@@ -168,7 +180,10 @@ describe('gitCustom — resolveGitCustom with real local git repository', () => 
     const packages = await resolveGitCustom(source, { cacheDir: cacheBaseDir });
     assert.strictEqual(packages.length, 1);
     assert.strictEqual(packages[0].artifacts[0].name, 'gitignore');
-    assert.strictEqual(packages[0].version, initialCommitHash);
+    assert.deepStrictEqual(packages[0].version, {
+      commit: initialCommitHash,
+      requestedRef: initialCommitHash,
+    });
   });
 
   it('resolves a specific branch pin (feature-skills)', async () => {
@@ -182,6 +197,7 @@ describe('gitCustom — resolveGitCustom with real local git repository', () => 
 
     const packages = await resolveGitCustom(source, { cacheDir: cacheBaseDir });
     assert.strictEqual(packages.length, 3);
+    assert.strictEqual(packages[0].version?.requestedRef, 'feature-skills');
 
     const names = packages.map((p) => p.artifacts[0].name);
     assert.ok(names.includes('gitignore'));
@@ -217,6 +233,80 @@ describe('gitCustom — resolveGitCustom with real local git repository', () => 
     assert.ok(namesAfter.includes('gitignore'));
     assert.ok(namesAfter.includes('markdown-formatter'));
     assert.ok(namesAfter.includes('changelog-generator'));
+  });
+
+  it('resolveArtifactContent resolves CanonicalSkill without casts', async () => {
+    const source: Source = {
+      id: 'src-test-content-resolve',
+      type: 'git-custom',
+      scope: 'project',
+      url: remoteRepoDir,
+      tag: 'v1.0.0',
+    };
+
+    const packages = await resolveGitCustom(source, { cacheDir: cacheBaseDir });
+    const pkg = packages[0];
+    const artifact = pkg.artifacts[0];
+
+    const resolved: ResolvedArtifact<CanonicalSkill> = await resolveArtifactContent(
+      source,
+      pkg,
+      artifact,
+      { cacheDir: cacheBaseDir }
+    );
+
+    assert.strictEqual(resolved.artifact.id, artifact.id);
+    assert.strictEqual(resolved.content.name, 'gitignore');
+    assert.ok(resolved.content.description.length > 0);
+  });
+
+  it('proves gitCustomMutex serializes access to target directory', async () => {
+    const target = path.join(cacheBaseDir, 'mutex-test');
+    const sequence: number[] = [];
+    await Promise.all([
+      gitCustomMutex.runExclusive(target, async () => {
+        sequence.push(1);
+        await new Promise((r) => setTimeout(r, 50));
+        sequence.push(2);
+      }),
+      gitCustomMutex.runExclusive(target, async () => {
+        sequence.push(3);
+        await new Promise((r) => setTimeout(r, 10));
+        sequence.push(4);
+      }),
+    ]);
+    assert.deepStrictEqual(sequence, [1, 2, 3, 4]);
+  });
+
+  it('proves shared mutex prevents race conditions between resolveArtifactContent and resolveGitCustom', async () => {
+    const sourceV1: Source = {
+      id: 'src-test-mutex',
+      type: 'git-custom',
+      scope: 'project',
+      url: remoteRepoDir,
+      tag: 'v1.0.0',
+    };
+
+    const packagesV1 = await resolveGitCustom(sourceV1, { cacheDir: cacheBaseDir });
+    const pkgV1 = packagesV1[0];
+    const artifactV1 = pkgV1.artifacts[0];
+
+    const sourceBranch: Source = {
+      id: 'src-test-mutex',
+      type: 'git-custom',
+      scope: 'project',
+      url: remoteRepoDir,
+      branch: 'feature-skills',
+    };
+
+    // Run both concurrently on the same cache directory
+    const [resolvedContent, branchPackages] = await Promise.all([
+      resolveArtifactContent(sourceV1, pkgV1, artifactV1, { cacheDir: cacheBaseDir }),
+      resolveGitCustom(sourceBranch, { cacheDir: cacheBaseDir }),
+    ]);
+
+    assert.strictEqual(resolvedContent.content.name, 'gitignore');
+    assert.strictEqual(branchPackages.length, 3);
   });
 
   it('throws a clear error for a nonexistent git repository path', async () => {

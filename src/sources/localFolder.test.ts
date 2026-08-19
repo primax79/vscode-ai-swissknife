@@ -3,8 +3,9 @@ import * as assert from 'node:assert';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import type { Source } from '../domain/types';
-import { resolveLocalFolder } from './localFolder';
+import type { Source, ResolvedArtifact } from '../domain/types';
+import type { CanonicalSkill } from '../adapters/types';
+import { resolveLocalFolder, resolveArtifactContent } from './localFolder';
 
 describe('localFolder — resolveLocalFolder with real fixtures', () => {
   const fixture1Path = '/Users/Alfredo/works/ai-coding-tools/agentic-coding-kit/plugins/common-tools/skills/gitignore';
@@ -100,5 +101,24 @@ describe('localFolder — resolveLocalFolder with real fixtures', () => {
     };
     const resNonExistent = await resolveLocalFolder(nonExistentSource);
     assert.deepStrictEqual(resNonExistent, []);
+  });
+
+  it('resolveArtifactContent resolves CanonicalSkill correctly without casts', async () => {
+    const source: Source = {
+      id: 'src-ack-gitignore',
+      type: 'local-folder',
+      scope: 'project',
+      localPath: fixture1Path,
+    };
+
+    const packages = await resolveLocalFolder(source);
+    const pkg = packages[0];
+    const artifact = pkg.artifacts[0];
+
+    const resolved: ResolvedArtifact<CanonicalSkill> = await resolveArtifactContent(source, pkg, artifact);
+    assert.strictEqual(resolved.artifact.id, artifact.id);
+    assert.strictEqual(resolved.content.name, 'gitignore');
+    assert.ok(resolved.content.description.length > 0);
+    assert.ok(Array.isArray(resolved.content.files));
   });
 });

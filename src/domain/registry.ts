@@ -1,81 +1,179 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import type { Source, ManagedInstallation } from './types';
+import type { Scope, AssistantId, Source, ManagedInstallation } from './types';
 
-export interface RegistryFile {
-  sources: Source[];
+export const SCHEMA_VERSION = 1;
+
+export interface DesiredSource {
+  id: string;
+  type: Source['type'];
+  scope: Scope;
+  name?: string;
+  url?: string;
+  branch?: string;
+  tag?: string;
+  commit?: string;
+  localPath?: string; // relative to the scope root; never absolute
+}
+
+export interface DesiredInstallation {
+  sourceId: string;
+  artifactId: string;
+  assistant: AssistantId;
+  scope: Scope;
+  requestedRef?: string;
+}
+
+export interface ManifestFile {
+  schemaVersion: number;
+  sources: DesiredSource[];
+  desiredInstallations: DesiredInstallation[];
+}
+
+export interface StateFile {
+  schemaVersion: number;
   installations: ManagedInstallation[];
 }
 
-export function emptyRegistry(): RegistryFile {
-  return { sources: [], installations: [] };
+export function emptyManifest(): ManifestFile {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    sources: [],
+    desiredInstallations: [],
+  };
 }
 
-export function registryPath(scope: 'global' | 'project', projectRoot?: string): string {
-  // global: os.homedir() + '/.ai-toolkit/registry.json'
-  // project: requires projectRoot; projectRoot + '/.ai-toolkit/registry.json'
-  // throw a clear Error if scope === 'project' and projectRoot is missing —
-  // do not silently fall back to global.
+export function emptyState(): StateFile {
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    installations: [],
+  };
+}
+
+export function manifestPath(scope: Scope, projectRoot?: string, homeRoot?: string): string {
   if (scope === 'global') {
-    return path.join(os.homedir(), '.ai-toolkit', 'registry.json');
+    return path.join(homeRoot ?? os.homedir(), '.ai-swissknife', 'manifest.json');
   }
 
   if (scope === 'project') {
     if (!projectRoot) {
       throw new Error('projectRoot is required when scope is "project"');
     }
-    return path.join(projectRoot, '.ai-toolkit', 'registry.json');
+    return path.join(projectRoot, '.ai-swissknife', 'manifest.json');
   }
 
   throw new Error(`Unsupported scope: ${scope}`);
 }
 
-export async function readRegistry(scope: 'global' | 'project', projectRoot?: string): Promise<RegistryFile> {
-  // if the file doesn't exist yet, return emptyRegistry() — this is the
-  // normal first-run state, not an error condition.
-  // if the file exists but fails to JSON.parse, throw a clear Error
-  // naming the file path — do not silently treat a corrupt file as empty,
-  // that would silently discard a user's existing registry.
-  const filePath = registryPath(scope, projectRoot);
+export function statePath(scope: Scope, projectRoot?: string, homeRoot?: string): string {
+  if (scope === 'global') {
+    return path.join(homeRoot ?? os.homedir(), '.ai-swissknife', 'state.json');
+  }
 
-  let rawContent: string;
-  try {
-    rawContent = await fs.promises.readFile(filePath, 'utf-8');
-  } catch (err: unknown) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-      return emptyRegistry();
+  if (scope === 'project') {
+    if (!projectRoot) {
+      throw new Error('projectRoot is required when scope is "project"');
     }
-    throw err;
+    return path.join(projectRoot, '.ai-swissknife', 'state.json');
   }
 
-  try {
-    const parsed = JSON.parse(rawContent) as RegistryFile;
-    return {
-      sources: Array.isArray(parsed?.sources) ? parsed.sources : [],
-      installations: Array.isArray(parsed?.installations) ? parsed.installations : [],
-    };
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    throw new Error(`Failed to parse registry JSON at ${filePath}: ${message}`);
-  }
+  throw new Error(`Unsupported scope: ${scope}`);
 }
 
-export async function writeRegistry(
-  scope: 'global' | 'project',
-  data: RegistryFile,
-  projectRoot?: string
-): Promise<void> {
-  // atomic write: write to `<path>.tmp-<random>`, then fs.rename() over
-  // the real path (rename is atomic on the same filesystem — this is the
-  // "atomic and recoverable" requirement from SPEC.md §2 "apply", reused
-  // here for the simpler registry-write case).
-  // ensure the parent directory exists first (fs.mkdir with recursive:
-  // true) — the global `~/.ai-toolkit/` directory won't exist on a fresh
-  // machine.
-  const filePath = registryPath(scope, projectRoot);
-  const parentDir = path.dirname(filePath);
+export function toDesiredSource(
+  source: Source,
+  workspaceRoot?: string,
+  homeRoot?: string
+): DesiredSource {
+  let relativeLocalPath: string | undefined;
 
+  if (source.scope === 'project') {
+    if (source.localPath !== undefined) {
+      if (!workspaceRoot) {
+        throw new Error('workspaceRoot is required to serialize project-scope localPath');
+      }
+      const absWorkspace = path.resolve(workspaceRoot);
+      const absLocal = path.isAbsolute(source.localPath)
+        ? path.resolve(source.localPath)
+        : path.resolve(absWorkspace, source.localPath);
+      const rel = path.relative(absWorkspace, absLocal);
+      if (rel.startsWith('..') || path.isAbsolute(rel)) {
+        throw new Error(`Path "${source.localPath}" lies outside workspace root "${workspaceRoot}"`);
+      }
+      relativeLocalPath = rel;
+    }
+  } else if (source.scope === 'global') {
+    if (source.localPath !== undefined) {
+      const absHome = path.resolve(homeRoot ?? os.homedir());
+      const absLocal = path.isAbsolute(source.localPath)
+        ? path.resolve(source.localPath)
+        : path.resolve(absHome, source.localPath);
+      const rel = path.relative(absHome, absLocal);
+      if (rel.startsWith('..') || path.isAbsolute(rel)) {
+        throw new Error(`Path "${source.localPath}" lies outside home root "${absHome}"`);
+      }
+      relativeLocalPath = rel;
+    }
+  }
+
+  const desired: DesiredSource = {
+    id: source.id,
+    type: source.type,
+    scope: source.scope,
+  };
+
+  if (source.name !== undefined) desired.name = source.name;
+  if (source.url !== undefined) desired.url = source.url;
+  if (source.branch !== undefined) desired.branch = source.branch;
+  if (source.tag !== undefined) desired.tag = source.tag;
+  if (source.commit !== undefined) desired.commit = source.commit;
+  if (relativeLocalPath !== undefined) desired.localPath = relativeLocalPath;
+
+  return desired;
+}
+
+export function fromDesiredSource(
+  desired: DesiredSource,
+  workspaceRoot?: string,
+  homeRoot?: string
+): Source {
+  let resolvedLocalPath: string | undefined;
+
+  if (desired.scope === 'project') {
+    if (desired.localPath !== undefined) {
+      resolvedLocalPath = workspaceRoot
+        ? path.resolve(workspaceRoot, desired.localPath)
+        : desired.localPath;
+    }
+  } else if (desired.scope === 'global') {
+    if (desired.localPath !== undefined) {
+      const absHome = homeRoot ?? os.homedir();
+      resolvedLocalPath = path.resolve(absHome, desired.localPath);
+    }
+  }
+
+  const source: Source = {
+    id: desired.id,
+    type: desired.type,
+    scope: desired.scope,
+  };
+
+  if (desired.scope === 'project' && workspaceRoot) {
+    source.projectPath = workspaceRoot;
+  }
+  if (desired.name !== undefined) source.name = desired.name;
+  if (desired.url !== undefined) source.url = desired.url;
+  if (desired.branch !== undefined) source.branch = desired.branch;
+  if (desired.tag !== undefined) source.tag = desired.tag;
+  if (desired.commit !== undefined) source.commit = desired.commit;
+  if (resolvedLocalPath !== undefined) source.localPath = resolvedLocalPath;
+
+  return source;
+}
+
+async function atomicWriteJson(filePath: string, data: unknown): Promise<void> {
+  const parentDir = path.dirname(filePath);
   await fs.promises.mkdir(parentDir, { recursive: true });
 
   const randomSuffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
@@ -89,8 +187,103 @@ export async function writeRegistry(
     try {
       await fs.promises.unlink(tempPath);
     } catch {
-      // Ignore cleanup error if temp file does not exist
+      // ignore
     }
     throw err;
   }
+}
+
+export async function readManifest(
+  scope: Scope,
+  projectRoot?: string,
+  homeRoot?: string
+): Promise<ManifestFile> {
+  const filePath = manifestPath(scope, projectRoot, homeRoot);
+
+  let rawContent: string;
+  try {
+    rawContent = await fs.promises.readFile(filePath, 'utf-8');
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return emptyManifest();
+    }
+    throw err;
+  }
+
+  let parsed: ManifestFile;
+  try {
+    parsed = JSON.parse(rawContent);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to parse manifest JSON at ${filePath}: ${message}`);
+  }
+
+  if (parsed?.schemaVersion !== SCHEMA_VERSION) {
+    throw new Error(
+      `Unsupported manifest schemaVersion: ${parsed?.schemaVersion} at ${filePath}`
+    );
+  }
+
+  return {
+    schemaVersion: parsed.schemaVersion,
+    sources: Array.isArray(parsed.sources) ? parsed.sources : [],
+    desiredInstallations: Array.isArray(parsed.desiredInstallations)
+      ? parsed.desiredInstallations
+      : [],
+  };
+}
+
+export async function writeManifest(
+  scope: Scope,
+  data: ManifestFile,
+  projectRoot?: string,
+  homeRoot?: string
+): Promise<void> {
+  const filePath = manifestPath(scope, projectRoot, homeRoot);
+  await atomicWriteJson(filePath, data);
+}
+
+export async function readState(
+  scope: Scope,
+  projectRoot?: string,
+  homeRoot?: string
+): Promise<StateFile> {
+  const filePath = statePath(scope, projectRoot, homeRoot);
+
+  let rawContent: string;
+  try {
+    rawContent = await fs.promises.readFile(filePath, 'utf-8');
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return emptyState();
+    }
+    throw err;
+  }
+
+  let parsed: StateFile;
+  try {
+    parsed = JSON.parse(rawContent);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to parse state JSON at ${filePath}: ${message}`);
+  }
+
+  if (parsed?.schemaVersion !== SCHEMA_VERSION) {
+    throw new Error(`Unsupported state schemaVersion: ${parsed?.schemaVersion} at ${filePath}`);
+  }
+
+  return {
+    schemaVersion: parsed.schemaVersion,
+    installations: Array.isArray(parsed.installations) ? parsed.installations : [],
+  };
+}
+
+export async function writeState(
+  scope: Scope,
+  data: StateFile,
+  projectRoot?: string,
+  homeRoot?: string
+): Promise<void> {
+  const filePath = statePath(scope, projectRoot, homeRoot);
+  await atomicWriteJson(filePath, data);
 }

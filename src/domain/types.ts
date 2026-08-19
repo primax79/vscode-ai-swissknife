@@ -44,12 +44,22 @@ export interface Artifact {
   nativeFormat: string;
 }
 
+export interface ResolvedRevision {
+  commit: string;
+  requestedRef?: string;
+}
+
 export interface Package {
   id: string;
   sourceId: string;
-  version?: string;
+  version?: ResolvedRevision;
   nativeFormat: string;
   artifacts: Artifact[];
+}
+
+export interface ResolvedArtifact<T> {
+  artifact: Artifact;
+  content: T;
 }
 
 export interface ObservedArtifact {
@@ -72,7 +82,7 @@ export interface ManagedInstallation {
   sourceId?: string;
   packageId?: string;
   artifactId?: string;
-  installedVersion?: string;
+  sourceRevision?: ResolvedRevision;
   installedAt: string;
   contentHash?: string;
 }
