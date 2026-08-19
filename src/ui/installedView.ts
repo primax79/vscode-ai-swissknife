@@ -1,9 +1,10 @@
 import * as vscode from 'vscode';
-import type { ManagedInstallation, ObservedArtifact, Source } from '../domain/types';
+import type { ManagedInstallation, ObservedArtifact, Source, AssistantId, Scope } from '../domain/types';
 import { readState, readManifest, fromDesiredSource } from '../domain/registry';
 import { analyzeLocalDrift, checkForUpstreamUpdate } from '../engine/drift';
 import { scanInstalledInventory, promoteObservedArtifact } from '../engine/discovery';
 import { planInstall } from '../engine/plan';
+import { planSync } from '../engine/sync';
 import { applyInstall } from '../engine/apply';
 import { ClaudeAdapter } from '../adapters/claude';
 import { KiloAdapter } from '../adapters/kilo';
@@ -161,7 +162,6 @@ export class InstalledTreeDataProvider
       const allManaged: ManagedInstallation[] = [];
       const allObserved: ObservedArtifact[] = [];
 
-      // Global scan
       try {
         const globalInv = await scanInstalledInventory('global');
         allManaged.push(...globalInv.managed);
@@ -170,7 +170,6 @@ export class InstalledTreeDataProvider
         // ignore
       }
 
-      // Project scan
       const folders = vscode.workspace.workspaceFolders;
       if (folders && folders.length > 0) {
         const projectRoot = folders[0].uri.fsPath;
@@ -185,7 +184,6 @@ export class InstalledTreeDataProvider
 
       const result: InstalledTreeItem[] = [];
 
-      // Group managed installations
       const managedGroups = new Map<string, ManagedInstallation[]>();
       for (const inst of allManaged) {
         const key = `${inst.assistant} (${inst.scope})`;
@@ -198,7 +196,6 @@ export class InstalledTreeDataProvider
         result.push(new InstalledGroupItem(key, key, list));
       }
 
-      // Group unmanaged items
       const unmanagedGroups = new Map<string, ObservedArtifact[]>();
       for (const obs of allObserved) {
         const key = `Unmanaged: ${obs.assistant} (${obs.scope})`;
@@ -233,7 +230,6 @@ export class InstalledTreeDataProvider
     const allInstallations: ManagedInstallation[] = [];
     const allSources: Source[] = [];
 
-    // Global
     try {
       const gState = await readState('global');
       allInstallations.push(...gState.installations);
@@ -243,7 +239,6 @@ export class InstalledTreeDataProvider
       // ignore
     }
 
-    // Project
     const folders = vscode.workspace.workspaceFolders;
     if (folders && folders.length > 0) {
       const projectRoot = folders[0].uri.fsPath;
@@ -365,6 +360,75 @@ export class InstalledTreeDataProvider
       await this.checkDrift();
     } else {
       vscode.window.showErrorMessage(`Update failed: ${outcome.reason}`);
+    }
+  }
+
+  async syncItem(item?: InstalledInstallationItem | ObservedArtifactItem): Promise<void> {
+    if (!item) {
+      vscode.window.showWarningMessage('Please select an item to copy / synchronize.');
+      return;
+    }
+
+    const sourceItem =
+      item instanceof InstalledInstallationItem ? item.installation : item.observed;
+
+    const assistantPick = await vscode.window.showQuickPick(
+      ['claude-code', 'kilo-code', 'github-copilot'],
+      {
+        placeHolder: `Select target assistant to copy "${sourceItem.name}" to`,
+      }
+    );
+    if (!assistantPick) return;
+    const targetAssistant = assistantPick as AssistantId;
+
+    const scopePick = await vscode.window.showQuickPick(['project', 'global'], {
+      placeHolder: `Select target scope for copied ${sourceItem.kind}`,
+    });
+    if (!scopePick) return;
+    const targetScope = scopePick as Scope;
+
+    let targetProjectRoot: string | undefined;
+    if (targetScope === 'project') {
+      targetProjectRoot = await getWorkspaceRoot();
+      if (!targetProjectRoot) return;
+    }
+
+    const prepared = await planSync({
+      sourceItem,
+      targetAssistant,
+      targetScope,
+      targetProjectRoot,
+    });
+
+    if (!prepared.supported) {
+      vscode.window.showErrorMessage(`Failed to plan copy: ${prepared.plan.reason}`);
+      return;
+    }
+
+    if (prepared.plan.conflict) {
+      const conflictChoice = await vscode.window.showWarningMessage(
+        `Item "${sourceItem.name}" already exists in target ${targetAssistant} (${targetScope}). Overwrite?`,
+        { modal: true },
+        'Overwrite'
+      );
+      if (conflictChoice !== 'Overwrite') return;
+    }
+
+    const confirm = await vscode.window.showInformationMessage(
+      `Copy ${sourceItem.kind} "${sourceItem.name}" from ${sourceItem.assistant} (${sourceItem.scope}) to ${targetAssistant} (${targetScope})?`,
+      { modal: true },
+      'Copy'
+    );
+    if (confirm !== 'Copy') return;
+
+    const outcome = await applyInstall(prepared);
+    if (outcome.status === 'applied') {
+      vscode.window.showInformationMessage(
+        `Successfully copied "${sourceItem.name}" to ${targetAssistant} (${targetScope}).`
+      );
+      this.refresh();
+    } else {
+      vscode.window.showErrorMessage(`Copy failed: ${outcome.reason}`);
     }
   }
 
