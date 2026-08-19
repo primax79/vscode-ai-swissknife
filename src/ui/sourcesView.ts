@@ -124,7 +124,7 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
     }
 
     const typePick = await vscode.window.showQuickPick(
-      ['git-custom', 'git-marketplace', 'local-folder'],
+      ['git-custom', 'git-marketplace', 'git-single-item', 'local-folder', 'remote-url'],
       {
         placeHolder: 'Select source type',
       }
@@ -147,22 +147,35 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
     let tag: string | undefined;
     let localPath: string | undefined;
 
-    if (typePick === 'git-custom' || typePick === 'git-marketplace') {
+    if (
+      typePick === 'git-custom' ||
+      typePick === 'git-marketplace' ||
+      typePick === 'git-single-item' ||
+      typePick === 'remote-url'
+    ) {
       url = await vscode.window.showInputBox({
-        prompt: 'Git repository URL (HTTPS or SSH, e.g. https://github.com/org/repo.git)',
+        prompt:
+          typePick === 'remote-url'
+            ? 'Raw artifact URL (e.g. https://gist.github.com/...)'
+            : 'Git repository URL (HTTPS or SSH, e.g. https://github.com/org/repo.git)',
         validateInput: (v) => (v.trim().length > 0 ? null : 'URL cannot be empty'),
       });
       if (!url) return;
 
-      const refChoice = await vscode.window.showQuickPick(['Default branch', 'Specific branch', 'Specific tag'], {
-        placeHolder: 'Pin to a branch, tag, or default',
-      });
-      if (!refChoice) return;
+      if (typePick !== 'remote-url') {
+        const refChoice = await vscode.window.showQuickPick(
+          ['Default branch', 'Specific branch', 'Specific tag'],
+          {
+            placeHolder: 'Pin to a branch, tag, or default',
+          }
+        );
+        if (!refChoice) return;
 
-      if (refChoice === 'Specific branch') {
-        branch = await vscode.window.showInputBox({ prompt: 'Branch name (e.g. "main" or "dev")' });
-      } else if (refChoice === 'Specific tag') {
-        tag = await vscode.window.showInputBox({ prompt: 'Tag name (e.g. "v1.0.0")' });
+        if (refChoice === 'Specific branch') {
+          branch = await vscode.window.showInputBox({ prompt: 'Branch name (e.g. "main" or "dev")' });
+        } else if (refChoice === 'Specific tag') {
+          tag = await vscode.window.showInputBox({ prompt: 'Tag name (e.g. "v1.0.0")' });
+        }
       }
     } else if (typePick === 'local-folder') {
       localPath = await vscode.window.showInputBox({

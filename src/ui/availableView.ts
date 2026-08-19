@@ -6,6 +6,8 @@ import { readManifest, fromDesiredSource } from '../domain/registry';
 import { resolveLocalFolder } from '../sources/localFolder';
 import { resolveGitCustom } from '../sources/gitCustom';
 import { resolveGitMarketplace } from '../sources/gitMarketplace';
+import { resolveGitSingleItem } from '../sources/gitSingleItem';
+import { resolveRemoteUrl } from '../sources/remoteUrl';
 import { ClaudeAdapter } from '../adapters/claude';
 import { KiloAdapter } from '../adapters/kilo';
 import { CopilotAdapter } from '../adapters/copilot';
@@ -203,6 +205,10 @@ export class AvailableTreeDataProvider
           resolution = await resolveGitCustom(src);
         } else if (src.type === 'git-marketplace') {
           resolution = await resolveGitMarketplace(src);
+        } else if (src.type === 'git-single-item') {
+          resolution = await resolveGitSingleItem(src);
+        } else if (src.type === 'remote-url') {
+          resolution = await resolveRemoteUrl(src);
         } else {
           resolution = { packages: [], diagnostics: [] };
         }
