@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { ClaudeAdapter, claudeAdapter } from './claude';
-import type { CanonicalRule, CanonicalSkill, CanonicalAgent } from './types';
+import type { CanonicalRule, CanonicalSkill, CanonicalAgent, CanonicalCommand } from './types';
 
 describe('ClaudeAdapter', () => {
   let testTempDir: string;
@@ -103,6 +103,20 @@ describe('ClaudeAdapter', () => {
       assert.strictEqual(
         projectPath,
         path.join(testProjectDir, '.claude', 'agents', 'tester.md')
+      );
+    });
+
+    it('commandPath returns correct global and project paths', () => {
+      const globalPath = adapter.commandPath('deploy', { scope: 'global' });
+      assert.strictEqual(globalPath, path.join(testHomeDir, '.claude', 'commands', 'deploy.md'));
+
+      const projectPath = adapter.commandPath('deploy', {
+        scope: 'project',
+        projectRoot: testProjectDir,
+      });
+      assert.strictEqual(
+        projectPath,
+        path.join(testProjectDir, '.claude', 'commands', 'deploy.md')
       );
     });
 
@@ -242,6 +256,33 @@ describe('ClaudeAdapter', () => {
     it('readAgent on nonexistent agent returns null', async () => {
       const loaded = await adapter.readAgent('nonexistent', { scope: 'global' });
       assert.strictEqual(loaded, null);
+    });
+  });
+
+  describe('commands', () => {
+    it('Round-trip: writeCommand then readCommand preserves command structure and body', async () => {
+      const cmd: CanonicalCommand = {
+        name: 'review-pr',
+        description: 'Review pull request changes',
+        agent: 'qa-engineer',
+        model: 'claude-3-5-sonnet',
+        subtask: true,
+        body: 'Please review all git diff changes.\n',
+        extraFields: {
+          customFlag: 42,
+        },
+      };
+
+      await adapter.writeCommand(cmd, { scope: 'project', projectRoot: testProjectDir });
+      const loaded = await adapter.readCommand(cmd.name, {
+        scope: 'project',
+        projectRoot: testProjectDir,
+      });
+
+      assert.deepStrictEqual(loaded, cmd);
+
+      const list = await adapter.listCommands({ scope: 'project', projectRoot: testProjectDir });
+      assert.deepStrictEqual(list, ['review-pr']);
     });
   });
 

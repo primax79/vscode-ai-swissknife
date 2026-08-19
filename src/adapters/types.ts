@@ -28,6 +28,16 @@ export interface CanonicalAgent {
   extraFields: Record<string, unknown>;
 }
 
+export interface CanonicalCommand {
+  name: string;
+  description: string;
+  agent?: string;
+  model?: string;
+  subtask?: boolean;
+  body: string; // prompt template content
+  extraFields: Record<string, unknown>;
+}
+
 export interface CanonicalRule {
   content: string; // raw file content, no frontmatter parsing — CLAUDE.md/AGENTS.md are plain markdown (SPEC.md §1)
 }
@@ -50,6 +60,11 @@ export interface Adapter {
   readAgent(name: string, loc: LocationRef): Promise<CanonicalAgent | null>;
   writeAgent(agent: CanonicalAgent, loc: LocationRef): Promise<void>;
   listAgents(loc: LocationRef): Promise<string[]>;
+
+  commandPath(name: string, loc: LocationRef): string;
+  readCommand(name: string, loc: LocationRef): Promise<CanonicalCommand | null>;
+  writeCommand(command: CanonicalCommand, loc: LocationRef): Promise<void>;
+  listCommands(loc: LocationRef): Promise<string[]>;
 
   rulePath(loc: LocationRef): string;
   readRule(loc: LocationRef): Promise<CanonicalRule | null>;

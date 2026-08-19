@@ -7,6 +7,7 @@ import type {
   CanonicalRule,
   CanonicalSkill,
   CanonicalAgent,
+  CanonicalCommand,
   LocationRef,
 } from './types';
 import { readSkill as codecReadSkill, writeSkill as codecWriteSkill } from './codec';
@@ -49,7 +50,6 @@ export function parseKiloAgentMarkdown(content: string): CanonicalAgent {
     }
 
     if (inPermissionBlock) {
-      // Check if indented under permission
       if (line.startsWith('  ') || line.startsWith('\t')) {
         const colonIdx = trimmed.indexOf(':');
         if (colonIdx !== -1) {
@@ -146,6 +146,93 @@ export function serializeKiloAgentMarkdown(agent: CanonicalAgent): string {
   }
   fm += '---';
   return agent.body ? `${fm}\n${agent.body}` : `${fm}\n`;
+}
+
+/**
+ * Parses Kilo command markdown into CanonicalCommand.
+ */
+export function parseKiloCommandMarkdown(content: string, defaultName = ''): CanonicalCommand {
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n([\s\S]*))?$/);
+  if (!match) {
+    return {
+      name: defaultName,
+      description: '',
+      body: content,
+      extraFields: {},
+    };
+  }
+
+  const fmBlock = match[1];
+  const body = match[2] ?? '';
+  const lines = fmBlock.split(/\r?\n/);
+
+  let name = defaultName;
+  let description = '';
+  let agent: string | undefined;
+  let model: string | undefined;
+  let subtask: boolean | undefined;
+  const extraFields: Record<string, unknown> = {};
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) {
+      continue;
+    }
+    const colonIdx = trimmed.indexOf(':');
+    if (colonIdx === -1) {
+      continue;
+    }
+    const key = trimmed.slice(0, colonIdx).trim();
+    const rawVal = trimmed.slice(colonIdx + 1).trim();
+    const parsedVal = parseYamlValue(rawVal);
+
+    if (key === 'name') {
+      name = typeof parsedVal === 'string' ? parsedVal : String(parsedVal ?? '');
+    } else if (key === 'description') {
+      description = typeof parsedVal === 'string' ? parsedVal : String(parsedVal ?? '');
+    } else if (key === 'agent') {
+      agent = typeof parsedVal === 'string' ? parsedVal : String(parsedVal ?? '');
+    } else if (key === 'model') {
+      model = typeof parsedVal === 'string' ? parsedVal : String(parsedVal ?? '');
+    } else if (key === 'subtask') {
+      subtask = typeof parsedVal === 'boolean' ? parsedVal : Boolean(parsedVal);
+    } else {
+      extraFields[key] = parsedVal;
+    }
+  }
+
+  return {
+    name,
+    description,
+    ...(agent ? { agent } : {}),
+    ...(model ? { model } : {}),
+    ...(subtask !== undefined ? { subtask } : {}),
+    body,
+    extraFields,
+  };
+}
+
+/**
+ * Serializes a CanonicalCommand into Kilo command markdown.
+ * STRICT SCHEMA: Kilo accepts strictly only `description`, `agent`, `model`, `subtask`.
+ * Unrecognized keys throw ConfigInvalidError and are stripped from frontmatter.
+ */
+export function serializeKiloCommandMarkdown(cmd: CanonicalCommand): string {
+  let fm = '---\n';
+  if (cmd.description) {
+    fm += `description: ${serializeYamlValue(cmd.description)}\n`;
+  }
+  if (cmd.agent) {
+    fm += `agent: ${serializeYamlValue(cmd.agent)}\n`;
+  }
+  if (cmd.model) {
+    fm += `model: ${serializeYamlValue(cmd.model)}\n`;
+  }
+  if (cmd.subtask !== undefined) {
+    fm += `subtask: ${cmd.subtask}\n`;
+  }
+  fm += '---';
+  return cmd.body ? `${fm}\n${cmd.body}` : `${fm}\n`;
 }
 
 export class KiloAdapter implements Adapter {
@@ -301,10 +388,88 @@ export class KiloAdapter implements Adapter {
           }
         }
       } catch {
-        // ignore missing directory
+        // ignore
       }
     }
     return Array.from(agentNames);
+  }
+
+  commandPath(name: string, loc: LocationRef): string {
+    const fileName = name.endsWith('.md') ? name : `${name}.md`;
+    if (loc.scope === 'global') {
+      return path.join(this.getHomedir(), '.config', 'kilo', 'command', fileName);
+    }
+    if (loc.scope === 'project') {
+      if (!loc.projectRoot) {
+        throw new Error('projectRoot is required when scope is "project"');
+      }
+      return path.join(loc.projectRoot, '.kilo', 'command', fileName);
+    }
+    throw new Error(`Unsupported scope: ${(loc as { scope: string }).scope}`);
+  }
+
+  async readCommand(name: string, loc: LocationRef): Promise<CanonicalCommand | null> {
+    const primaryPath = this.commandPath(name, loc);
+    const fileName = name.endsWith('.md') ? name : `${name}.md`;
+    const fallbackPath =
+      loc.scope === 'global'
+        ? path.join(this.getHomedir(), '.config', 'kilo', 'commands', fileName)
+        : loc.projectRoot
+        ? path.join(loc.projectRoot, '.kilo', 'commands', fileName)
+        : '';
+
+    for (const candidate of [primaryPath, fallbackPath]) {
+      if (!candidate) continue;
+      try {
+        const content = await fs.promises.readFile(candidate, 'utf-8');
+        return parseKiloCommandMarkdown(content, name);
+      } catch (err: unknown) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+          throw err;
+        }
+      }
+    }
+    return null;
+  }
+
+  async writeCommand(command: CanonicalCommand, loc: LocationRef): Promise<void> {
+    const filePath = this.commandPath(command.name, loc);
+    await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+    const serialized = serializeKiloCommandMarkdown(command);
+    await fs.promises.writeFile(filePath, serialized, 'utf-8');
+  }
+
+  async listCommands(loc: LocationRef): Promise<string[]> {
+    const candidates: string[] = [];
+    if (loc.scope === 'global') {
+      candidates.push(
+        path.join(this.getHomedir(), '.config', 'kilo', 'command'),
+        path.join(this.getHomedir(), '.config', 'kilo', 'commands')
+      );
+    } else if (loc.scope === 'project') {
+      if (!loc.projectRoot) {
+        throw new Error('projectRoot is required when scope is "project"');
+      }
+      candidates.push(
+        path.join(loc.projectRoot, '.kilo', 'command'),
+        path.join(loc.projectRoot, '.kilo', 'commands')
+      );
+    }
+
+    const commandNames = new Set<string>();
+    for (const dir of candidates) {
+      try {
+        const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+        for (const e of entries) {
+          if (e.isFile() && e.name.endsWith('.md')) {
+            commandNames.add(e.name.replace(/\.md$/, ''));
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+    return Array.from(commandNames);
   }
 
   rulePath(loc: LocationRef): string {
