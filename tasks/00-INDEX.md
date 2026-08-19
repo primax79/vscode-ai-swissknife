@@ -29,8 +29,8 @@ target adapters (GitHub Copilot). See [`specs/phase-2-spec.md`](specs/phase-2-sp
 | 5        | 05  | [Canonical model + translator (skill)](05-translator-skill/plan.md)       | ✅ done (05.2 hardening merged) | 03.4                 | M    |
 | 6        | 06  | [Install engine (pipeline)](06-install-engine/plan.md)                    | ✅ done (06.1/06.2 merged)      | 05, 02.3, 03.4, 04.3 | M    |
 | 7        | 07  | [Minimal UI (3 views)](07-minimal-ui/plan.md)                             | ✅ done (07.1/07.2/07.3 merged) | 06                   | M    |
-| 8        | 08  | [Agent artifact support](08-agent-support/plan.md)                        | 🟡 ready                        | 07                   | M    |
-| 9        | 09  | [Command artifact support](09-command-support/plan.md)                    | ⚪ planned                      | 08                   | M    |
+| 8        | 08  | [Agent artifact support](08-agent-support/plan.md)                        | ✅ done                         | 07                   | M    |
+| 9        | 09  | [Command artifact support](09-command-support/plan.md)                    | 🟡 ready                        | 08                   | M    |
 | 10       | 10  | [MCP-server artifact support](10-mcp-support/plan.md)                     | ⚪ planned                      | 08                   | L    |
 | 11       | 11  | [Marketplace sources resolver](11-marketplace-sources/plan.md)            | ⚪ planned                      | 08, 09, 10           | M    |
 | 12       | 12  | [GitHub Copilot adapter](12-copilot-adapter/plan.md)                      | ⚪ planned                      | 08, 09, 10           | M    |
