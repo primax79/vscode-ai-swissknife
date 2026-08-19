@@ -34,6 +34,10 @@ target adapters (GitHub Copilot). See [`specs/phase-2-spec.md`](specs/phase-2-sp
 | 10       | 10  | [MCP-server artifact support](10-mcp-support/plan.md)                     | ✅ done                         | 08                   | L    |
 | 11       | 11  | [Marketplace sources resolver](11-marketplace-sources/plan.md)            | ✅ done                         | 08, 09, 10           | M    |
 | 12       | 12  | [GitHub Copilot adapter](12-copilot-adapter/plan.md)                      | ✅ done                         | 08, 09, 10           | M    |
+| 13       | 13  | [Drift & update detection](13-drift-and-updates/plan.md)                  | 🟡 ready                        | 12                   | M    |
+| 14       | 14  | [Discovery & promotion](14-discovery-promotion/plan.md)                   | ⚪ planned                      | 13                   | M    |
+| 15       | 15  | [File watchers for consistency](15-file-watchers/plan.md)                 | ⚪ planned                      | 13                   | S    |
+| 16       | 16  | [Management dashboard webview](16-dashboard-webview/plan.md)              | ⚪ planned                      | 13, 14, 15           | L    |
 
 ## Specs
 
@@ -41,17 +45,17 @@ target adapters (GitHub Copilot). See [`specs/phase-2-spec.md`](specs/phase-2-sp
 | ------------------------------------------- | ------------------------------ |
 | [foundations](specs/foundations.md)         | 01, 02, 03, 04, 05, 06, 07     |
 | [phase-2-spec](specs/phase-2-spec.md)       | 08, 09, 10, 11, 12             |
+| [phase-3-spec](specs/phase-3-spec.md)       | 13, 14, 15, 16                 |
 
 ## Dependency graph
 
 ```text
-Phase 1:
-01 ──► 02 ──► 03 ──┬──► 04 ──┐
-                   └──► 05 ──┼──► 06 ──► 07
+Phase 1 & 2:
+01 ──► 02 ──► 03 ──► 04 ──► 05 ──► 06 ──► 07 ──► 08 ──► 09 ──► 10 ──► 11 ──► 12
 
-Phase 2:
-07 ──► 08 (Agent) ──┬──► 09 (Command) ──┬──► 11 (Marketplace sources)
-                    └──► 10 (MCP)       └──► 12 (Copilot adapter)
+Phase 3:
+12 ──► 13 (Drift & Updates) ──┬──► 14 (Discovery & Promotion) ──┬──► 16 (Dashboard Webview)
+                              └──► 15 (File Watchers) ──────────┘
 ```
 
 ---
