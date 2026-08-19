@@ -3,11 +3,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { CanonicalSkill } from '../adapters/types';
 import type { ResolvedArtifact } from '../domain/types';
-import { serializeSkillMarkdown } from '../adapters/claude';
-import { canonicalSkillHash } from '../adapters/codec';
+import { serializeSkillMarkdown, parseClaudeAgentMarkdown, serializeClaudeAgentMarkdown } from '../adapters/claude';
+import { serializeKiloAgentMarkdown } from '../adapters/kilo';
+import { canonicalSkillHash, canonicalAgentHash } from '../adapters/codec';
 import { resolveArtifactContent as resolveLocalFolderContent } from '../sources/localFolder';
 import { resolveArtifactContent as resolveGitCustomContent } from '../sources/gitCustom';
 import { translateSkill } from '../translator/skill';
+import { translateAgent } from '../translator/agent';
 import type {
   PreparedInstall,
   PlanInstallParams,
@@ -22,8 +24,7 @@ function sha256(data: Uint8Array | string): string {
 export async function planInstall(params: PlanInstallParams): Promise<PreparedInstall> {
   const { source, pkg, artifact, targetAdapter, targetScope, projectRoot, resolverOpts } = params;
 
-  // 1. Reject unsupported kinds in Phase 1
-  if (artifact.kind !== 'skill') {
+  if (artifact.kind !== 'skill' && artifact.kind !== 'agent') {
     return {
       supported: false,
       plan: {
@@ -31,12 +32,164 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
         sourceId: source.id,
         packageId: pkg.id,
         artifactId: artifact.id,
-        reason: `Artifact kind "${artifact.kind}" is not supported in Phase 1 (only "skill" is supported)`,
+        reason: `Artifact kind "${artifact.kind}" is not supported (supported kinds: skill, agent)`,
       },
     };
   }
 
-  // 2. Dispatch content resolution
+  // --- AGENT KIND ---
+  if (artifact.kind === 'agent') {
+    let rawAgentContent: string;
+    try {
+      if (source.type === 'local-folder' && source.localPath) {
+        const prefix = `${source.id}:`;
+        const pathId = pkg.id.startsWith(prefix) ? pkg.id.slice(prefix.length) : '';
+        const candidate1 = path.join(source.localPath, pathId);
+        const candidate2 = path.join(source.localPath, `${artifact.name}.md`);
+        const candidate3 = path.join(source.localPath, 'agents', `${artifact.name}.md`);
+
+        let agentFile = '';
+        if (fs.existsSync(candidate1) && fs.statSync(candidate1).isFile()) {
+          agentFile = candidate1;
+        } else if (fs.existsSync(candidate2)) {
+          agentFile = candidate2;
+        } else if (fs.existsSync(candidate3)) {
+          agentFile = candidate3;
+        } else {
+          throw new Error(`Cannot locate agent file for "${artifact.name}" in "${source.localPath}"`);
+        }
+        rawAgentContent = await fs.promises.readFile(agentFile, 'utf-8');
+      } else {
+        throw new Error(`Source type "${source.type}" is not yet supported for agent resolution`);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        supported: false,
+        plan: {
+          supported: false,
+          sourceId: source.id,
+          packageId: pkg.id,
+          artifactId: artifact.id,
+          reason: `Agent content resolution failed: ${msg}`,
+        },
+      };
+    }
+
+    const parsedAgent = parseClaudeAgentMarkdown(rawAgentContent);
+    const translation = translateAgent(parsedAgent, targetAdapter.assistant);
+
+    if (translation.overall === 'unsupported') {
+      return {
+        supported: false,
+        plan: {
+          supported: false,
+          sourceId: source.id,
+          packageId: pkg.id,
+          artifactId: artifact.id,
+          reason: `Target assistant "${targetAdapter.assistant}" is not supported for agents`,
+          diagnostics: translation.diagnostics,
+        },
+      };
+    }
+
+    const translatedAgent = translation.value;
+    if (!targetAdapter.agentPath) {
+      return {
+        supported: false,
+        plan: {
+          supported: false,
+          sourceId: source.id,
+          packageId: pkg.id,
+          artifactId: artifact.id,
+          reason: `Target adapter for "${targetAdapter.assistant}" does not support agent installation`,
+          diagnostics: translation.diagnostics,
+        },
+      };
+    }
+
+    const targetFilePath = targetAdapter.agentPath(translatedAgent.name, {
+      scope: targetScope,
+      projectRoot,
+    });
+
+    const existingFiles: ExistingFile[] = [];
+    try {
+      const stat = await fs.promises.lstat(targetFilePath);
+      if (stat.isSymbolicLink() || stat.isDirectory()) {
+        return {
+          supported: false,
+          plan: {
+            supported: false,
+            sourceId: source.id,
+            packageId: pkg.id,
+            artifactId: artifact.id,
+            reason: `Target agent path "${targetFilePath}" is a directory or symlink and will not be overwritten`,
+            diagnostics: translation.diagnostics,
+          },
+        };
+      }
+      const data = await fs.promises.readFile(targetFilePath);
+      existingFiles.push({
+        path: path.basename(targetFilePath),
+        contentHash: sha256(data),
+      });
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          supported: false,
+          plan: {
+            supported: false,
+            sourceId: source.id,
+            packageId: pkg.id,
+            artifactId: artifact.id,
+            reason: `Error inspecting target agent file: ${msg}`,
+            diagnostics: translation.diagnostics,
+          },
+        };
+      }
+    }
+
+    const serialized =
+      targetAdapter.assistant === 'claude-code'
+        ? serializeClaudeAgentMarkdown(translatedAgent)
+        : serializeKiloAgentMarkdown(translatedAgent);
+
+    const proposedFiles: ProposedFile[] = [
+      {
+        path: path.basename(targetFilePath),
+        contentHash: sha256(Buffer.from(serialized, 'utf-8')),
+      },
+    ];
+
+    const conflict = existingFiles.length > 0;
+    const contentHash = canonicalAgentHash(translatedAgent);
+
+    return {
+      supported: true,
+      kind: 'agent',
+      plan: {
+        supported: true,
+        sourceId: source.id,
+        packageId: pkg.id,
+        artifactId: artifact.id,
+        targetAssistant: targetAdapter.assistant,
+        targetScope,
+        targetDir: targetFilePath,
+        projectRoot,
+        sourceRevision: pkg.version,
+        conflict,
+        existingFiles,
+        proposedFiles,
+        diagnostics: translation.diagnostics,
+      },
+      content: translatedAgent,
+      contentHash,
+    };
+  }
+
+  // --- SKILL KIND ---
   let resolvedContent: ResolvedArtifact<CanonicalSkill>;
   try {
     if (source.type === 'local-folder') {
@@ -69,7 +222,6 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
     };
   }
 
-  // 3. Translate skill content
   const translation = translateSkill(resolvedContent.content, targetAdapter.assistant);
   if (translation.overall === 'unsupported') {
     return {
@@ -87,7 +239,6 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
 
   const translatedSkill = translation.value;
 
-  // 4. Resolve target directory
   let targetDir: string;
   try {
     targetDir = targetAdapter.skillDir(translatedSkill.name, {
@@ -109,7 +260,6 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
     };
   }
 
-  // 5. Inspect targetDir with lstat and walk if present
   const existingFiles: ExistingFile[] = [];
   try {
     const targetStat = await fs.promises.lstat(targetDir);
@@ -128,7 +278,6 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
       };
     }
 
-    // Walk existing directory
     const walk = async (currentDir: string, relativeRoot: string): Promise<boolean> => {
       const entries = await fs.promises.readdir(currentDir, { withFileTypes: true });
       for (const entry of entries) {
@@ -137,7 +286,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
 
         const stat = await fs.promises.lstat(fullPath);
         if (stat.isSymbolicLink() || stat.isSocket() || stat.isFIFO() || stat.isBlockDevice() || stat.isCharacterDevice()) {
-          return false; // unsupported file type
+          return false;
         }
 
         if (stat.isDirectory()) {
@@ -187,10 +336,8 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
         },
       };
     }
-    // ENOENT: target does not exist yet, existingFiles remains empty
   }
 
-  // 6. Build proposed files
   const proposedFiles: ProposedFile[] = [];
   const skillMdContent = serializeSkillMarkdown(translatedSkill);
   proposedFiles.push({
@@ -211,6 +358,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
 
   return {
     supported: true,
+    kind: 'skill',
     plan: {
       supported: true,
       sourceId: source.id,

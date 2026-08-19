@@ -2,7 +2,20 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { ManagedInstallation } from '../domain/types';
-import { canonicalSkillHash, readSkill, writeSkill } from '../adapters/codec';
+import {
+  canonicalSkillHash,
+  canonicalAgentHash,
+  readSkill,
+  writeSkill,
+} from '../adapters/codec';
+import {
+  serializeClaudeAgentMarkdown,
+  parseClaudeAgentMarkdown,
+} from '../adapters/claude';
+import {
+  serializeKiloAgentMarkdown,
+  parseKiloAgentMarkdown,
+} from '../adapters/kilo';
 import { readState, writeState } from '../domain/registry';
 import type { PreparedInstall, ApplyOutcome } from './types';
 
@@ -23,6 +36,245 @@ export async function applyInstall(
   }
 
   const plan = prepared.plan;
+
+  // --- AGENT KIND APPLY ---
+  if (prepared.kind === 'agent') {
+    const agent = prepared.content;
+    const recomputedHash = canonicalAgentHash(agent);
+    if (recomputedHash !== prepared.contentHash) {
+      return {
+        status: 'refused',
+        reason: 'Agent content was mutated after preview (hash mismatch)',
+      };
+    }
+
+    const targetFilePath = plan.targetDir;
+    let targetExists = false;
+
+    try {
+      const stat = await fs.promises.lstat(targetFilePath);
+      targetExists = true;
+      if (stat.isSymbolicLink() || stat.isDirectory()) {
+        return {
+          status: 'refused',
+          reason: `Target agent path "${targetFilePath}" is a directory or symlink and will not be overwritten`,
+        };
+      }
+      const data = await fs.promises.readFile(targetFilePath);
+      const currentHash = sha256(data);
+      if (plan.existingFiles.length === 0 || plan.existingFiles[0].contentHash !== currentHash) {
+        return {
+          status: 'refused',
+          reason: 'Target agent file changed after preview was computed',
+        };
+      }
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        if (plan.existingFiles.length > 0) {
+          return {
+            status: 'refused',
+            reason: 'Target agent file was deleted after preview was computed',
+          };
+        }
+      } else {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          status: 'refused',
+          reason: `Failed to inspect target agent file: ${msg}`,
+        };
+      }
+    }
+
+    const randomId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const stagingPath = `${targetFilePath}.staging-${randomId}`;
+    const backupPath = `${targetFilePath}.backup-${randomId}`;
+
+    const serialized =
+      plan.targetAssistant === 'claude-code'
+        ? serializeClaudeAgentMarkdown(agent)
+        : serializeKiloAgentMarkdown(agent);
+
+    try {
+      await fs.promises.mkdir(path.dirname(stagingPath), { recursive: true });
+      await fs.promises.writeFile(stagingPath, serialized, 'utf-8');
+      const readBack = await fs.promises.readFile(stagingPath, 'utf-8');
+      const parsedStaged =
+        plan.targetAssistant === 'claude-code'
+          ? parseClaudeAgentMarkdown(readBack)
+          : parseKiloAgentMarkdown(readBack);
+      if (canonicalAgentHash(parsedStaged) !== prepared.contentHash) {
+        throw new Error('Staging agent verification hash mismatch');
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      try {
+        if (fs.existsSync(stagingPath)) {
+          await fs.promises.unlink(stagingPath);
+        }
+        return { status: 'refused', reason: `Staging failed: ${msg}` };
+      } catch {
+        return {
+          status: 'manual-recovery-required',
+          reason: `Staging failed and cleanup failed: ${msg}`,
+          paths: [stagingPath],
+        };
+      }
+    }
+
+    let backupCreated = false;
+    try {
+      if (targetExists) {
+        await fs.promises.rename(targetFilePath, backupPath);
+        backupCreated = true;
+      }
+      await fs.promises.rename(stagingPath, targetFilePath);
+    } catch (swapErr: unknown) {
+      const msg = swapErr instanceof Error ? swapErr.message : String(swapErr);
+      if (backupCreated) {
+        try {
+          if (fs.existsSync(targetFilePath)) {
+            await fs.promises.unlink(targetFilePath);
+          }
+          await fs.promises.rename(backupPath, targetFilePath);
+          if (fs.existsSync(stagingPath)) {
+            await fs.promises.unlink(stagingPath);
+          }
+          return {
+            status: 'rolled-back',
+            reason: `Agent swap failed and restored from backup: ${msg}`,
+          };
+        } catch {
+          return {
+            status: 'manual-recovery-required',
+            reason: `Agent swap failed and backup restoration failed: ${msg}`,
+            paths: [targetFilePath, backupPath, stagingPath].filter((p) => fs.existsSync(p)),
+          };
+        }
+      } else {
+        try {
+          if (fs.existsSync(stagingPath)) {
+            await fs.promises.unlink(stagingPath);
+          }
+          return { status: 'refused', reason: `Swap failed: ${msg}` };
+        } catch {
+          return {
+            status: 'manual-recovery-required',
+            reason: `Swap failed and staging cleanup failed: ${msg}`,
+            paths: [stagingPath],
+          };
+        }
+      }
+    }
+
+    // Final verification
+    try {
+      const finalContent = await fs.promises.readFile(targetFilePath, 'utf-8');
+      const finalAgent =
+        plan.targetAssistant === 'claude-code'
+          ? parseClaudeAgentMarkdown(finalContent)
+          : parseKiloAgentMarkdown(finalContent);
+      if (canonicalAgentHash(finalAgent) !== prepared.contentHash) {
+        throw new Error('Final target agent verification hash mismatch');
+      }
+    } catch (verifyErr: unknown) {
+      const msg = verifyErr instanceof Error ? verifyErr.message : String(verifyErr);
+      try {
+        if (fs.existsSync(targetFilePath)) {
+          await fs.promises.unlink(targetFilePath);
+        }
+        if (backupCreated) {
+          await fs.promises.rename(backupPath, targetFilePath);
+        }
+        return {
+          status: 'rolled-back',
+          reason: `Final agent verification failed and rolled back: ${msg}`,
+        };
+      } catch {
+        return {
+          status: 'manual-recovery-required',
+          reason: `Final agent verification failed and rollback failed: ${msg}`,
+          paths: [targetFilePath, backupPath].filter((p) => fs.existsSync(p)),
+        };
+      }
+    }
+
+    // State persistence
+    const installation: ManagedInstallation = {
+      assistant: plan.targetAssistant,
+      scope: plan.targetScope,
+      projectPath: plan.projectRoot,
+      kind: 'agent',
+      name: agent.name,
+      path: targetFilePath,
+      sourceId: plan.sourceId,
+      packageId: plan.packageId,
+      artifactId: plan.artifactId,
+      sourceRevision: plan.sourceRevision,
+      installedAt: new Date().toISOString(),
+      contentHash: prepared.contentHash,
+    };
+
+    try {
+      const state = await readState(plan.targetScope, plan.projectRoot, homeRoot);
+      const filtered = state.installations.filter(
+        (inst) =>
+          !(
+            inst.assistant === plan.targetAssistant &&
+            inst.scope === plan.targetScope &&
+            inst.projectPath === plan.projectRoot &&
+            inst.path === targetFilePath &&
+            inst.name === agent.name
+          )
+      );
+      filtered.push(installation);
+
+      await writeState(
+        plan.targetScope,
+        {
+          schemaVersion: state.schemaVersion,
+          installations: filtered,
+        },
+        plan.projectRoot,
+        homeRoot
+      );
+    } catch (stateErr: unknown) {
+      const msg = stateErr instanceof Error ? stateErr.message : String(stateErr);
+      try {
+        if (fs.existsSync(targetFilePath)) {
+          await fs.promises.unlink(targetFilePath);
+        }
+        if (backupCreated) {
+          await fs.promises.rename(backupPath, targetFilePath);
+        }
+        return {
+          status: 'rolled-back',
+          reason: `State persistence failed and rolled back agent file: ${msg}`,
+        };
+      } catch {
+        return {
+          status: 'manual-recovery-required',
+          reason: `State persistence failed and rollback failed: ${msg}`,
+          paths: [targetFilePath, backupPath].filter((p) => fs.existsSync(p)),
+        };
+      }
+    }
+
+    // Cleanup backup
+    if (backupCreated) {
+      try {
+        await fs.promises.unlink(backupPath);
+      } catch {
+        // ignore
+      }
+    }
+
+    return {
+      status: 'applied',
+      installation,
+    };
+  }
+
+  // --- SKILL KIND APPLY ---
   const content = prepared.content;
 
   // Check contentHash hasn't mutated
@@ -59,7 +311,6 @@ export async function applyInstall(
       };
     }
 
-    // Re-walk and verify exact file set & hashes match plan.existingFiles
     const currentFiles: Array<{ path: string; contentHash: string }> = [];
     const walk = async (currentDir: string, relativeRoot: string): Promise<boolean> => {
       const entries = await fs.promises.readdir(currentDir, { withFileTypes: true });
@@ -98,7 +349,6 @@ export async function applyInstall(
       };
     }
 
-    // Compare currentFiles with plan.existingFiles
     if (currentFiles.length !== plan.existingFiles.length) {
       return {
         status: 'refused',
@@ -132,7 +382,7 @@ export async function applyInstall(
     }
   }
 
-  // 2. Staging
+  // Staging
   const randomId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const stagingDir = `${targetDir}.staging-${randomId}`;
   const backupDir = `${targetDir}.backup-${randomId}`;
@@ -164,7 +414,7 @@ export async function applyInstall(
     }
   }
 
-  // 3. Transactional swap
+  // Transactional swap
   let backupCreated = false;
   try {
     if (targetExists) {
@@ -176,7 +426,6 @@ export async function applyInstall(
     const msg = swapErr instanceof Error ? swapErr.message : String(swapErr);
 
     if (backupCreated) {
-      // Attempt restore from backup
       try {
         if (fs.existsSync(targetDir)) {
           await fs.promises.rm(targetDir, { recursive: true, force: true });
@@ -197,7 +446,6 @@ export async function applyInstall(
         };
       }
     } else {
-      // Failed before backup was created or fresh install failed
       try {
         if (fs.existsSync(stagingDir)) {
           await fs.promises.rm(stagingDir, { recursive: true, force: true });
@@ -216,7 +464,7 @@ export async function applyInstall(
     }
   }
 
-  // 4. Final verification
+  // Final verification
   try {
     const finalSkill = await readSkill(targetDir);
     const finalHash = canonicalSkillHash(finalSkill);
@@ -247,7 +495,7 @@ export async function applyInstall(
     }
   }
 
-  // 5. State persistence
+  // State persistence
   const installation: ManagedInstallation = {
     assistant: plan.targetAssistant,
     scope: plan.targetScope,
@@ -289,7 +537,6 @@ export async function applyInstall(
   } catch (stateErr: unknown) {
     const msg = stateErr instanceof Error ? stateErr.message : String(stateErr);
 
-    // Rollback filesystem
     try {
       if (fs.existsSync(targetDir)) {
         await fs.promises.rm(targetDir, { recursive: true, force: true });
@@ -310,7 +557,7 @@ export async function applyInstall(
     }
   }
 
-  // 6. Backup cleanup
+  // Backup cleanup
   const warnings: string[] = [];
   if (backupCreated) {
     try {

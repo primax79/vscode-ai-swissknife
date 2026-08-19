@@ -100,7 +100,7 @@ describe('Install Engine — planInstall and applyInstall', () => {
       assert.ok(prepared.plan.diagnostics && prepared.plan.diagnostics.length > 0);
     });
 
-    it('plans fresh install correctly with proposed files and zero conflict', async () => {
+    it('plans fresh skill install correctly with proposed files and zero conflict', async () => {
       const source: Source = {
         id: 'src-nested',
         type: 'local-folder',
@@ -132,6 +132,49 @@ describe('Install Engine — planInstall and applyInstall', () => {
         assert.strictEqual(prepared.plan.proposedFiles.length, 2); // SKILL.md + scripts/helper.sh
         assert.strictEqual(prepared.content.name, 'nested-skill-b');
         assert.ok(prepared.contentHash.length > 0);
+      }
+    });
+
+    it('plans agent install translating tools to permissions for Kilo', async () => {
+      const agentFolder = path.join(testTempDir, 'src-agent-folder');
+      await fs.promises.mkdir(agentFolder, { recursive: true });
+      await fs.promises.writeFile(
+        path.join(agentFolder, 'architect.md'),
+        '---\nname: architect\ndescription: Software Architect\ntools: ["read", "edit", "bash"]\nmodel: claude-3-5-sonnet\n---\n# Architect\nDesign first.\n',
+        'utf-8'
+      );
+
+      const source: Source = {
+        id: 'src-agent',
+        type: 'local-folder',
+        scope: 'project',
+        localPath: agentFolder,
+      };
+      const pkg: Package = { id: 'src-agent:architect', sourceId: 'src-agent', nativeFormat: 'claude-agent', artifacts: [] };
+      const artifact: Artifact = {
+        id: 'src-agent:architect:architect',
+        packageId: 'src-agent:architect',
+        kind: 'agent',
+        name: 'architect',
+        nativeFormat: 'claude-agent',
+      };
+
+      const prepared = await planInstall({
+        source,
+        pkg,
+        artifact,
+        targetAdapter: kiloAdapter,
+        targetScope: 'project',
+        projectRoot: testTempDir,
+      });
+
+      assert.strictEqual(prepared.supported, true);
+      if (prepared.supported && prepared.kind === 'agent') {
+        assert.strictEqual(prepared.content.name, 'architect');
+        assert.strictEqual(prepared.content.permissions.read, 'allow');
+        assert.strictEqual(prepared.content.permissions.bash, 'allow');
+        assert.strictEqual(prepared.plan.proposedFiles.length, 1);
+        assert.strictEqual(prepared.plan.proposedFiles[0].path, 'architect.md');
       }
     });
 
@@ -172,7 +215,7 @@ describe('Install Engine — planInstall and applyInstall', () => {
   });
 
   describe('applyInstall', () => {
-    it('applies fresh install end-to-end, sets file mode, and updates state', async () => {
+    it('applies fresh skill install end-to-end, sets file mode, and updates state', async () => {
       const source: Source = {
         id: 'src-nested',
         type: 'local-folder',
@@ -207,18 +250,69 @@ describe('Install Engine — planInstall and applyInstall', () => {
         assert.strictEqual(outcome.installation.assistant, 'kilo-code');
         assert.strictEqual(outcome.installation.scope, 'project');
 
-        // Check installed skill on disk
         const targetDir = outcome.installation.path;
         assert.ok(fs.existsSync(path.join(targetDir, 'SKILL.md')));
         const installedSkill = await readSkill(targetDir);
         assert.strictEqual(installedSkill.name, 'nested-skill-b');
         assert.strictEqual(installedSkill.files.length, 1);
 
-        // Check state.json
         const state = await readState('project', testTempDir, testHomeDir);
         assert.strictEqual(state.installations.length, 1);
         assert.strictEqual(state.installations[0].name, 'nested-skill-b');
         assert.strictEqual(state.installations[0].contentHash, prepared.supported ? prepared.contentHash : '');
+      }
+    });
+
+    it('applies fresh agent install end-to-end and updates state', async () => {
+      const agentFolder = path.join(testTempDir, 'src-agent-folder');
+      await fs.promises.mkdir(agentFolder, { recursive: true });
+      await fs.promises.writeFile(
+        path.join(agentFolder, 'architect.md'),
+        '---\nname: architect\ndescription: Software Architect\ntools: ["read", "edit", "bash"]\n---\n# Architect\nDesign first.\n',
+        'utf-8'
+      );
+
+      const source: Source = {
+        id: 'src-agent',
+        type: 'local-folder',
+        scope: 'project',
+        localPath: agentFolder,
+      };
+      const pkg: Package = { id: 'src-agent:architect', sourceId: 'src-agent', nativeFormat: 'claude-agent', artifacts: [] };
+      const artifact: Artifact = {
+        id: 'src-agent:architect:architect',
+        packageId: 'src-agent:architect',
+        kind: 'agent',
+        name: 'architect',
+        nativeFormat: 'claude-agent',
+      };
+
+      const prepared: PreparedInstall = await planInstall({
+        source,
+        pkg,
+        artifact,
+        targetAdapter: kiloAdapter,
+        targetScope: 'project',
+        projectRoot: testTempDir,
+      });
+
+      assert.strictEqual(prepared.supported, true);
+
+      const outcome = await applyInstall(prepared, testHomeDir);
+      assert.strictEqual(outcome.status, 'applied');
+
+      if (outcome.status === 'applied') {
+        assert.strictEqual(outcome.installation.name, 'architect');
+        assert.strictEqual(outcome.installation.kind, 'agent');
+        assert.strictEqual(outcome.installation.assistant, 'kilo-code');
+
+        const targetFile = outcome.installation.path;
+        assert.ok(fs.existsSync(targetFile));
+
+        const state = await readState('project', testTempDir, testHomeDir);
+        assert.strictEqual(state.installations.length, 1);
+        assert.strictEqual(state.installations[0].name, 'architect');
+        assert.strictEqual(state.installations[0].kind, 'agent');
       }
     });
 
@@ -248,8 +342,7 @@ describe('Install Engine — planInstall and applyInstall', () => {
       });
 
       assert.strictEqual(prepared.supported, true);
-      if (prepared.supported) {
-        // Mutate content after preview
+      if (prepared.supported && prepared.kind === 'skill') {
         prepared.content.description = 'Mutated after preview';
 
         const outcome = await applyInstall(prepared, testHomeDir);
@@ -285,7 +378,6 @@ describe('Install Engine — planInstall and applyInstall', () => {
 
       assert.strictEqual(prepared.supported, true);
       if (prepared.supported) {
-        // Inject an unexpected file into target directory before apply
         const targetDir = prepared.plan.targetDir;
         await fs.promises.mkdir(targetDir, { recursive: true });
         await fs.promises.writeFile(path.join(targetDir, 'unexpected.txt'), 'surprised', 'utf-8');
@@ -367,7 +459,7 @@ describe('Install Engine — planInstall and applyInstall', () => {
       assert.strictEqual(outcome3.status, 'applied');
 
       const state3 = await readState('project', testTempDir, testHomeDir);
-      assert.strictEqual(state3.installations.length, 2); // No duplicates, preserved unrelated installation
+      assert.strictEqual(state3.installations.length, 2);
     });
   });
 });
