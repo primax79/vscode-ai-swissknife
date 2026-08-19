@@ -36,6 +36,25 @@ here: how it performs on a genuinely ambiguous or under-specified task —
 every task above was written with the level of detail `task-spec-
 authoring` calls for, which may be doing a lot of the work.
 
+## Implementation delegations (hardening-gate tasks, post-convergence)
+
+The first hardening-gate task to actually reach implementation, after
+three rounds of spec review (see below) converged. Model tier:
+`google/gemini-3.1-pro-preview-customtools` (complex/correctness-critical
+tier), isolated in a worktree.
+
+| Task                                             | Duration                                                                                                                | Outcome                                                                                      | Quality notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 03.4 (shared skill codec + `Adapter.skillDir()`) | main dispatch not separately timed; hit real `tsc` errors mid-implementation and self-corrected before the final commit | success, verified independently on `main` after merge (50/50 tests, build clean, lint clean) | One real gap on first pass: implemented `skillDir()` correctly in both adapters but didn't add the specific test the task file's Verification section demanded (`skillDir === path.dirname(skillPath)` for both scopes). Caught by direct inspection (`grep` for the assertion, not just trusting the "success" report), corrected via one `continue_session_id` steering call into the same session rather than a fresh dispatch — the model added the missing tests and amended the existing commit (kept it one commit, as instructed) instead of creating a second. Worth remembering: "N/N tests passed" in a report is not evidence a *specific named* required test exists — grep for it. |
+
+**Read so far**: this is the first data point for `continue_session_id`
+as a correction mechanism in this project (used previously in reviews as
+a described option but not yet exercised) — it worked cleanly for a
+narrow, well-specified follow-up ("add this exact test, amend the
+commit") without needing to re-explain any of the original task's
+context. Cheaper than a fresh `kilo_implement` dispatch for this class of
+gap.
+
 ## Review round 001 (hardening-gate task specs, pre-implementation)
 
 | Engine                | Model                                          | Duration (dispatching call) | Findings (B / I) | Depth/character                                                                                                                                                                                                                                                                                                                                                                                      |

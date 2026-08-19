@@ -40,15 +40,15 @@ The gate specifications are now converged; review-engine history and the
 `#` is the stable id (folder/task prefix); it is NOT reading order —
 `Priority` is.
 
-| Priority | #   | Initiative                                                                | Status                                             | Depends on           | Size |
-| -------- | --- | ------------------------------------------------------------------------- | -------------------------------------------------- | -------------------- | ---- |
-| 1        | 01  | [Project scaffold](01-project-scaffold/plan.md)                           | ✅ done                                            | —                    | S    |
-| 2        | 02  | [Domain types + registry store](02-domain-and-registry/plan.md)           | partial (02.1/02.2 done, 02.3 hardening open)      | 01                   | S    |
-| 3        | 03  | [Claude + Kilo adapters (skill+rule)](03-claude-kilo-adapters/plan.md)    | partial (03.1/03.2/03.3 done, 03.4 hardening open) | 02                   | M    |
-| 4        | 04  | [Source resolver (git-custom + local-folder)](04-source-resolver/plan.md) | partial (04.1/04.2 done, 04.3 hardening open)      | 02                   | M    |
-| 5        | 05  | [Canonical model + translator (skill)](05-translator-skill/plan.md)       | partial (05.1 done, 05.2 hardening open)           | 03.4                 | M    |
-| 6        | 06  | [Install engine (pipeline)](06-install-engine/plan.md)                    | open (revised)                                     | 05, 02.3, 03.4, 04.3 | M    |
-| 7        | 07  | [Minimal UI (3 views)](07-minimal-ui/plan.md)                             | open (revised)                                     | 06                   | M    |
+| Priority | #   | Initiative                                                                | Status                                        | Depends on           | Size |
+| -------- | --- | ------------------------------------------------------------------------- | --------------------------------------------- | -------------------- | ---- |
+| 1        | 01  | [Project scaffold](01-project-scaffold/plan.md)                           | ✅ done                                       | —                    | S    |
+| 2        | 02  | [Domain types + registry store](02-domain-and-registry/plan.md)           | partial (02.1/02.2 done, 02.3 hardening open) | 01                   | S    |
+| 3        | 03  | [Claude + Kilo adapters (skill+rule)](03-claude-kilo-adapters/plan.md)    | ✅ done (03.4 hardening merged, 50/50 tests)  | 02                   | M    |
+| 4        | 04  | [Source resolver (git-custom + local-folder)](04-source-resolver/plan.md) | partial (04.1/04.2 done, 04.3 hardening open) | 02                   | M    |
+| 5        | 05  | [Canonical model + translator (skill)](05-translator-skill/plan.md)       | partial (05.1 done, 05.2 hardening open)      | 03.4                 | M    |
+| 6        | 06  | [Install engine (pipeline)](06-install-engine/plan.md)                    | open (revised)                                | 05, 02.3, 03.4, 04.3 | M    |
+| 7        | 07  | [Minimal UI (3 views)](07-minimal-ui/plan.md)                             | open (revised)                                | 06                   | M    |
 
 Everything above is SPEC.md §6 "Phase 1" (see
 [`specs/foundations.md`](specs/foundations.md)). Phase 2 (agent/mcp-server/
