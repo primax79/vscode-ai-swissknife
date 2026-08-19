@@ -19,6 +19,12 @@ export interface DetectedAgentFile {
   description?: string;
 }
 
+export interface DetectedCommandFile {
+  path: string;
+  name: string;
+  description?: string;
+}
+
 export interface SkillDetectionResult {
   skills: DetectedSkillDir[];
   diagnostics: DetectionDiagnostic[];

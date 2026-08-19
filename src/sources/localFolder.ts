@@ -2,25 +2,27 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { Source, Package, Artifact, ResolvedArtifact } from '../domain/types';
 import type { CanonicalSkill, CanonicalAgent, CanonicalCommand } from '../adapters/types';
-import type { SourceResolution, SkillDetectionResult } from './types';
+import type { SourceResolution } from './types';
 import { readSkill } from '../adapters/codec';
 import { parseClaudeAgentMarkdown, parseClaudeCommandMarkdown } from '../adapters/claude';
-import { findSkillDirs, findAgentFiles } from './detect';
+import { findSkillDirs, findAgentFiles, findCommandFiles } from './detect';
 
 /**
- * Resolves a `Source` of type `local-folder` detecting skills and agents.
+ * Resolves a `Source` of type `local-folder` detecting skills, agents, and commands.
  */
 export async function resolveLocalFolder(source: Source): Promise<SourceResolution> {
   if (!source.localPath) {
     return { packages: [], diagnostics: [] };
   }
 
-  let skillDetection: SkillDetectionResult;
-  let agentDetection: { agents: Array<{ path: string; name: string; description?: string }>; diagnostics: Array<{ severity: 'error' | 'warning'; path: string; message: string; code: 'invalid-frontmatter' | 'unsafe-path' | 'unreadable-skill' }> };
+  let skillDetection;
+  let agentDetection;
+  let commandDetection;
 
   try {
     skillDetection = await findSkillDirs(source.localPath);
     agentDetection = await findAgentFiles(source.localPath);
+    commandDetection = await findCommandFiles(source.localPath);
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
       return { packages: [], diagnostics: [] };
@@ -77,9 +79,37 @@ export async function resolveLocalFolder(source: Source): Promise<SourceResoluti
     return pkg;
   });
 
+  const commandPackages: Package[] = commandDetection.commands.map((cmdFile) => {
+    const relPath = path.relative(source.localPath!, cmdFile.path);
+    const packageId = `${source.id}:${relPath}`;
+    const artifactId = `${packageId}:${cmdFile.name}`;
+
+    const artifact: Artifact = {
+      id: artifactId,
+      packageId,
+      kind: 'command',
+      name: cmdFile.name,
+      description: cmdFile.description,
+      nativeFormat: 'claude-command',
+    };
+
+    const pkg: Package = {
+      id: packageId,
+      sourceId: source.id,
+      nativeFormat: 'claude-command',
+      artifacts: [artifact],
+    };
+
+    return pkg;
+  });
+
   return {
-    packages: [...skillPackages, ...agentPackages],
-    diagnostics: [...skillDetection.diagnostics, ...agentDetection.diagnostics],
+    packages: [...skillPackages, ...agentPackages, ...commandPackages],
+    diagnostics: [
+      ...skillDetection.diagnostics,
+      ...agentDetection.diagnostics,
+      ...commandDetection.diagnostics,
+    ],
   };
 }
 

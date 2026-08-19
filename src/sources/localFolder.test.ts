@@ -3,7 +3,7 @@ import * as assert from 'node:assert';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Source, ResolvedArtifact } from '../domain/types';
-import type { CanonicalSkill, CanonicalAgent } from '../adapters/types';
+import type { CanonicalSkill, CanonicalCommand } from '../adapters/types';
 import type { SourceResolution } from './types';
 import { resolveLocalFolder, resolveArtifactContent } from './localFolder';
 
@@ -80,7 +80,7 @@ describe('localFolder — resolveLocalFolder with committed fixtures', () => {
     assert.strictEqual(resolution.diagnostics[0].code, 'invalid-frontmatter');
   });
 
-  it('resolves fixtures root containing both skills and agents', async () => {
+  it('resolves fixtures root containing skills, agents, and commands', async () => {
     const source: Source = {
       id: 'src-all',
       type: 'local-folder',
@@ -93,14 +93,18 @@ describe('localFolder — resolveLocalFolder with committed fixtures', () => {
     assert.ok(agentPkg);
     assert.strictEqual(agentPkg.artifacts[0].name, 'code-reviewer');
 
+    const cmdPkg = resolution.packages.find((p) => p.artifacts[0].kind === 'command');
+    assert.ok(cmdPkg);
+    assert.strictEqual(cmdPkg.artifacts[0].name, 'review');
+
     const resolved = (await resolveArtifactContent(
       source,
-      agentPkg,
-      agentPkg.artifacts[0]
-    )) as ResolvedArtifact<CanonicalAgent>;
+      cmdPkg,
+      cmdPkg.artifacts[0]
+    )) as ResolvedArtifact<CanonicalCommand>;
 
-    assert.strictEqual(resolved.content.name, 'code-reviewer');
-    assert.ok(resolved.content.tools.includes('read'));
+    assert.strictEqual(resolved.content.name, 'review');
+    assert.strictEqual(resolved.content.agent, 'code-reviewer');
   });
 
   it('returns empty packages and diagnostics when source has no localPath or path does not exist', async () => {

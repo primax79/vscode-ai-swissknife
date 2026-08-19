@@ -4,6 +4,7 @@ import * as path from 'path';
 import type {
   DetectedSkillDir,
   DetectedAgentFile,
+  DetectedCommandFile,
   SkillDetectionResult,
   DetectionDiagnostic,
 } from './types';
@@ -210,4 +211,80 @@ export async function findAgentFiles(
 
   await walk(resolvedRoot);
   return { agents, diagnostics };
+}
+
+/**
+ * Recursively walks `rootDir` looking for command markdown files (*.command.md, or *.md inside commands/ / command/ directories).
+ */
+export async function findCommandFiles(
+  rootDir: string
+): Promise<{ commands: DetectedCommandFile[]; diagnostics: DetectionDiagnostic[] }> {
+  const resolvedRoot = path.resolve(rootDir);
+  const commands: DetectedCommandFile[] = [];
+  const diagnostics: DetectionDiagnostic[] = [];
+
+  async function walk(dir: string): Promise<void> {
+    let entries: fs.Dirent[];
+    try {
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        if (entry.name === '.git' || entry.name === 'node_modules') {
+          continue;
+        }
+        await walk(path.join(dir, entry.name));
+      } else if (entry.isFile() && entry.name.endsWith('.md')) {
+        const fullPath = path.join(dir, entry.name);
+        const relDir = path.relative(resolvedRoot, dir).split(path.sep).join('/');
+
+        const isCommandNamed =
+          entry.name.endsWith('.command.md') ||
+          relDir === 'commands' ||
+          relDir === 'command' ||
+          relDir.endsWith('/commands') ||
+          relDir.endsWith('/command') ||
+          relDir.includes('/commands/') ||
+          relDir.includes('/command/');
+
+        if (entry.name.toLowerCase() === 'readme.md' || entry.name === 'SKILL.md') {
+          continue;
+        }
+
+        if (isCommandNamed) {
+          let name = entry.name.replace(/(\.command)?\.md$/, '');
+          let description: string | undefined;
+
+          try {
+            const content = await fs.promises.readFile(fullPath, 'utf-8');
+            const frontmatter = extractSkillFrontmatter(content);
+            if (frontmatter.name) {
+              name = frontmatter.name;
+            }
+            description = frontmatter.description;
+          } catch {
+            diagnostics.push({
+              severity: 'error',
+              path: fullPath,
+              message: 'Failed to read command file',
+              code: 'unreadable-skill',
+            });
+            continue;
+          }
+
+          commands.push({
+            path: fullPath,
+            name,
+            description,
+          });
+        }
+      }
+    }
+  }
+
+  await walk(resolvedRoot);
+  return { commands, diagnostics };
 }
