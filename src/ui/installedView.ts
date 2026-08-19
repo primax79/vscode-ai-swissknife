@@ -87,13 +87,29 @@ export class InstalledTreeDataProvider
 
     if (element instanceof ObservedArtifactItem) {
       const obs = element.observed;
+      let desc = `${obs.kind} [unmanaged]`;
+      let iconName = 'eye';
+
+      if (obs.match?.status === 'identical') {
+        desc = `${obs.kind} [identical to ${obs.match.sourceId}]`;
+        iconName = 'pass';
+      } else if (obs.match?.status === 'different') {
+        desc = `${obs.kind} [differs from ${obs.match.sourceId}]`;
+        iconName = 'diff-modified';
+      } else if (obs.match?.status === 'unmatched') {
+        desc = `${obs.kind} [local only]`;
+        iconName = 'eye';
+      }
+
       const item = new vscode.TreeItem(
         obs.name,
         vscode.TreeItemCollapsibleState.None
       );
-      item.description = `${obs.kind} [unmanaged]`;
-      item.tooltip = `Name: ${obs.name}\nKind: ${obs.kind}\nAssistant: ${obs.assistant}\nScope: ${obs.scope}\nPath: ${obs.path}\nDiscovered: ${obs.discoveredAt}`;
-      item.iconPath = new vscode.ThemeIcon('eye');
+      item.description = desc;
+      item.tooltip = `Name: ${obs.name}\nKind: ${obs.kind}\nAssistant: ${obs.assistant}\nScope: ${obs.scope}\nPath: ${obs.path}\nDiscovered: ${obs.discoveredAt}${
+        obs.match?.details ? `\nFeedback: ${obs.match.details}` : ''
+      }`;
+      item.iconPath = new vscode.ThemeIcon(iconName);
       item.contextValue = 'observedArtifactItem';
       return item;
     }
@@ -359,8 +375,16 @@ export class InstalledTreeDataProvider
     }
 
     const obs = item.observed;
+    let confirmPrompt = `Promote unmanaged ${obs.kind} "${obs.name}" (${obs.assistant}, ${obs.scope}) to managed installation?`;
+
+    if (obs.match?.status === 'identical') {
+      confirmPrompt = `Observed ${obs.kind} "${obs.name}" is identical to registered source "${obs.match.sourceId}". Promote to managed installation and attach source provenance?`;
+    } else if (obs.match?.status === 'different') {
+      confirmPrompt = `Observed ${obs.kind} "${obs.name}" differs from registered source "${obs.match.sourceId}". Promote local copy to managed installation?`;
+    }
+
     const confirm = await vscode.window.showInformationMessage(
-      `Promote unmanaged ${obs.kind} "${obs.name}" (${obs.assistant}, ${obs.scope}) to managed installation?`,
+      confirmPrompt,
       { modal: true },
       'Promote'
     );

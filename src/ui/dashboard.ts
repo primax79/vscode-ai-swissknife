@@ -29,6 +29,19 @@ export class DashboardPanel {
               await this.update();
             }
             break;
+          case 'promoteAllIdentical':
+            if (Array.isArray(message.items)) {
+              let count = 0;
+              for (const item of message.items) {
+                if (item.match?.status === 'identical') {
+                  await promoteObservedArtifact(item);
+                  count++;
+                }
+              }
+              vscode.window.showInformationMessage(`Promoted ${count} identical item(s) to managed installations.`);
+              await this.update();
+            }
+            break;
         }
       },
       null,
@@ -129,6 +142,7 @@ export class DashboardPanel {
     const modifiedLocally = reports.filter(
       (r) => r.status === 'modified-locally' || r.status === 'modified-and-update-available'
     ).length;
+    const identicalCount = observed.filter((o) => o.match?.status === 'identical').length;
 
     const reportMap = new Map(reports.map((r) => [`${r.installation.assistant}:${r.installation.scope}:${r.installation.name}`, r]));
 
@@ -162,15 +176,22 @@ export class DashboardPanel {
 
     const observedRows = observed
       .map((obs, idx) => {
+        let matchBadge = '<span class="badge badge-unmanaged">local only</span>';
+        if (obs.match?.status === 'identical') {
+          matchBadge = `<span class="badge badge-success" title="${obs.match.details}">identical: ${obs.match.sourceId}</span>`;
+        } else if (obs.match?.status === 'different') {
+          matchBadge = `<span class="badge badge-warning" title="${obs.match.details}">differs: ${obs.match.sourceId}</span>`;
+        }
+
         return `
         <tr class="unmanaged-row" data-kind="${obs.kind}" data-name="${obs.name.toLowerCase()}">
           <td><span class="kind-pill kind-${obs.kind}">${obs.kind}</span></td>
           <td><strong>${obs.name}</strong></td>
           <td>${obs.assistant}</td>
           <td><span class="scope-pill scope-${obs.scope}">${obs.scope}</span></td>
-          <td><span class="badge badge-unmanaged">unmanaged</span></td>
+          <td>${matchBadge}</td>
           <td>
-            <button class="btn btn-primary" onclick="promoteItem(${idx})">Promote</button>
+            <button class="btn btn-sm btn-primary" onclick="promoteItem(${idx})">Promote</button>
           </td>
         </tr>
       `;
@@ -200,50 +221,58 @@ export class DashboardPanel {
       font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
       background-color: var(--bg);
       color: var(--fg);
-      padding: 24px;
+      padding: 16px 20px;
       margin: 0;
     }
     .header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 24px;
-      padding-bottom: 16px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
       border-bottom: 1px solid var(--border);
     }
     .title-group h1 {
-      margin: 0 0 4px 0;
-      font-size: 24px;
+      margin: 0 0 2px 0;
+      font-size: 18px;
       font-weight: 600;
     }
     .title-group p {
       margin: 0;
-      opacity: 0.8;
-      font-size: 13px;
+      opacity: 0.7;
+      font-size: 12px;
     }
-    .metrics-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 16px;
-      margin-bottom: 24px;
+    .header-actions {
+      display: flex;
+      gap: 8px;
     }
-    .metric-card {
+    .stats-ribbon {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .stat-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
       background: var(--card-bg);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 16px;
-    }
-    .metric-value {
-      font-size: 28px;
-      font-weight: 700;
-      margin-bottom: 4px;
-    }
-    .metric-label {
+      border-radius: 6px;
+      padding: 6px 12px;
       font-size: 12px;
-      opacity: 0.7;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
     }
+    .stat-num {
+      font-size: 15px;
+      font-weight: 700;
+    }
+    .stat-label {
+      opacity: 0.8;
+      font-size: 11px;
+    }
+    .stat-info .stat-num { color: #58a6ff; }
+    .stat-warning .stat-num { color: #d29922; }
+    .stat-success .stat-num { color: #3fb950; }
     .toolbar {
       display: flex;
       gap: 12px;
@@ -256,21 +285,21 @@ export class DashboardPanel {
       color: var(--vscode-input-foreground, #fff);
       border: 1px solid var(--vscode-input-border, #555);
       border-radius: 4px;
-      padding: 8px 12px;
-      font-size: 13px;
+      padding: 6px 10px;
+      font-size: 12px;
     }
     .tabs {
       display: flex;
-      gap: 8px;
+      gap: 6px;
     }
     .tab-btn {
       background: transparent;
       border: 1px solid var(--border);
       color: var(--fg);
-      padding: 6px 12px;
+      padding: 5px 10px;
       border-radius: 4px;
       cursor: pointer;
-      font-size: 12px;
+      font-size: 11px;
     }
     .tab-btn.active {
       background: var(--btn-bg);
@@ -282,19 +311,28 @@ export class DashboardPanel {
       color: var(--btn-fg);
       border: none;
       border-radius: 4px;
-      padding: 8px 14px;
+      padding: 6px 12px;
       cursor: pointer;
       font-size: 12px;
       font-weight: 500;
     }
+    .btn-sm {
+      padding: 3px 8px;
+      font-size: 11px;
+    }
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.1);
+      color: var(--fg);
+      border: 1px solid var(--border);
+    }
     table {
       width: 100%;
       border-collapse: collapse;
-      margin-top: 8px;
-      font-size: 13px;
+      margin-top: 6px;
+      font-size: 12px;
     }
     th, td {
-      padding: 10px 12px;
+      padding: 8px 10px;
       text-align: left;
       border-bottom: 1px solid var(--border);
     }
@@ -307,9 +345,9 @@ export class DashboardPanel {
     }
     .kind-pill {
       display: inline-block;
-      padding: 2px 6px;
+      padding: 2px 5px;
       border-radius: 4px;
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 600;
       text-transform: uppercase;
     }
@@ -319,17 +357,17 @@ export class DashboardPanel {
     .kind-mcp-server { background: rgba(46, 160, 67, 0.2); color: #3fb950; }
     .scope-pill {
       display: inline-block;
-      padding: 2px 6px;
+      padding: 2px 5px;
       border-radius: 4px;
-      font-size: 11px;
+      font-size: 10px;
     }
     .scope-project { background: rgba(255, 255, 255, 0.1); }
     .scope-global { background: rgba(0, 150, 255, 0.15); }
     .badge {
       display: inline-block;
-      padding: 3px 8px;
-      border-radius: 12px;
-      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 10px;
+      font-size: 10px;
       font-weight: 500;
     }
     .badge-success { background: rgba(46, 160, 67, 0.2); color: #3fb950; }
@@ -342,10 +380,16 @@ export class DashboardPanel {
       opacity: 0.7;
       word-break: break-all;
     }
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 20px 0 8px 0;
+    }
     .section-title {
-      margin: 32px 0 12px 0;
-      font-size: 16px;
+      font-size: 14px;
       font-weight: 600;
+      margin: 0;
     }
   </style>
 </head>
@@ -353,29 +397,29 @@ export class DashboardPanel {
   <div class="header">
     <div class="title-group">
       <h1>AI Swissknife Dashboard</h1>
-      <p>Cross-assistant inventory management, drift tracking, and updates</p>
+      <p>Inventory, drift tracking, and unmanaged artifact promotion</p>
     </div>
-    <div>
-      <button class="btn" onclick="refreshState()">Refresh</button>
+    <div class="header-actions">
+      <button class="btn btn-secondary" onclick="refreshState()">Refresh</button>
     </div>
   </div>
 
-  <div class="metrics-grid">
-    <div class="metric-card">
-      <div class="metric-value">${totalInstalled}</div>
-      <div class="metric-label">Managed Installations</div>
+  <div class="stats-ribbon">
+    <div class="stat-chip">
+      <span class="stat-num">${totalInstalled}</span>
+      <span class="stat-label">Managed Installations</span>
     </div>
-    <div class="metric-card">
-      <div class="metric-value" style="color: #58a6ff;">${updatesAvailable}</div>
-      <div class="metric-label">Updates Available</div>
+    <div class="stat-chip stat-info">
+      <span class="stat-num">${updatesAvailable}</span>
+      <span class="stat-label">Updates Available</span>
     </div>
-    <div class="metric-card">
-      <div class="metric-value" style="color: #d29922;">${modifiedLocally}</div>
-      <div class="metric-label">Modified Locally</div>
+    <div class="stat-chip stat-warning">
+      <span class="stat-num">${modifiedLocally}</span>
+      <span class="stat-label">Modified Locally</span>
     </div>
-    <div class="metric-card">
-      <div class="metric-value">${totalUnmanaged}</div>
-      <div class="metric-label">Unmanaged Discovered</div>
+    <div class="stat-chip stat-unmanaged">
+      <span class="stat-num">${totalUnmanaged}</span>
+      <span class="stat-label">Unmanaged Discovered (${identicalCount} identical, ${totalUnmanaged - identicalCount} custom)</span>
     </div>
   </div>
 
@@ -390,7 +434,9 @@ export class DashboardPanel {
     </div>
   </div>
 
-  <div class="section-title">Managed Artifacts</div>
+  <div class="section-header">
+    <h2 class="section-title">Managed Artifacts (${totalInstalled})</h2>
+  </div>
   <table>
     <thead>
       <tr>
@@ -410,7 +456,14 @@ export class DashboardPanel {
   ${
     observed.length > 0
       ? `
-  <div class="section-title">Unmanaged Discovered Items</div>
+  <div class="section-header">
+    <h2 class="section-title">Unmanaged Discovered Items (${totalUnmanaged})</h2>
+    ${
+      identicalCount > 0
+        ? `<button class="btn btn-sm btn-primary" onclick="promoteAllIdentical()">Promote ${identicalCount} Identical Source Items</button>`
+        : ''
+    }
+  </div>
   <table>
     <thead>
       <tr>
@@ -418,7 +471,7 @@ export class DashboardPanel {
         <th>Name</th>
         <th>Assistant</th>
         <th>Scope</th>
-        <th>Status</th>
+        <th>Source Match</th>
         <th>Action</th>
       </tr>
     </thead>
@@ -443,6 +496,10 @@ export class DashboardPanel {
     function promoteItem(index) {
       const item = observedData[index];
       vscode.postMessage({ command: 'promote', observed: item });
+    }
+
+    function promoteAllIdentical() {
+      vscode.postMessage({ command: 'promoteAllIdentical', items: observedData });
     }
 
     function setKindFilter(kind, btn) {

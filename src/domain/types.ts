@@ -62,6 +62,15 @@ export interface ResolvedArtifact<T> {
   content: T;
 }
 
+export interface ObservedSourceMatch {
+  status: 'identical' | 'different' | 'unmatched';
+  sourceId?: string;
+  packageId?: string;
+  artifactId?: string;
+  sourceRevision?: ResolvedRevision;
+  details?: string;
+}
+
 export interface ObservedArtifact {
   assistant: AssistantId;
   scope: Scope;
@@ -70,6 +79,8 @@ export interface ObservedArtifact {
   name: string;
   path: string;
   discoveredAt: string;
+  contentHash?: string;
+  match?: ObservedSourceMatch;
 }
 
 export interface ManagedInstallation {
