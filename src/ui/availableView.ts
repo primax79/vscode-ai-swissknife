@@ -272,7 +272,8 @@ export class AvailableTreeDataProvider
     item.description = artifact.description;
     item.tooltip = `Kind: ${artifact.kind}\nSource: ${element.source.id}\nPackage: ${element.pkg.id}`;
     item.contextValue = 'availableArtifact';
-    item.iconPath = new vscode.ThemeIcon(artifact.kind === 'agent' ? 'robot' : 'tools');
+    const icon = artifact.kind === 'agent' ? 'robot' : artifact.kind === 'command' ? 'terminal' : 'tools';
+    item.iconPath = new vscode.ThemeIcon(icon);
     item.command = {
       command: 'aiSwissknife.installArtifact',
       title: `Install ${artifact.kind}`,
@@ -317,7 +318,6 @@ export class AvailableTreeDataProvider
 
     const { source, pkg, artifact } = item;
 
-    // Pick target assistant
     const assistantPick = await vscode.window.showQuickPick(['claude-code', 'kilo-code'], {
       placeHolder: 'Select target AI assistant',
     });
@@ -325,7 +325,6 @@ export class AvailableTreeDataProvider
     const targetAssistant = assistantPick as AssistantId;
     const targetAdapter = targetAssistant === 'claude-code' ? this.claudeAdapter : this.kiloAdapter;
 
-    // Pick scope
     const scopePick = await vscode.window.showQuickPick(['project', 'global'], {
       placeHolder: 'Select installation scope (project or global)',
     });
@@ -338,7 +337,6 @@ export class AvailableTreeDataProvider
       if (!projectRoot) return;
     }
 
-    // Call planInstall
     const prepared = await planInstall({
       source,
       pkg,
@@ -355,7 +353,6 @@ export class AvailableTreeDataProvider
 
     const plan = prepared.plan;
 
-    // Check conflict policy
     if (plan.conflict) {
       const conflictChoice = await vscode.window.showWarningMessage(
         `${artifact.kind} "${prepared.content.name}" already exists at "${plan.targetDir}". Overwrite existing installation?`,
@@ -367,7 +364,6 @@ export class AvailableTreeDataProvider
       }
     }
 
-    // Modal preview confirmation
     const confirmMessage = `Install ${artifact.kind} "${prepared.content.name}" to ${targetAssistant} (${targetScope})?\nTarget path: ${plan.targetDir}\nFiles proposed: ${plan.proposedFiles.length} file(s)`;
     const confirmChoice = await vscode.window.showInformationMessage(
       confirmMessage,
@@ -379,7 +375,6 @@ export class AvailableTreeDataProvider
       return;
     }
 
-    // Call applyInstall exactly once
     const outcome = await applyInstall(prepared);
 
     switch (outcome.status) {
@@ -461,7 +456,6 @@ export class AvailableTreeDataProvider
       if (!projectRoot) return;
     }
 
-    // Plan all items
     const preparedList: PreparedInstall[] = [];
     let supportedCount = 0;
     let conflictCount = 0;
@@ -489,7 +483,6 @@ export class AvailableTreeDataProvider
       return;
     }
 
-    // Check conflict policy
     if (conflictCount > 0) {
       const conflictChoice = await vscode.window.showWarningMessage(
         `${conflictCount} of ${supportedCount} item(s) already exist at target. Overwrite existing installations?`,
@@ -501,7 +494,6 @@ export class AvailableTreeDataProvider
       }
     }
 
-    // Modal confirmation
     const confirmMessage = `Install ${supportedCount} item(s) from ${groupLabel} to ${targetAssistant} (${targetScope})?`;
     const confirmChoice = await vscode.window.showInformationMessage(
       confirmMessage,

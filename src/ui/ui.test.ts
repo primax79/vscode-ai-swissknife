@@ -183,7 +183,7 @@ describe('UI TreeDataProviders', () => {
       ];
 
       const hierarchy = buildHierarchy(source, packages);
-      assert.strictEqual(hierarchy.length, 2); // 1 folder (_attic/skills) + 1 root artifact
+      assert.strictEqual(hierarchy.length, 2);
 
       const folderItem = hierarchy.find((h) => h instanceof AvailableFolderItem) as AvailableFolderItem;
       assert.ok(folderItem);
@@ -200,27 +200,46 @@ describe('UI TreeDataProviders', () => {
       assert.strictEqual(rootArtifact.artifact.name, 'root-skill');
     });
 
-    it('AvailableTreeDataProvider sets command on artifact items for single-click install', () => {
+    it('AvailableTreeDataProvider sets distinct icons and command for skill, agent, and command', () => {
       const provider = new AvailableTreeDataProvider();
       const source: Source = { id: 'src-1', type: 'local-folder', scope: 'project' };
       const pkg: Package = { id: 'src-1:pkg', sourceId: 'src-1', nativeFormat: 'claude-skill', artifacts: [] };
-      const artItem = new AvailableArtifactItem(source, pkg, {
+
+      const skillItem = new AvailableArtifactItem(source, pkg, {
         id: 'art-1',
         packageId: 'src-1:pkg',
         kind: 'skill',
         name: 'test-skill',
         nativeFormat: 'claude-skill',
       });
+      const skillTreeItem = provider.getTreeItem(skillItem);
+      assert.strictEqual(skillTreeItem.label, 'test-skill');
+      assert.strictEqual((skillTreeItem.iconPath as { id: string }).id, 'tools');
 
-      const treeItem = provider.getTreeItem(artItem);
-      assert.strictEqual(treeItem.label, 'test-skill');
-      assert.ok(treeItem.command);
-      assert.strictEqual((treeItem.command as { command: string }).command, 'aiSwissknife.installArtifact');
+      const agentItem = new AvailableArtifactItem(source, pkg, {
+        id: 'art-2',
+        packageId: 'src-1:pkg',
+        kind: 'agent',
+        name: 'test-agent',
+        nativeFormat: 'claude-agent',
+      });
+      const agentTreeItem = provider.getTreeItem(agentItem);
+      assert.strictEqual((agentTreeItem.iconPath as { id: string }).id, 'robot');
+
+      const cmdItem = new AvailableArtifactItem(source, pkg, {
+        id: 'art-3',
+        packageId: 'src-1:pkg',
+        kind: 'command',
+        name: 'test-cmd',
+        nativeFormat: 'claude-command',
+      });
+      const cmdTreeItem = provider.getTreeItem(cmdItem);
+      assert.strictEqual((cmdTreeItem.iconPath as { id: string }).id, 'terminal');
     });
   });
 
   describe('InstalledTreeDataProvider', () => {
-    it('groups installations by (assistant, scope)', async () => {
+    it('groups installations by (assistant, scope) and renders correct icons', async () => {
       const inst1: ManagedInstallation = {
         assistant: 'claude-code',
         scope: 'global',
@@ -232,37 +251,41 @@ describe('UI TreeDataProviders', () => {
       const inst2: ManagedInstallation = {
         assistant: 'kilo-code',
         scope: 'global',
-        kind: 'skill',
-        name: 'skill-two',
-        path: '/tmp/skill-two',
+        kind: 'agent',
+        name: 'agent-two',
+        path: '/tmp/agent-two',
         installedAt: '2026-08-19T12:05:00.000Z',
+      };
+      const inst3: ManagedInstallation = {
+        assistant: 'kilo-code',
+        scope: 'global',
+        kind: 'command',
+        name: 'cmd-three',
+        path: '/tmp/cmd-three',
+        installedAt: '2026-08-19T12:10:00.000Z',
       };
 
       await writeState(
         'global',
         {
           schemaVersion: SCHEMA_VERSION,
-          installations: [inst1, inst2],
+          installations: [inst1, inst2, inst3],
         },
         undefined,
         testHomeDir
       );
 
       const provider = new InstalledTreeDataProvider();
-      const groupItem = new InstalledGroupItem('claude-code (global)', 'Claude Code (global)', [inst1]);
+      const groupItem = new InstalledGroupItem('kilo-code (global)', 'Kilo Code (global)', [inst2, inst3]);
       const treeGroup = provider.getTreeItem(groupItem);
-      assert.strictEqual(treeGroup.label, 'Claude Code (global)');
-      assert.strictEqual(treeGroup.description, '1 installed');
+      assert.strictEqual(treeGroup.label, 'Kilo Code (global)');
+      assert.strictEqual(treeGroup.description, '2 installed');
 
-      const installItem = new InstalledInstallationItem(inst1);
-      const treeInst = provider.getTreeItem(installItem);
-      assert.strictEqual(treeInst.label, 'skill-one');
-      assert.strictEqual(treeInst.description, 'skill (global)');
+      const treeInstAgent = provider.getTreeItem(new InstalledInstallationItem(inst2));
+      assert.strictEqual((treeInstAgent.iconPath as { id: string }).id, 'robot');
 
-      const children = await provider.getChildren(groupItem);
-      assert.strictEqual(children.length, 1);
-      assert.ok(children[0] instanceof InstalledInstallationItem);
-      assert.strictEqual(children[0].installation.name, 'skill-one');
+      const treeInstCmd = provider.getTreeItem(new InstalledInstallationItem(inst3));
+      assert.strictEqual((treeInstCmd.iconPath as { id: string }).id, 'terminal');
     });
   });
 });

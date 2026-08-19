@@ -8,7 +8,7 @@ import type { CanonicalSkill, CanonicalAgent, CanonicalCommand } from '../adapte
 import type { SourceResolution } from './types';
 import { readSkill } from '../adapters/codec';
 import { parseClaudeAgentMarkdown, parseClaudeCommandMarkdown } from '../adapters/claude';
-import { findSkillDirs, findAgentFiles } from './detect';
+import { findSkillDirs, findAgentFiles, findCommandFiles } from './detect';
 
 const execFileAsync = promisify(child_process.execFile);
 
@@ -79,7 +79,7 @@ async function getDefaultBranch(cwd: string): Promise<string> {
 }
 
 /**
- * Resolves a `Source` of type `git-custom` detecting skills and agents.
+ * Resolves a `Source` of type `git-custom` detecting skills, agents, and commands.
  */
 export async function resolveGitCustom(
   source: Source,
@@ -141,6 +141,7 @@ export async function resolveGitCustom(
 
     const skillDetection = await findSkillDirs(targetDir);
     const agentDetection = await findAgentFiles(targetDir);
+    const commandDetection = await findCommandFiles(targetDir);
 
     const skillPackages: Package[] = skillDetection.skills.map((skillDir) => {
       const relPath = path.relative(targetDir, skillDir.path);
@@ -193,9 +194,38 @@ export async function resolveGitCustom(
       return pkg;
     });
 
+    const commandPackages: Package[] = commandDetection.commands.map((cmdFile) => {
+      const relPath = path.relative(targetDir, cmdFile.path);
+      const packageId = `${source.id}:${relPath}`;
+      const artifactId = `${packageId}:${cmdFile.name}`;
+
+      const artifact: Artifact = {
+        id: artifactId,
+        packageId,
+        kind: 'command',
+        name: cmdFile.name,
+        description: cmdFile.description,
+        nativeFormat: 'claude-command',
+      };
+
+      const pkg: Package = {
+        id: packageId,
+        sourceId: source.id,
+        version,
+        nativeFormat: 'claude-command',
+        artifacts: [artifact],
+      };
+
+      return pkg;
+    });
+
     return {
-      packages: [...skillPackages, ...agentPackages],
-      diagnostics: [...skillDetection.diagnostics, ...agentDetection.diagnostics],
+      packages: [...skillPackages, ...agentPackages, ...commandPackages],
+      diagnostics: [
+        ...skillDetection.diagnostics,
+        ...agentDetection.diagnostics,
+        ...commandDetection.diagnostics,
+      ],
     };
   });
 }

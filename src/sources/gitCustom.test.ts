@@ -5,7 +5,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import type { Source, ResolvedArtifact } from '../domain/types';
-import type { CanonicalSkill, CanonicalAgent } from '../adapters/types';
+import type { CanonicalSkill, CanonicalAgent, CanonicalCommand } from '../adapters/types';
 import type { SourceResolution } from './types';
 import { resolveGitCustom, resolveArtifactContent, gitCustomMutex } from './gitCustom';
 
@@ -59,7 +59,7 @@ describe('gitCustom — resolveGitCustom with committed fixtures in dynamic repo
     initialCommitHash = runGitSync(['rev-parse', 'HEAD'], remoteRepoDir).trim();
     runGitSync(['tag', 'v1.0.0'], remoteRepoDir);
 
-    // Commit 2: add nested-skills and agent
+    // Commit 2: add nested-skills, agent, and command
     const nestedFixture = path.join(fixturesRoot, 'nested-skills');
     const destNested = path.join(remoteRepoDir, 'skills', 'nested');
     fs.cpSync(nestedFixture, destNested, { recursive: true });
@@ -68,8 +68,12 @@ describe('gitCustom — resolveGitCustom with committed fixtures in dynamic repo
     const destAgents = path.join(remoteRepoDir, 'agents');
     fs.cpSync(agentsFixture, destAgents, { recursive: true });
 
+    const commandsFixture = path.join(fixturesRoot, 'commands');
+    const destCommands = path.join(remoteRepoDir, 'commands');
+    fs.cpSync(commandsFixture, destCommands, { recursive: true });
+
     runGitSync(['add', '.'], remoteRepoDir);
-    runGitSync(['commit', '-m', 'Add nested skills and agents'], remoteRepoDir);
+    runGitSync(['commit', '-m', 'Add nested skills, agents, and commands'], remoteRepoDir);
     secondCommitHash = runGitSync(['rev-parse', 'HEAD'], remoteRepoDir).trim();
     runGitSync(['tag', 'v2.0.0'], remoteRepoDir);
 
@@ -92,7 +96,7 @@ describe('gitCustom — resolveGitCustom with committed fixtures in dynamic repo
     }
   });
 
-  it('resolves default branch to packages (skills and agents) on latest main commit', async () => {
+  it('resolves default branch to packages (skills, agents, commands) on latest main commit', async () => {
     const source: Source = {
       id: 'src-test-default',
       type: 'git-custom',
@@ -101,8 +105,8 @@ describe('gitCustom — resolveGitCustom with committed fixtures in dynamic repo
     };
 
     const resolution: SourceResolution = await resolveGitCustom(source, { cacheDir: cacheBaseDir });
-    // 1 root skill + 2 nested skills + 1 agent = 4 packages
-    assert.strictEqual(resolution.packages.length, 4);
+    // 1 root skill + 2 nested skills + 1 agent + 1 command = 5 packages
+    assert.strictEqual(resolution.packages.length, 5);
     assert.strictEqual(resolution.diagnostics.length, 0);
 
     const names = resolution.packages.map((p) => p.artifacts[0].name);
@@ -110,10 +114,11 @@ describe('gitCustom — resolveGitCustom with committed fixtures in dynamic repo
     assert.ok(names.includes('nested-skill-a'));
     assert.ok(names.includes('nested-skill-b'));
     assert.ok(names.includes('code-reviewer'));
+    assert.ok(names.includes('review'));
 
-    const agentPkg = resolution.packages.find((p) => p.artifacts[0].name === 'code-reviewer');
-    assert.ok(agentPkg);
-    assert.strictEqual(agentPkg.artifacts[0].kind, 'agent');
+    const cmdPkg = resolution.packages.find((p) => p.artifacts[0].name === 'review');
+    assert.ok(cmdPkg);
+    assert.strictEqual(cmdPkg.artifacts[0].kind, 'command');
   });
 
   it('resolves a specific tag pin (v1.0.0) with exact ResolvedRevision', async () => {
@@ -143,7 +148,7 @@ describe('gitCustom — resolveGitCustom with committed fixtures in dynamic repo
       tag: 'v2.0.0',
     };
     const resTag = await resolveGitCustom(sourceTag, { cacheDir: cacheBaseDir });
-    assert.strictEqual(resTag.packages.length, 4);
+    assert.strictEqual(resTag.packages.length, 5);
     assert.deepStrictEqual(resTag.packages[0].version, {
       commit: secondCommitHash,
       requestedRef: 'v2.0.0',
@@ -157,7 +162,7 @@ describe('gitCustom — resolveGitCustom with committed fixtures in dynamic repo
       commit: secondCommitHash,
     };
     const resCommit = await resolveGitCustom(sourceCommit, { cacheDir: cacheBaseDir });
-    assert.strictEqual(resCommit.packages.length, 4);
+    assert.strictEqual(resCommit.packages.length, 5);
     assert.deepStrictEqual(resCommit.packages[0].version, {
       commit: secondCommitHash,
       requestedRef: secondCommitHash,
@@ -174,8 +179,8 @@ describe('gitCustom — resolveGitCustom with committed fixtures in dynamic repo
     };
 
     const resolution = await resolveGitCustom(source, { cacheDir: cacheBaseDir });
-    // 4 from main + 2 from mixed = 6
-    assert.strictEqual(resolution.packages.length, 6);
+    // 5 from main + 2 from mixed = 7
+    assert.strictEqual(resolution.packages.length, 7);
     assert.strictEqual(resolution.diagnostics.length, 1);
     assert.strictEqual(resolution.diagnostics[0].code, 'invalid-frontmatter');
     assert.strictEqual(resolution.packages[0].version?.requestedRef, 'feature-skills');
@@ -203,7 +208,7 @@ describe('gitCustom — resolveGitCustom with committed fixtures in dynamic repo
     ]);
 
     assert.strictEqual(res1.packages.length, 1);
-    assert.strictEqual(res2.packages.length, 4);
+    assert.strictEqual(res2.packages.length, 5);
     assert.strictEqual(res1.packages[0].version?.commit, initialCommitHash);
     assert.strictEqual(res2.packages[0].version?.commit, secondCommitHash);
   });
@@ -261,6 +266,32 @@ describe('gitCustom — resolveGitCustom with committed fixtures in dynamic repo
     assert.ok(resolved.content.tools.includes('read'));
   });
 
+  it('resolveArtifactContent resolves CanonicalCommand from git repository', async () => {
+    const source: Source = {
+      id: 'src-test-cmd',
+      type: 'git-custom',
+      scope: 'project',
+      url: remoteRepoDir,
+      tag: 'v2.0.0',
+    };
+
+    const resolution = await resolveGitCustom(source, { cacheDir: cacheBaseDir });
+    const pkg = resolution.packages.find((p) => p.artifacts[0].name === 'review');
+    assert.ok(pkg);
+    const artifact = pkg.artifacts[0];
+
+    const resolved = (await resolveArtifactContent(
+      source,
+      pkg,
+      artifact,
+      { cacheDir: cacheBaseDir }
+    )) as ResolvedArtifact<CanonicalCommand>;
+
+    assert.strictEqual(resolved.artifact.id, artifact.id);
+    assert.strictEqual(resolved.content.name, 'review');
+    assert.strictEqual(resolved.content.agent, 'code-reviewer');
+  });
+
   it('interleaves resolveGitCustom and resolveArtifactContent proving lock protects checkout plus read', async () => {
     const sourceV1: Source = {
       id: 'src-test-interleave',
@@ -288,7 +319,7 @@ describe('gitCustom — resolveGitCustom with committed fixtures in dynamic repo
     ]);
 
     assert.strictEqual(resolvedContent.content.name, 'root-skill');
-    assert.strictEqual(branchResolution.packages.length, 6);
+    assert.strictEqual(branchResolution.packages.length, 7);
   });
 
   it('proves gitCustomMutex serializes access to target directory', async () => {

@@ -2,7 +2,12 @@ import { describe, it } from 'node:test';
 import * as assert from 'node:assert';
 import * as fs from 'fs';
 import * as path from 'path';
-import { findSkillDirs, findAgentFiles, extractSkillFrontmatter } from './detect';
+import {
+  findSkillDirs,
+  findAgentFiles,
+  findCommandFiles,
+  extractSkillFrontmatter,
+} from './detect';
 
 function getFixturesRoot(): string {
   const candidateOut = path.join(__dirname, '__fixtures__');
@@ -100,6 +105,18 @@ describe('detect — findAgentFiles', () => {
     const reviewer = agents.find((a) => a.name === 'code-reviewer');
     assert.ok(reviewer);
     assert.strictEqual(reviewer.description, 'Automated code reviewer agent');
+    assert.strictEqual(diagnostics.length, 0);
+  });
+});
+
+describe('detect — findCommandFiles', () => {
+  const fixturesRoot = getFixturesRoot();
+
+  it('detects command files inside commands/ directory', async () => {
+    const { commands, diagnostics } = await findCommandFiles(fixturesRoot);
+    const reviewCmd = commands.find((c) => c.name === 'review');
+    assert.ok(reviewCmd);
+    assert.strictEqual(reviewCmd.description, 'Review current git changes');
     assert.strictEqual(diagnostics.length, 0);
   });
 });

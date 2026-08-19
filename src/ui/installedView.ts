@@ -50,7 +50,8 @@ export class InstalledTreeDataProvider
     item.tooltip = `Name: ${inst.name}\nKind: ${inst.kind}\nAssistant: ${inst.assistant}\nScope: ${inst.scope}\nPath: ${inst.path}\nInstalled at: ${inst.installedAt}${
       inst.sourceRevision?.commit ? `\nCommit: ${inst.sourceRevision.commit}` : ''
     }${inst.sourceRevision?.requestedRef ? `\nRef: ${inst.sourceRevision.requestedRef}` : ''}`;
-    item.iconPath = new vscode.ThemeIcon(inst.kind === 'agent' ? 'robot' : 'check');
+    const icon = inst.kind === 'agent' ? 'robot' : inst.kind === 'command' ? 'terminal' : 'check';
+    item.iconPath = new vscode.ThemeIcon(icon);
     item.contextValue = 'installedInstallation';
     return item;
   }
