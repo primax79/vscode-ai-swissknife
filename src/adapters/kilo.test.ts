@@ -5,7 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { KiloAdapter, kiloAdapter } from './kilo';
 import { ClaudeAdapter, claudeAdapter } from './claude';
-import type { CanonicalRule, CanonicalSkill } from './types';
+import type { CanonicalRule, CanonicalSkill, CanonicalAgent } from './types';
 
 describe('KiloAdapter', () => {
   let testTempDir: string;
@@ -93,6 +93,23 @@ describe('KiloAdapter', () => {
       );
     });
 
+    it('agentPath returns correct global and project paths', () => {
+      const globalPath = adapter.agentPath('tester', { scope: 'global' });
+      assert.strictEqual(
+        globalPath,
+        path.join(testHomeDir, '.config', 'kilo', 'agents', 'tester.md')
+      );
+
+      const projectPath = adapter.agentPath('tester', {
+        scope: 'project',
+        projectRoot: testProjectDir,
+      });
+      assert.strictEqual(
+        projectPath,
+        path.join(testProjectDir, '.kilo', 'agents', 'tester.md')
+      );
+    });
+
     it('rulePath returns correct global (~/.config/kilo/AGENTS.md) and project (<root>/CLAUDE.md) paths', () => {
       const defaultGlobalRule = kiloAdapter.rulePath({ scope: 'global' });
       assert.strictEqual(
@@ -157,7 +174,6 @@ describe('KiloAdapter', () => {
         files: [],
       };
 
-      // Test in project scope
       await adapter.writeSkill(skill, { scope: 'project', projectRoot: testProjectDir });
       const loadedProjectSkill = await adapter.readSkill(skill.name, {
         scope: 'project',
@@ -165,7 +181,6 @@ describe('KiloAdapter', () => {
       });
       assert.deepStrictEqual(loadedProjectSkill, skill);
 
-      // Test in global scope
       await adapter.writeSkill(skill, { scope: 'global' });
       const loadedGlobalSkill = await adapter.readSkill(skill.name, { scope: 'global' });
       assert.deepStrictEqual(loadedGlobalSkill, skill);
@@ -183,7 +198,6 @@ describe('KiloAdapter', () => {
     });
 
     it('listSkills returns only directories containing SKILL.md, given a fixture directory with one valid skill dir and one dir without SKILL.md', async () => {
-      // Create .kilo/skills in testProjectDir
       const skillsDir = path.join(testProjectDir, '.kilo', 'skills');
       const validSkillDir = path.join(skillsDir, 'valid-skill');
       const invalidDir = path.join(skillsDir, 'not-a-skill');
@@ -192,21 +206,18 @@ describe('KiloAdapter', () => {
       await fs.promises.mkdir(validSkillDir, { recursive: true });
       await fs.promises.mkdir(invalidDir, { recursive: true });
 
-      // Add SKILL.md to valid-skill
       await fs.promises.writeFile(
         path.join(validSkillDir, 'SKILL.md'),
         '---\nname: valid-skill\ndescription: A valid skill\n---\n# Body\n',
         'utf-8'
       );
 
-      // Add another file (not SKILL.md) to not-a-skill
       await fs.promises.writeFile(
         path.join(invalidDir, 'OTHER.md'),
         '# Not a skill',
         'utf-8'
       );
 
-      // Add a stray regular file in skillsDir
       await fs.promises.writeFile(strayFile, 'some text', 'utf-8');
 
       const listed = await adapter.listSkills({
@@ -226,6 +237,61 @@ describe('KiloAdapter', () => {
     });
   });
 
+  describe('agents', () => {
+    it('Round-trip: writeAgent then readAgent preserves permissions and mode', async () => {
+      const agent: CanonicalAgent = {
+        name: 'kilo-expert',
+        description: 'An expert Kilo agent',
+        mode: 'subagent',
+        tools: [],
+        permissions: {
+          read: 'allow',
+          edit: 'allow',
+          bash: 'deny',
+        },
+        model: 'gemini-3.7-flash',
+        variant: 'high',
+        body: '# Kilo Expert\n\nHandles execution.\n',
+        extraFields: {
+          customOption: true,
+        },
+      };
+
+      await adapter.writeAgent(agent, { scope: 'project', projectRoot: testProjectDir });
+      const loaded = await adapter.readAgent(agent.name, {
+        scope: 'project',
+        projectRoot: testProjectDir,
+      });
+
+      assert.deepStrictEqual(loaded, agent);
+
+      const list = await adapter.listAgents({ scope: 'project', projectRoot: testProjectDir });
+      assert.deepStrictEqual(list, ['kilo-expert']);
+    });
+
+    it('reads agent from singular .kilo/agent/ fallback directory', async () => {
+      const singularDir = path.join(testProjectDir, '.kilo', 'agent');
+      await fs.promises.mkdir(singularDir, { recursive: true });
+      await fs.promises.writeFile(
+        path.join(singularDir, 'legacy-agent.md'),
+        '---\nname: legacy-agent\ndescription: A legacy agent\nmode: primary\npermission:\n  read: allow\n---\n# Prompt\n',
+        'utf-8'
+      );
+
+      const loaded = await adapter.readAgent('legacy-agent', {
+        scope: 'project',
+        projectRoot: testProjectDir,
+      });
+      assert.ok(loaded);
+      assert.strictEqual(loaded.name, 'legacy-agent');
+      assert.strictEqual(loaded.mode, 'primary');
+      assert.strictEqual(loaded.permissions.read, 'allow');
+
+      const list = await adapter.listAgents({ scope: 'project', projectRoot: testProjectDir });
+      assert.ok(list.includes('legacy-agent'));
+    });
+  });
+
   describe('rules', () => {
     it('rulePath/readRule/writeRule round-trip for both scopes', async () => {
       const projectRule: CanonicalRule = {
@@ -236,7 +302,6 @@ describe('KiloAdapter', () => {
         content: '# Global Rules\n\n- Global user preferences\n',
       };
 
-      // Project scope
       const projectRuleLocation = { scope: 'project' as const, projectRoot: testProjectDir };
       assert.strictEqual(adapter.rulePath(projectRuleLocation), path.join(testProjectDir, 'CLAUDE.md'));
       const initialProjectRule = await adapter.readRule(projectRuleLocation);
@@ -246,7 +311,6 @@ describe('KiloAdapter', () => {
       const readProjectRule = await adapter.readRule(projectRuleLocation);
       assert.deepStrictEqual(readProjectRule, projectRule);
 
-      // Global scope
       const globalRuleLocation = { scope: 'global' as const };
       assert.strictEqual(
         adapter.rulePath(globalRuleLocation),

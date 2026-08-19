@@ -2,8 +2,151 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import type { AssistantId } from '../domain/types';
-import type { Adapter, CanonicalRule, CanonicalSkill, LocationRef } from './types';
+import type {
+  Adapter,
+  CanonicalRule,
+  CanonicalSkill,
+  CanonicalAgent,
+  LocationRef,
+} from './types';
 import { readSkill as codecReadSkill, writeSkill as codecWriteSkill } from './codec';
+import { parseYamlValue, serializeYamlValue } from './claude';
+
+/**
+ * Parses Kilo agent markdown into CanonicalAgent.
+ */
+export function parseKiloAgentMarkdown(content: string): CanonicalAgent {
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n([\s\S]*))?$/);
+  if (!match) {
+    return {
+      name: '',
+      description: '',
+      tools: [],
+      permissions: {},
+      body: content,
+      extraFields: {},
+    };
+  }
+
+  const fmBlock = match[1];
+  const body = match[2] ?? '';
+  const lines = fmBlock.split(/\r?\n/);
+
+  let name = '';
+  let description = '';
+  let mode: 'primary' | 'subagent' | 'all' | undefined;
+  let model: string | undefined;
+  let variant: string | undefined;
+  const permissions: Record<string, 'allow' | 'deny' | 'ask'> = {};
+  const extraFields: Record<string, unknown> = {};
+
+  let inPermissionBlock = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) {
+      continue;
+    }
+
+    if (inPermissionBlock) {
+      // Check if indented under permission
+      if (line.startsWith('  ') || line.startsWith('\t')) {
+        const colonIdx = trimmed.indexOf(':');
+        if (colonIdx !== -1) {
+          const permKey = trimmed.slice(0, colonIdx).trim();
+          const permVal = trimmed.slice(colonIdx + 1).trim() as 'allow' | 'deny' | 'ask';
+          permissions[permKey] = permVal;
+        }
+        continue;
+      } else {
+        inPermissionBlock = false;
+      }
+    }
+
+    const colonIdx = trimmed.indexOf(':');
+    if (colonIdx === -1) {
+      continue;
+    }
+    const key = trimmed.slice(0, colonIdx).trim();
+    const rawVal = trimmed.slice(colonIdx + 1).trim();
+
+    if (key === 'permission') {
+      if (rawVal.startsWith('{') && rawVal.endsWith('}')) {
+        try {
+          const parsed = JSON.parse(rawVal);
+          Object.assign(permissions, parsed);
+        } catch {
+          // ignore
+        }
+      } else {
+        inPermissionBlock = true;
+      }
+      continue;
+    }
+
+    const parsedVal = parseYamlValue(rawVal);
+
+    if (key === 'name') {
+      name = typeof parsedVal === 'string' ? parsedVal : String(parsedVal ?? '');
+    } else if (key === 'description') {
+      description = typeof parsedVal === 'string' ? parsedVal : String(parsedVal ?? '');
+    } else if (key === 'mode') {
+      if (parsedVal === 'primary' || parsedVal === 'subagent' || parsedVal === 'all') {
+        mode = parsedVal;
+      }
+    } else if (key === 'model') {
+      model = typeof parsedVal === 'string' ? parsedVal : String(parsedVal ?? '');
+    } else if (key === 'variant') {
+      variant = typeof parsedVal === 'string' ? parsedVal : String(parsedVal ?? '');
+    } else {
+      extraFields[key] = parsedVal;
+    }
+  }
+
+  return {
+    name,
+    description,
+    mode,
+    tools: [],
+    permissions,
+    ...(model ? { model } : {}),
+    ...(variant ? { variant } : {}),
+    body,
+    extraFields,
+  };
+}
+
+/**
+ * Serializes a CanonicalAgent into Kilo agent markdown.
+ */
+export function serializeKiloAgentMarkdown(agent: CanonicalAgent): string {
+  let fm = `---\nname: ${serializeYamlValue(agent.name)}\ndescription: ${serializeYamlValue(agent.description)}\n`;
+  if (agent.mode) {
+    fm += `mode: ${agent.mode}\n`;
+  }
+  if (agent.permissions && Object.keys(agent.permissions).length > 0) {
+    fm += 'permission:\n';
+    for (const [permKey, permVal] of Object.entries(agent.permissions)) {
+      fm += `  ${permKey}: ${permVal}\n`;
+    }
+  }
+  if (agent.model) {
+    fm += `model: ${serializeYamlValue(agent.model)}\n`;
+  }
+  if (agent.variant) {
+    fm += `variant: ${serializeYamlValue(agent.variant)}\n`;
+  }
+  if (agent.extraFields) {
+    for (const [key, value] of Object.entries(agent.extraFields)) {
+      if (key === 'name' || key === 'description' || key === 'mode' || key === 'permission' || key === 'permissions' || key === 'tools' || key === 'model' || key === 'variant') {
+        continue;
+      }
+      fm += `${key}: ${serializeYamlValue(value)}\n`;
+    }
+  }
+  fm += '---';
+  return agent.body ? `${fm}\n${agent.body}` : `${fm}\n`;
+}
 
 export class KiloAdapter implements Adapter {
   readonly assistant: AssistantId = 'kilo-code';
@@ -79,11 +222,89 @@ export class KiloAdapter implements Adapter {
             skillNames.push(entry.name);
           }
         } catch {
-          // Not a valid skill directory if SKILL.md is missing or unreadable
+          // ignore
         }
       }
     }
     return skillNames;
+  }
+
+  agentPath(name: string, loc: LocationRef): string {
+    const fileName = name.endsWith('.md') ? name : `${name}.md`;
+    if (loc.scope === 'global') {
+      return path.join(this.getHomedir(), '.config', 'kilo', 'agents', fileName);
+    }
+    if (loc.scope === 'project') {
+      if (!loc.projectRoot) {
+        throw new Error('projectRoot is required when scope is "project"');
+      }
+      return path.join(loc.projectRoot, '.kilo', 'agents', fileName);
+    }
+    throw new Error(`Unsupported scope: ${(loc as { scope: string }).scope}`);
+  }
+
+  async readAgent(name: string, loc: LocationRef): Promise<CanonicalAgent | null> {
+    const primaryPath = this.agentPath(name, loc);
+    const fileName = name.endsWith('.md') ? name : `${name}.md`;
+    const fallbackPath =
+      loc.scope === 'global'
+        ? path.join(this.getHomedir(), '.config', 'kilo', 'agent', fileName)
+        : loc.projectRoot
+        ? path.join(loc.projectRoot, '.kilo', 'agent', fileName)
+        : '';
+
+    for (const candidate of [primaryPath, fallbackPath]) {
+      if (!candidate) continue;
+      try {
+        const content = await fs.promises.readFile(candidate, 'utf-8');
+        return parseKiloAgentMarkdown(content);
+      } catch (err: unknown) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+          throw err;
+        }
+      }
+    }
+    return null;
+  }
+
+  async writeAgent(agent: CanonicalAgent, loc: LocationRef): Promise<void> {
+    const filePath = this.agentPath(agent.name, loc);
+    await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+    const serialized = serializeKiloAgentMarkdown(agent);
+    await fs.promises.writeFile(filePath, serialized, 'utf-8');
+  }
+
+  async listAgents(loc: LocationRef): Promise<string[]> {
+    const candidates: string[] = [];
+    if (loc.scope === 'global') {
+      candidates.push(
+        path.join(this.getHomedir(), '.config', 'kilo', 'agents'),
+        path.join(this.getHomedir(), '.config', 'kilo', 'agent')
+      );
+    } else if (loc.scope === 'project') {
+      if (!loc.projectRoot) {
+        throw new Error('projectRoot is required when scope is "project"');
+      }
+      candidates.push(
+        path.join(loc.projectRoot, '.kilo', 'agents'),
+        path.join(loc.projectRoot, '.kilo', 'agent')
+      );
+    }
+
+    const agentNames = new Set<string>();
+    for (const dir of candidates) {
+      try {
+        const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+        for (const e of entries) {
+          if (e.isFile() && e.name.endsWith('.md')) {
+            agentNames.add(e.name.replace(/\.md$/, ''));
+          }
+        }
+      } catch {
+        // ignore missing directory
+      }
+    }
+    return Array.from(agentNames);
   }
 
   rulePath(loc: LocationRef): string {
