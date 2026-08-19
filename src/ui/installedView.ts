@@ -47,10 +47,10 @@ export class InstalledTreeDataProvider
       vscode.TreeItemCollapsibleState.None
     );
     item.description = `${inst.kind} (${inst.scope})`;
-    item.tooltip = `Name: ${inst.name}\nAssistant: ${inst.assistant}\nScope: ${inst.scope}\nPath: ${inst.path}\nInstalled at: ${inst.installedAt}${
+    item.tooltip = `Name: ${inst.name}\nKind: ${inst.kind}\nAssistant: ${inst.assistant}\nScope: ${inst.scope}\nPath: ${inst.path}\nInstalled at: ${inst.installedAt}${
       inst.sourceRevision?.commit ? `\nCommit: ${inst.sourceRevision.commit}` : ''
     }${inst.sourceRevision?.requestedRef ? `\nRef: ${inst.sourceRevision.requestedRef}` : ''}`;
-    item.iconPath = new vscode.ThemeIcon('check');
+    item.iconPath = new vscode.ThemeIcon(inst.kind === 'agent' ? 'robot' : 'check');
     item.contextValue = 'installedInstallation';
     return item;
   }
@@ -59,7 +59,6 @@ export class InstalledTreeDataProvider
     if (!element) {
       const allInstallations: ManagedInstallation[] = [];
 
-      // Read global state
       try {
         const globalState = await readState('global');
         allInstallations.push(...globalState.installations);
@@ -67,7 +66,6 @@ export class InstalledTreeDataProvider
         // ignore
       }
 
-      // Read project state if workspace open
       const folders = vscode.workspace.workspaceFolders;
       if (folders && folders.length > 0) {
         const projectRoot = folders[0].uri.fsPath;
@@ -79,7 +77,6 @@ export class InstalledTreeDataProvider
         }
       }
 
-      // Group by (assistant, scope)
       const groups = new Map<string, ManagedInstallation[]>();
       for (const inst of allInstallations) {
         const key = `${inst.assistant} (${inst.scope})`;

@@ -80,8 +80,6 @@ export function buildHierarchy(
     const normalized = pathId.split(path.sep).join('/');
     const parts = normalized.split('/').filter(Boolean);
 
-    // If path is just the skill name (e.g. ['gitignore']), it's at root level
-    // If path is ['_attic', 'skills', 'skill-a'], folder parts are ['_attic', 'skills']
     const folderParts = parts.length > 1 ? parts.slice(0, -1) : [];
 
     let current = rootNode;
@@ -108,7 +106,6 @@ export function buildHierarchy(
     const result: Array<AvailableFolderItem | AvailableArtifactItem> = [];
 
     for (const [segment, childNode] of node.folders.entries()) {
-      // Compact single-child folder chains (e.g. _attic -> skills becomes _attic/skills)
       let compactedSegment = segment;
       let targetNode = childNode;
 
@@ -235,7 +232,7 @@ export class AvailableTreeDataProvider
         source.name ?? source.id,
         vscode.TreeItemCollapsibleState.Expanded
       );
-      item.description = `${count} skill(s)${diagCount > 0 ? ` [${diagCount} diagnostic(s)]` : ''}`;
+      item.description = `${count} item(s)${diagCount > 0 ? ` [${diagCount} diagnostic(s)]` : ''}`;
       item.contextValue = 'availableSourceGroup';
       return item;
     }
@@ -246,10 +243,10 @@ export class AvailableTreeDataProvider
         element.label,
         vscode.TreeItemCollapsibleState.Collapsed
       );
-      item.description = `${allArts.length} skill(s)`;
+      item.description = `${allArts.length} item(s)`;
       item.contextValue = 'availableFolder';
       item.iconPath = new vscode.ThemeIcon('folder');
-      item.tooltip = `Folder: ${element.folderPath}\nContains ${allArts.length} skill(s)`;
+      item.tooltip = `Folder: ${element.folderPath}\nContains ${allArts.length} item(s)`;
       return item;
     }
 
@@ -275,10 +272,10 @@ export class AvailableTreeDataProvider
     item.description = artifact.description;
     item.tooltip = `Kind: ${artifact.kind}\nSource: ${element.source.id}\nPackage: ${element.pkg.id}`;
     item.contextValue = 'availableArtifact';
-    item.iconPath = new vscode.ThemeIcon('tools');
+    item.iconPath = new vscode.ThemeIcon(artifact.kind === 'agent' ? 'robot' : 'tools');
     item.command = {
       command: 'aiSwissknife.installArtifact',
-      title: 'Install Skill',
+      title: `Install ${artifact.kind}`,
       arguments: [element],
     };
     return item;
@@ -295,12 +292,10 @@ export class AvailableTreeDataProvider
     if (element instanceof AvailableSourceGroupItem) {
       const children: AvailableTreeItem[] = [];
 
-      // Diagnostics first
       for (const diag of element.resolution.diagnostics) {
         children.push(new DiagnosticTreeItem(diag));
       }
 
-      // Hierarchy
       const hierarchy = buildHierarchy(element.source, element.resolution.packages);
       children.push(...hierarchy);
 
@@ -316,7 +311,7 @@ export class AvailableTreeDataProvider
 
   async installArtifact(item?: AvailableArtifactItem): Promise<void> {
     if (!item) {
-      vscode.window.showWarningMessage('Please select an available skill to install.');
+      vscode.window.showWarningMessage('Please select an available item to install.');
       return;
     }
 
@@ -354,7 +349,7 @@ export class AvailableTreeDataProvider
     });
 
     if (!prepared.supported) {
-      vscode.window.showErrorMessage(`Cannot install skill: ${prepared.plan.reason}`);
+      vscode.window.showErrorMessage(`Cannot install ${artifact.kind}: ${prepared.plan.reason}`);
       return;
     }
 
@@ -363,7 +358,7 @@ export class AvailableTreeDataProvider
     // Check conflict policy
     if (plan.conflict) {
       const conflictChoice = await vscode.window.showWarningMessage(
-        `Skill "${prepared.content.name}" already exists at "${plan.targetDir}". Overwrite existing installation?`,
+        `${artifact.kind} "${prepared.content.name}" already exists at "${plan.targetDir}". Overwrite existing installation?`,
         { modal: true },
         'Overwrite'
       );
@@ -373,7 +368,7 @@ export class AvailableTreeDataProvider
     }
 
     // Modal preview confirmation
-    const confirmMessage = `Install skill "${prepared.content.name}" to ${targetAssistant} (${targetScope})?\nTarget directory: ${plan.targetDir}\nFiles proposed: ${plan.proposedFiles.length} file(s)`;
+    const confirmMessage = `Install ${artifact.kind} "${prepared.content.name}" to ${targetAssistant} (${targetScope})?\nTarget path: ${plan.targetDir}\nFiles proposed: ${plan.proposedFiles.length} file(s)`;
     const confirmChoice = await vscode.window.showInformationMessage(
       confirmMessage,
       { modal: true },
@@ -443,12 +438,12 @@ export class AvailableTreeDataProvider
     groupLabel: string
   ): Promise<void> {
     if (items.length === 0) {
-      vscode.window.showWarningMessage(`No skills found in ${groupLabel}.`);
+      vscode.window.showWarningMessage(`No items found in ${groupLabel}.`);
       return;
     }
 
     const assistantPick = await vscode.window.showQuickPick(['claude-code', 'kilo-code'], {
-      placeHolder: `Select target AI assistant for ${items.length} skill(s)`,
+      placeHolder: `Select target AI assistant for ${items.length} item(s)`,
     });
     if (!assistantPick) return;
     const targetAssistant = assistantPick as AssistantId;
@@ -490,14 +485,14 @@ export class AvailableTreeDataProvider
     }
 
     if (supportedCount === 0) {
-      vscode.window.showErrorMessage(`None of the ${items.length} skill(s) could be planned for installation.`);
+      vscode.window.showErrorMessage(`None of the ${items.length} item(s) could be planned for installation.`);
       return;
     }
 
     // Check conflict policy
     if (conflictCount > 0) {
       const conflictChoice = await vscode.window.showWarningMessage(
-        `${conflictCount} of ${supportedCount} skill(s) already exist at target. Overwrite existing installations?`,
+        `${conflictCount} of ${supportedCount} item(s) already exist at target. Overwrite existing installations?`,
         { modal: true },
         'Overwrite All'
       );
@@ -507,7 +502,7 @@ export class AvailableTreeDataProvider
     }
 
     // Modal confirmation
-    const confirmMessage = `Install ${supportedCount} skill(s) from ${groupLabel} to ${targetAssistant} (${targetScope})?`;
+    const confirmMessage = `Install ${supportedCount} item(s) from ${groupLabel} to ${targetAssistant} (${targetScope})?`;
     const confirmChoice = await vscode.window.showInformationMessage(
       confirmMessage,
       { modal: true },
@@ -531,14 +526,14 @@ export class AvailableTreeDataProvider
     }
 
     if (appliedCount > 0) {
-      let msg = `Successfully installed ${appliedCount}/${supportedCount} skill(s) to ${targetAssistant} (${targetScope}).`;
+      let msg = `Successfully installed ${appliedCount}/${supportedCount} item(s) to ${targetAssistant} (${targetScope}).`;
       if (failedNames.length > 0) {
         msg += ` Failures: ${failedNames.join(', ')}`;
       }
       vscode.window.showInformationMessage(msg);
       this.onInstalledRefreshCallback?.();
     } else {
-      vscode.window.showErrorMessage(`Failed to install skills. ${failedNames.join(', ')}`);
+      vscode.window.showErrorMessage(`Failed to install items. ${failedNames.join(', ')}`);
     }
   }
 }

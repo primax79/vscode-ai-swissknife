@@ -1,9 +1,9 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
-import type { CanonicalSkill } from '../adapters/types';
+import type { CanonicalSkill, CanonicalAgent } from '../adapters/types';
 import type { ResolvedArtifact } from '../domain/types';
-import { serializeSkillMarkdown, parseClaudeAgentMarkdown, serializeClaudeAgentMarkdown } from '../adapters/claude';
+import { serializeSkillMarkdown, serializeClaudeAgentMarkdown } from '../adapters/claude';
 import { serializeKiloAgentMarkdown } from '../adapters/kilo';
 import { canonicalSkillHash, canonicalAgentHash } from '../adapters/codec';
 import { resolveArtifactContent as resolveLocalFolderContent } from '../sources/localFolder';
@@ -39,26 +39,12 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
 
   // --- AGENT KIND ---
   if (artifact.kind === 'agent') {
-    let rawAgentContent: string;
+    let resolvedAgent: ResolvedArtifact<CanonicalAgent>;
     try {
-      if (source.type === 'local-folder' && source.localPath) {
-        const prefix = `${source.id}:`;
-        const pathId = pkg.id.startsWith(prefix) ? pkg.id.slice(prefix.length) : '';
-        const candidate1 = path.join(source.localPath, pathId);
-        const candidate2 = path.join(source.localPath, `${artifact.name}.md`);
-        const candidate3 = path.join(source.localPath, 'agents', `${artifact.name}.md`);
-
-        let agentFile = '';
-        if (fs.existsSync(candidate1) && fs.statSync(candidate1).isFile()) {
-          agentFile = candidate1;
-        } else if (fs.existsSync(candidate2)) {
-          agentFile = candidate2;
-        } else if (fs.existsSync(candidate3)) {
-          agentFile = candidate3;
-        } else {
-          throw new Error(`Cannot locate agent file for "${artifact.name}" in "${source.localPath}"`);
-        }
-        rawAgentContent = await fs.promises.readFile(agentFile, 'utf-8');
+      if (source.type === 'local-folder') {
+        resolvedAgent = (await resolveLocalFolderContent(source, pkg, artifact)) as ResolvedArtifact<CanonicalAgent>;
+      } else if (source.type === 'git-custom') {
+        resolvedAgent = (await resolveGitCustomContent(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalAgent>;
       } else {
         throw new Error(`Source type "${source.type}" is not yet supported for agent resolution`);
       }
@@ -76,8 +62,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
       };
     }
 
-    const parsedAgent = parseClaudeAgentMarkdown(rawAgentContent);
-    const translation = translateAgent(parsedAgent, targetAdapter.assistant);
+    const translation = translateAgent(resolvedAgent.content, targetAdapter.assistant);
 
     if (translation.overall === 'unsupported') {
       return {
@@ -193,9 +178,9 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
   let resolvedContent: ResolvedArtifact<CanonicalSkill>;
   try {
     if (source.type === 'local-folder') {
-      resolvedContent = await resolveLocalFolderContent(source, pkg, artifact);
+      resolvedContent = (await resolveLocalFolderContent(source, pkg, artifact)) as ResolvedArtifact<CanonicalSkill>;
     } else if (source.type === 'git-custom') {
-      resolvedContent = await resolveGitCustomContent(source, pkg, artifact, resolverOpts);
+      resolvedContent = (await resolveGitCustomContent(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalSkill>;
     } else {
       return {
         supported: false,

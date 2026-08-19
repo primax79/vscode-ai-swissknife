@@ -3,7 +3,7 @@ import * as assert from 'node:assert';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Source, ResolvedArtifact } from '../domain/types';
-import type { CanonicalSkill } from '../adapters/types';
+import type { CanonicalSkill, CanonicalAgent } from '../adapters/types';
 import type { SourceResolution } from './types';
 import { resolveLocalFolder, resolveArtifactContent } from './localFolder';
 
@@ -80,6 +80,29 @@ describe('localFolder — resolveLocalFolder with committed fixtures', () => {
     assert.strictEqual(resolution.diagnostics[0].code, 'invalid-frontmatter');
   });
 
+  it('resolves fixtures root containing both skills and agents', async () => {
+    const source: Source = {
+      id: 'src-all',
+      type: 'local-folder',
+      scope: 'project',
+      localPath: fixturesRoot,
+    };
+
+    const resolution = await resolveLocalFolder(source);
+    const agentPkg = resolution.packages.find((p) => p.artifacts[0].kind === 'agent');
+    assert.ok(agentPkg);
+    assert.strictEqual(agentPkg.artifacts[0].name, 'code-reviewer');
+
+    const resolved = (await resolveArtifactContent(
+      source,
+      agentPkg,
+      agentPkg.artifacts[0]
+    )) as ResolvedArtifact<CanonicalAgent>;
+
+    assert.strictEqual(resolved.content.name, 'code-reviewer');
+    assert.ok(resolved.content.tools.includes('read'));
+  });
+
   it('returns empty packages and diagnostics when source has no localPath or path does not exist', async () => {
     const emptySource: Source = {
       id: 'src-empty',
@@ -112,11 +135,11 @@ describe('localFolder — resolveLocalFolder with committed fixtures', () => {
     assert.ok(skillBPkg);
     const artifact = skillBPkg.artifacts[0];
 
-    const resolved: ResolvedArtifact<CanonicalSkill> = await resolveArtifactContent(
+    const resolved = (await resolveArtifactContent(
       source,
       skillBPkg,
       artifact
-    );
+    )) as ResolvedArtifact<CanonicalSkill>;
     assert.strictEqual(resolved.artifact.id, artifact.id);
     assert.strictEqual(resolved.content.name, 'nested-skill-b');
     assert.strictEqual(resolved.content.description, 'Second nested skill fixture with auxiliary script');

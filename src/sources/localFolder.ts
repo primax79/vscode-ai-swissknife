@@ -1,26 +1,26 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Source, Package, Artifact, ResolvedArtifact } from '../domain/types';
-import type { CanonicalSkill } from '../adapters/types';
+import type { CanonicalSkill, CanonicalAgent } from '../adapters/types';
 import type { SourceResolution, SkillDetectionResult } from './types';
 import { readSkill } from '../adapters/codec';
-import { findSkillDirs } from './detect';
+import { parseClaudeAgentMarkdown } from '../adapters/claude';
+import { findSkillDirs, findAgentFiles } from './detect';
 
 /**
- * Resolves a `Source` of type `local-folder` by detecting all skill directories within `source.localPath`.
- *
- * Returns a `SourceResolution` containing detected `Package` items and structured `DetectionDiagnostic`s.
- * Each detected skill directory is mapped to a degenerate `Package` containing exactly one `Artifact` of kind `skill`.
- * Package and Artifact IDs are deterministically derived from `source.id` and the relative path / skill name.
+ * Resolves a `Source` of type `local-folder` detecting both skills and agents.
  */
 export async function resolveLocalFolder(source: Source): Promise<SourceResolution> {
   if (!source.localPath) {
     return { packages: [], diagnostics: [] };
   }
 
-  let detectionResult: SkillDetectionResult;
+  let skillDetection: SkillDetectionResult;
+  let agentDetection: { agents: Array<{ path: string; name: string; description?: string }>; diagnostics: Array<{ severity: 'error' | 'warning'; path: string; message: string; code: 'invalid-frontmatter' | 'unsafe-path' | 'unreadable-skill' }> };
+
   try {
-    detectionResult = await findSkillDirs(source.localPath);
+    skillDetection = await findSkillDirs(source.localPath);
+    agentDetection = await findAgentFiles(source.localPath);
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
       return { packages: [], diagnostics: [] };
@@ -28,7 +28,7 @@ export async function resolveLocalFolder(source: Source): Promise<SourceResoluti
     throw err;
   }
 
-  const packages: Package[] = detectionResult.skills.map((skillDir) => {
+  const skillPackages: Package[] = skillDetection.skills.map((skillDir) => {
     const relPath = path.relative(source.localPath!, skillDir.path);
     const pathId = relPath === '' ? skillDir.name : relPath;
     const packageId = `${source.id}:${pathId}`;
@@ -53,20 +53,44 @@ export async function resolveLocalFolder(source: Source): Promise<SourceResoluti
     return pkg;
   });
 
+  const agentPackages: Package[] = agentDetection.agents.map((agentFile) => {
+    const relPath = path.relative(source.localPath!, agentFile.path);
+    const packageId = `${source.id}:${relPath}`;
+    const artifactId = `${packageId}:${agentFile.name}`;
+
+    const artifact: Artifact = {
+      id: artifactId,
+      packageId,
+      kind: 'agent',
+      name: agentFile.name,
+      description: agentFile.description,
+      nativeFormat: 'claude-agent',
+    };
+
+    const pkg: Package = {
+      id: packageId,
+      sourceId: source.id,
+      nativeFormat: 'claude-agent',
+      artifacts: [artifact],
+    };
+
+    return pkg;
+  });
+
   return {
-    packages,
-    diagnostics: detectionResult.diagnostics,
+    packages: [...skillPackages, ...agentPackages],
+    diagnostics: [...skillDetection.diagnostics, ...agentDetection.diagnostics],
   };
 }
 
 /**
- * Resolves content for a skill artifact from a local-folder source.
+ * Resolves content for a skill or agent artifact from a local-folder source.
  */
 export async function resolveArtifactContent(
   source: Source,
   pkg: Package,
   artifact: Artifact
-): Promise<ResolvedArtifact<CanonicalSkill>> {
+): Promise<ResolvedArtifact<CanonicalSkill | CanonicalAgent>> {
   if (source.type !== 'local-folder') {
     throw new Error(`Expected source.type === "local-folder", got "${source.type}"`);
   }
@@ -76,26 +100,49 @@ export async function resolveArtifactContent(
   if (artifact.packageId !== pkg.id) {
     throw new Error(`Artifact packageId mismatch: expected "${pkg.id}", got "${artifact.packageId}"`);
   }
-  if (artifact.kind !== 'skill') {
-    throw new Error(`Unsupported artifact kind: "${artifact.kind}" (only skill is supported in Phase 1)`);
-  }
   if (!source.localPath) {
     throw new Error('Source localPath is required for local-folder content resolution');
   }
 
   const prefix = `${source.id}:`;
   const pathId = pkg.id.startsWith(prefix) ? pkg.id.slice(prefix.length) : '';
-  const candidate1 = path.join(source.localPath, pathId);
-  let skillDir: string;
 
-  if (fs.existsSync(path.join(candidate1, 'SKILL.md'))) {
-    skillDir = candidate1;
-  } else if (fs.existsSync(path.join(source.localPath, 'SKILL.md'))) {
-    skillDir = source.localPath;
-  } else {
-    throw new Error(`Cannot locate skill directory for artifact "${artifact.name}" in "${source.localPath}"`);
+  if (artifact.kind === 'skill') {
+    const candidate1 = path.join(source.localPath, pathId);
+    let skillDir: string;
+
+    if (fs.existsSync(path.join(candidate1, 'SKILL.md'))) {
+      skillDir = candidate1;
+    } else if (fs.existsSync(path.join(source.localPath, 'SKILL.md'))) {
+      skillDir = source.localPath;
+    } else {
+      throw new Error(`Cannot locate skill directory for artifact "${artifact.name}" in "${source.localPath}"`);
+    }
+
+    const content = await readSkill(skillDir);
+    return { artifact, content };
   }
 
-  const content = await readSkill(skillDir);
-  return { artifact, content };
+  if (artifact.kind === 'agent') {
+    const candidate1 = path.join(source.localPath, pathId);
+    const candidate2 = path.join(source.localPath, `${artifact.name}.md`);
+    const candidate3 = path.join(source.localPath, 'agents', `${artifact.name}.md`);
+
+    let agentFile = '';
+    if (fs.existsSync(candidate1) && fs.statSync(candidate1).isFile()) {
+      agentFile = candidate1;
+    } else if (fs.existsSync(candidate2)) {
+      agentFile = candidate2;
+    } else if (fs.existsSync(candidate3)) {
+      agentFile = candidate3;
+    } else {
+      throw new Error(`Cannot locate agent file for "${artifact.name}" in "${source.localPath}"`);
+    }
+
+    const raw = await fs.promises.readFile(agentFile, 'utf-8');
+    const content = parseClaudeAgentMarkdown(raw);
+    return { artifact, content };
+  }
+
+  throw new Error(`Unsupported artifact kind: "${artifact.kind}"`);
 }
