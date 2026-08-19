@@ -89,6 +89,21 @@ export type ApplyOutcome =
   | { status: 'rolled-back'; reason: string }
   | { status: 'manual-recovery-required'; reason: string; paths: string[] };
 
+export type DriftStatus =
+  | 'up-to-date'
+  | 'modified-locally'
+  | 'update-available'
+  | 'modified-and-update-available'
+  | 'missing-on-disk';
+
+export interface DriftReport {
+  installation: ManagedInstallation;
+  status: DriftStatus;
+  diskHash?: string;
+  sourceHash?: string;
+  details?: string;
+}
+
 export interface PlanInstallParams {
   source: Source;
   pkg: Package;
