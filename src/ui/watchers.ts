@@ -18,6 +18,7 @@ export function setupFileWatchers(onChanged: () => void): vscode.Disposable[] {
     '**/.github/agents/**',
     '**/.github/prompts/**',
     '**/.vscode/mcp.json',
+    '**/.vscode/ai-swissknife/**',
     '**/.ai-swissknife/**',
   ];
 
