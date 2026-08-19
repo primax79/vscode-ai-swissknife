@@ -105,6 +105,12 @@
         "title": "Update to Latest Version",
         "icon": "$(arrow-circle-up)",
         "category": "AI Swissknife"
+      },
+      {
+        "command": "aiSwissknife.promoteItem",
+        "title": "Promote to Managed",
+        "icon": "$(shield)",
+        "category": "AI Swissknife"
       }
     ],
     "menus": {
@@ -154,6 +160,11 @@
         {
           "command": "aiSwissknife.updateItem",
           "when": "view == aiSwissknife.installed && viewItem == installedInstallation",
+          "group": "inline@1"
+        },
+        {
+          "command": "aiSwissknife.promoteItem",
+          "when": "view == aiSwissknife.installed && viewItem == observedArtifactItem",
           "group": "inline@1"
         },
         {

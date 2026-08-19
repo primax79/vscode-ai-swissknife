@@ -297,7 +297,7 @@ describe('UI TreeDataProviders', () => {
       const groupItem = new InstalledGroupItem('kilo-code (global)', 'Kilo Code (global)', [inst2, inst3, inst4]);
       const treeGroup = provider.getTreeItem(groupItem);
       assert.strictEqual(treeGroup.label, 'Kilo Code (global)');
-      assert.strictEqual(treeGroup.description, '3 installed');
+      assert.strictEqual(treeGroup.description, '3 managed');
 
       const treeInstAgent = provider.getTreeItem(new InstalledInstallationItem(inst2));
       assert.strictEqual((treeInstAgent.iconPath as { id: string }).id, 'robot');
