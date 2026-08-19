@@ -67,6 +67,31 @@ describe('ClaudeAdapter', () => {
       );
     });
 
+    it('skillDir equals path.dirname(skillPath) for both global and project scope', () => {
+      const globalLoc = { scope: 'global' as const };
+      assert.strictEqual(
+        adapter.skillDir('my-skill', globalLoc),
+        path.dirname(adapter.skillPath('my-skill', globalLoc))
+      );
+      assert.strictEqual(
+        claudeAdapter.skillDir('my-skill', globalLoc),
+        path.dirname(claudeAdapter.skillPath('my-skill', globalLoc))
+      );
+
+      const projectLoc = {
+        scope: 'project' as const,
+        projectRoot: testProjectDir,
+      };
+      assert.strictEqual(
+        adapter.skillDir('my-skill', projectLoc),
+        path.dirname(adapter.skillPath('my-skill', projectLoc))
+      );
+      assert.strictEqual(
+        claudeAdapter.skillDir('my-skill', projectLoc),
+        path.dirname(claudeAdapter.skillPath('my-skill', projectLoc))
+      );
+    });
+
     it('rulePath returns correct global (~/.claude/CLAUDE.md) and project (<root>/CLAUDE.md) paths', () => {
       const defaultGlobalRule = claudeAdapter.rulePath({ scope: 'global' });
       assert.strictEqual(defaultGlobalRule, path.join(os.homedir(), '.claude', 'CLAUDE.md'));
@@ -94,22 +119,26 @@ describe('ClaudeAdapter', () => {
   describe('skills', () => {
     it('Round-trip: writeSkill then readSkill returns the same name/description/body and extraFields', async () => {
       const skill: CanonicalSkill = {
-        name: 'conflict-resolver',
-        description: 'Resolve merge conflicts in files produced by parallel Executor tasks',
-        body: '# conflict-resolver\n\nUse this skill to resolve merge conflicts.',
+        name: 'full-feature-skill',
+        description: 'A skill with many fields',
+        body: 'This is the skill body.\nIt spans multiple lines.\n',
         extraFields: {
           license: 'MIT',
-          version: '1.2.0',
+          version: '1.0.0',
           enabled: true,
           priority: 10,
-          metadata: { category: 'development', author: 'test' },
-          tags: ['git', 'merge'],
+          metadata: {
+            category: 'test',
+            author: 'Alfredo',
+          },
+          tags: ['typescript', 'node'],
         },
+        files: [],
       };
 
       // Test in project scope
       await adapter.writeSkill(skill, { scope: 'project', projectRoot: testProjectDir });
-      const loadedProjectSkill = await adapter.readSkill('conflict-resolver', {
+      const loadedProjectSkill = await adapter.readSkill(skill.name, {
         scope: 'project',
         projectRoot: testProjectDir,
       });
@@ -117,7 +146,7 @@ describe('ClaudeAdapter', () => {
 
       // Test in global scope
       await adapter.writeSkill(skill, { scope: 'global' });
-      const loadedGlobalSkill = await adapter.readSkill('conflict-resolver', { scope: 'global' });
+      const loadedGlobalSkill = await adapter.readSkill(skill.name, { scope: 'global' });
       assert.deepStrictEqual(loadedGlobalSkill, skill);
     });
 

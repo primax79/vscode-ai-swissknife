@@ -108,9 +108,9 @@ export async function resolveGitCustom(
     }
   }
 
-  const skillDirs = await findSkillDirs(targetDir);
+  const { skills } = await findSkillDirs(targetDir);
 
-  return skillDirs.map((skillDir) => {
+  return skills.map((skillDir) => {
     const relPath = path.relative(targetDir, skillDir.path);
     const pathId = relPath === '' ? skillDir.name : relPath;
     const packageId = `${source.id}:${pathId}`;

@@ -13,9 +13,18 @@ export async function resolveLocalFolder(source: Source): Promise<Package[]> {
     return [];
   }
 
-  const skillDirs = await findSkillDirs(source.localPath);
+  let skills;
+  try {
+    const result = await findSkillDirs(source.localPath);
+    skills = result.skills;
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return [];
+    }
+    throw err;
+  }
 
-  return skillDirs.map((skillDir) => {
+  return skills.map((skillDir) => {
     const relPath = path.relative(source.localPath!, skillDir.path);
     const pathId = relPath === '' ? skillDir.name : relPath;
     const packageId = `${source.id}:${pathId}`;

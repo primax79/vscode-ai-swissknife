@@ -1,0 +1,17 @@
+export interface DetectionDiagnostic {
+  severity: 'error' | 'warning';
+  path: string;
+  message: string;
+  code: 'invalid-frontmatter' | 'unsafe-path' | 'unreadable-skill';
+}
+
+export interface DetectedSkillDir {
+  path: string;
+  name: string;
+  description?: string;
+}
+
+export interface SkillDetectionResult {
+  skills: DetectedSkillDir[];
+  diagnostics: DetectionDiagnostic[];
+}

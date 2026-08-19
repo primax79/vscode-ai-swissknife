@@ -2,7 +2,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import type { AssistantId } from '../domain/types';
-import type { Adapter, CanonicalRule, CanonicalSkill, LocationRef } from './types';
+import type { Adapter, CanonicalRule, CanonicalSkill, CanonicalSkillDocument, LocationRef } from './types';
+import { readSkill as codecReadSkill, writeSkill as codecWriteSkill } from './codec';
 
 /**
  * Parses a single YAML value from a string.
@@ -86,9 +87,9 @@ export function serializeYamlValue(val: unknown): string {
 }
 
 /**
- * Parses markdown content with YAML frontmatter into a CanonicalSkill.
+ * Parses markdown content with YAML frontmatter into a CanonicalSkillDocument.
  */
-export function parseSkillMarkdown(content: string): CanonicalSkill {
+export function parseSkillMarkdown(content: string): CanonicalSkillDocument {
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n([\s\S]*))?$/);
   if (!match) {
     return {
@@ -138,9 +139,9 @@ export function parseSkillMarkdown(content: string): CanonicalSkill {
 }
 
 /**
- * Serializes a CanonicalSkill into markdown with YAML frontmatter.
+ * Serializes a CanonicalSkillDocument into markdown with YAML frontmatter.
  */
-export function serializeSkillMarkdown(skill: CanonicalSkill): string {
+export function serializeSkillMarkdown(skill: CanonicalSkillDocument): string {
   let fm = `---\nname: ${serializeYamlValue(skill.name)}\ndescription: ${serializeYamlValue(skill.description)}\n`;
   if (skill.extraFields) {
     for (const [key, value] of Object.entries(skill.extraFields)) {
@@ -159,6 +160,10 @@ export class ClaudeAdapter implements Adapter {
 
   constructor(private readonly getHomedir: () => string = os.homedir) {}
 
+  skillDir(name: string, loc: LocationRef): string {
+    return path.dirname(this.skillPath(name, loc));
+  }
+
   skillPath(name: string, loc: LocationRef): string {
     if (loc.scope === 'global') {
       return path.join(this.getHomedir(), '.claude', 'skills', name, 'SKILL.md');
@@ -174,24 +179,21 @@ export class ClaudeAdapter implements Adapter {
 
   async readSkill(name: string, loc: LocationRef): Promise<CanonicalSkill | null> {
     const filePath = this.skillPath(name, loc);
-    let rawContent: string;
+    const dir = path.dirname(filePath);
     try {
-      rawContent = await fs.promises.readFile(filePath, 'utf-8');
+      return await codecReadSkill(dir);
     } catch (err: unknown) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
         return null;
       }
       throw err;
     }
-    return parseSkillMarkdown(rawContent);
   }
 
   async writeSkill(skill: CanonicalSkill, loc: LocationRef): Promise<void> {
     const filePath = this.skillPath(skill.name, loc);
     const dir = path.dirname(filePath);
-    await fs.promises.mkdir(dir, { recursive: true });
-    const content = serializeSkillMarkdown(skill);
-    await fs.promises.writeFile(filePath, content, 'utf-8');
+    await codecWriteSkill(skill, dir);
   }
 
   async listSkills(loc: LocationRef): Promise<string[]> {

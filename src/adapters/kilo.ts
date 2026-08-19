@@ -3,12 +3,16 @@ import * as os from 'os';
 import * as path from 'path';
 import type { AssistantId } from '../domain/types';
 import type { Adapter, CanonicalRule, CanonicalSkill, LocationRef } from './types';
-import { parseSkillMarkdown, serializeSkillMarkdown } from './claude';
+import { readSkill as codecReadSkill, writeSkill as codecWriteSkill } from './codec';
 
 export class KiloAdapter implements Adapter {
   readonly assistant: AssistantId = 'kilo-code';
 
   constructor(private readonly getHomedir: () => string = os.homedir) {}
+
+  skillDir(name: string, loc: LocationRef): string {
+    return path.dirname(this.skillPath(name, loc));
+  }
 
   skillPath(name: string, loc: LocationRef): string {
     if (loc.scope === 'global') {
@@ -25,24 +29,21 @@ export class KiloAdapter implements Adapter {
 
   async readSkill(name: string, loc: LocationRef): Promise<CanonicalSkill | null> {
     const filePath = this.skillPath(name, loc);
-    let rawContent: string;
+    const dir = path.dirname(filePath);
     try {
-      rawContent = await fs.promises.readFile(filePath, 'utf-8');
+      return await codecReadSkill(dir);
     } catch (err: unknown) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
         return null;
       }
       throw err;
     }
-    return parseSkillMarkdown(rawContent);
   }
 
   async writeSkill(skill: CanonicalSkill, loc: LocationRef): Promise<void> {
     const filePath = this.skillPath(skill.name, loc);
     const dir = path.dirname(filePath);
-    await fs.promises.mkdir(dir, { recursive: true });
-    const content = serializeSkillMarkdown(skill);
-    await fs.promises.writeFile(filePath, content, 'utf-8');
+    await codecWriteSkill(skill, dir);
   }
 
   async listSkills(loc: LocationRef): Promise<string[]> {

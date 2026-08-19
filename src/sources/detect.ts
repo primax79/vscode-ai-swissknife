@@ -1,11 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-export interface DetectedSkillDir {
-  path: string; // absolute path to the directory containing SKILL.md
-  name: string; // from SKILL.md frontmatter, not the directory name — they can differ
-  description?: string;
-}
+import type { DetectedSkillDir, SkillDetectionResult, DetectionDiagnostic } from './types';
 
 /**
  * Minimal, self-contained frontmatter parser to extract `name` and optional `description` from a SKILL.md file.
@@ -60,15 +56,25 @@ export function extractSkillFrontmatter(content: string): { name?: string; descr
  * - Skips node_modules, .git, and any dotfile-prefixed directory during the walk.
  * - Extracts `name` from SKILL.md frontmatter (falling back to directory basename if missing).
  */
-export async function findSkillDirs(rootDir: string): Promise<DetectedSkillDir[]> {
+export async function findSkillDirs(rootDir: string): Promise<SkillDetectionResult> {
   const resolvedRoot = path.resolve(rootDir);
-  const results: DetectedSkillDir[] = [];
+  const skills: DetectedSkillDir[] = [];
+  const diagnostics: DetectionDiagnostic[] = [];
 
   async function walk(dir: string): Promise<void> {
     let entries: fs.Dirent[];
     try {
       entries = await fs.promises.readdir(dir, { withFileTypes: true });
-    } catch {
+    } catch (err) {
+      if (dir === resolvedRoot) {
+        throw err;
+      }
+      diagnostics.push({
+        severity: 'error',
+        path: dir,
+        message: 'Unreadable directory',
+        code: 'unreadable-skill',
+      });
       return;
     }
 
@@ -83,13 +89,26 @@ export async function findSkillDirs(rootDir: string): Promise<DetectedSkillDir[]
         const frontmatter = extractSkillFrontmatter(content);
         if (frontmatter.name) {
           name = frontmatter.name;
+        } else {
+          diagnostics.push({
+            severity: 'warning',
+            path: dir,
+            message: 'Missing name in frontmatter, falling back to directory name',
+            code: 'invalid-frontmatter',
+          });
         }
         description = frontmatter.description;
-      } catch {
-        // Fallback to directory basename if reading fails
+      } catch (err) {
+        diagnostics.push({
+          severity: 'error',
+          path: dir,
+          message: 'Failed to read or parse SKILL.md',
+          code: 'unreadable-skill',
+        });
+        return;
       }
 
-      results.push({
+      skills.push({
         path: dir,
         name,
         description,
@@ -100,7 +119,7 @@ export async function findSkillDirs(rootDir: string): Promise<DetectedSkillDir[]
 
     for (const entry of entries) {
       if (entry.isDirectory()) {
-        if (entry.name.startsWith('.') || entry.name === 'node_modules') {
+        if (entry.name === '.git' || entry.name === 'node_modules') {
           continue;
         }
         await walk(path.join(dir, entry.name));
@@ -109,5 +128,5 @@ export async function findSkillDirs(rootDir: string): Promise<DetectedSkillDir[]
   }
 
   await walk(resolvedRoot);
-  return results;
+  return { skills, diagnostics };
 }

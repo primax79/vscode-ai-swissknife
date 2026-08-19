@@ -27,7 +27,10 @@ function getRealSkillFixturePath(): string {
 describe('translateSkill', () => {
   const fixturePath = getRealSkillFixturePath();
   const rawContent = fs.readFileSync(fixturePath, 'utf-8');
-  const realCanonicalSkill: CanonicalSkill = parseSkillMarkdown(rawContent);
+  const realCanonicalSkill: CanonicalSkill = {
+    ...parseSkillMarkdown(rawContent),
+    files: [],
+  };
 
   it('translates Claude -> Kilo losslessly with unchanged value using real gitignore SKILL.md', () => {
     assert.strictEqual(realCanonicalSkill.name, 'gitignore');
@@ -64,6 +67,7 @@ describe('translateSkill', () => {
           retries: 3,
         },
       },
+      files: [],
     };
 
     const toKiloResult = translateSkill(skillWithExtra, 'claude-code', 'kilo-code');
