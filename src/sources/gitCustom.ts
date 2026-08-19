@@ -4,10 +4,11 @@ import * as os from 'os';
 import * as path from 'path';
 import { promisify } from 'util';
 import type { Source, Package, Artifact, ResolvedRevision, ResolvedArtifact } from '../domain/types';
-import type { CanonicalSkill } from '../adapters/types';
+import type { CanonicalSkill, CanonicalAgent } from '../adapters/types';
 import type { SourceResolution } from './types';
 import { readSkill } from '../adapters/codec';
-import { findSkillDirs } from './detect';
+import { parseClaudeAgentMarkdown } from '../adapters/claude';
+import { findSkillDirs, findAgentFiles } from './detect';
 
 const execFileAsync = promisify(child_process.execFile);
 
@@ -78,10 +79,7 @@ async function getDefaultBranch(cwd: string): Promise<string> {
 }
 
 /**
- * Resolves a `Source` of type `git-custom` by cloning or fetching the git repository into a local cache directory,
- * checking out the requested ref (commit > tag > branch > default branch), and scanning for skills.
- *
- * Returns a `SourceResolution` containing detected `Package` items and structured `DetectionDiagnostic`s.
+ * Resolves a `Source` of type `git-custom` detecting both skills and agents.
  */
 export async function resolveGitCustom(
   source: Source,
@@ -96,7 +94,6 @@ export async function resolveGitCustom(
   const targetDir = path.join(baseCacheDir, sanitizedId);
 
   return gitCustomMutex.runExclusive(targetDir, async () => {
-    // If target directory exists but is not a valid git repo, clear it before cloning
     if (fs.existsSync(targetDir) && !fs.existsSync(path.join(targetDir, '.git'))) {
       await fs.promises.rm(targetDir, { recursive: true, force: true });
     }
@@ -104,15 +101,12 @@ export async function resolveGitCustom(
     const isExistingRepo = fs.existsSync(path.join(targetDir, '.git'));
 
     if (isExistingRepo) {
-      // Fetch latest remote changes, tags, and prune deleted branches
       await runGit(['fetch', '--all', '--tags', '--prune'], targetDir);
     } else {
-      // Fresh clone
       await fs.promises.mkdir(path.dirname(targetDir), { recursive: true });
       await runGit(['clone', source.url!, targetDir]);
     }
 
-    // Ref precedence: commit > tag > branch > default branch
     let requestedRef: string | undefined;
     if (source.commit) {
       requestedRef = source.commit;
@@ -126,7 +120,7 @@ export async function resolveGitCustom(
       try {
         await runGit(['reset', '--hard', `origin/${source.branch}`], targetDir);
       } catch {
-        // Remote branch may not exist if working locally or detached
+        // ignore
       }
     } else {
       const defaultBranch = await getDefaultBranch(targetDir);
@@ -134,7 +128,7 @@ export async function resolveGitCustom(
       try {
         await runGit(['reset', '--hard', `origin/${defaultBranch}`], targetDir);
       } catch {
-        // Remote branch may not exist if working locally or detached
+        // ignore
       }
     }
 
@@ -145,9 +139,10 @@ export async function resolveGitCustom(
       ...(requestedRef ? { requestedRef } : {}),
     };
 
-    const detectionResult = await findSkillDirs(targetDir);
+    const skillDetection = await findSkillDirs(targetDir);
+    const agentDetection = await findAgentFiles(targetDir);
 
-    const packages = detectionResult.skills.map((skillDir) => {
+    const skillPackages: Package[] = skillDetection.skills.map((skillDir) => {
       const relPath = path.relative(targetDir, skillDir.path);
       const pathId = relPath === '' ? skillDir.name : relPath;
       const packageId = `${source.id}:${pathId}`;
@@ -173,23 +168,47 @@ export async function resolveGitCustom(
       return pkg;
     });
 
+    const agentPackages: Package[] = agentDetection.agents.map((agentFile) => {
+      const relPath = path.relative(targetDir, agentFile.path);
+      const packageId = `${source.id}:${relPath}`;
+      const artifactId = `${packageId}:${agentFile.name}`;
+
+      const artifact: Artifact = {
+        id: artifactId,
+        packageId,
+        kind: 'agent',
+        name: agentFile.name,
+        description: agentFile.description,
+        nativeFormat: 'claude-agent',
+      };
+
+      const pkg: Package = {
+        id: packageId,
+        sourceId: source.id,
+        version,
+        nativeFormat: 'claude-agent',
+        artifacts: [artifact],
+      };
+
+      return pkg;
+    });
+
     return {
-      packages,
-      diagnostics: detectionResult.diagnostics,
+      packages: [...skillPackages, ...agentPackages],
+      diagnostics: [...skillDetection.diagnostics, ...agentDetection.diagnostics],
     };
   });
 }
 
 /**
- * Resolves content for a skill artifact from a git-custom source.
- * Locks the cache directory across checking out the commit and reading the full canonical skill.
+ * Resolves content for a skill or agent artifact from a git-custom source.
  */
 export async function resolveArtifactContent(
   source: Source,
   pkg: Package,
   artifact: Artifact,
   opts?: GitCustomResolveOptions
-): Promise<ResolvedArtifact<CanonicalSkill>> {
+): Promise<ResolvedArtifact<CanonicalSkill | CanonicalAgent>> {
   if (source.type !== 'git-custom') {
     throw new Error(`Expected source.type === "git-custom", got "${source.type}"`);
   }
@@ -198,9 +217,6 @@ export async function resolveArtifactContent(
   }
   if (artifact.packageId !== pkg.id) {
     throw new Error(`Artifact packageId mismatch: expected "${pkg.id}", got "${artifact.packageId}"`);
-  }
-  if (artifact.kind !== 'skill') {
-    throw new Error(`Unsupported artifact kind: "${artifact.kind}" (only skill is supported in Phase 1)`);
   }
   if (!pkg.version?.commit) {
     throw new Error('Package version commit is required for git-custom content resolution');
@@ -219,18 +235,44 @@ export async function resolveArtifactContent(
 
     const prefix = `${source.id}:`;
     const pathId = pkg.id.startsWith(prefix) ? pkg.id.slice(prefix.length) : '';
-    const candidate1 = path.join(targetDir, pathId);
-    let skillDir: string;
 
-    if (fs.existsSync(path.join(candidate1, 'SKILL.md'))) {
-      skillDir = candidate1;
-    } else if (fs.existsSync(path.join(targetDir, 'SKILL.md'))) {
-      skillDir = targetDir;
-    } else {
-      throw new Error(`Cannot locate skill directory for artifact "${artifact.name}" in "${targetDir}"`);
+    if (artifact.kind === 'skill') {
+      const candidate1 = path.join(targetDir, pathId);
+      let skillDir: string;
+
+      if (fs.existsSync(path.join(candidate1, 'SKILL.md'))) {
+        skillDir = candidate1;
+      } else if (fs.existsSync(path.join(targetDir, 'SKILL.md'))) {
+        skillDir = targetDir;
+      } else {
+        throw new Error(`Cannot locate skill directory for artifact "${artifact.name}" in "${targetDir}"`);
+      }
+
+      const content = await readSkill(skillDir);
+      return { artifact, content };
     }
 
-    const content = await readSkill(skillDir);
-    return { artifact, content };
+    if (artifact.kind === 'agent') {
+      const candidate1 = path.join(targetDir, pathId);
+      const candidate2 = path.join(targetDir, `${artifact.name}.md`);
+      const candidate3 = path.join(targetDir, 'agents', `${artifact.name}.md`);
+
+      let agentFile = '';
+      if (fs.existsSync(candidate1) && fs.statSync(candidate1).isFile()) {
+        agentFile = candidate1;
+      } else if (fs.existsSync(candidate2)) {
+        agentFile = candidate2;
+      } else if (fs.existsSync(candidate3)) {
+        agentFile = candidate3;
+      } else {
+        throw new Error(`Cannot locate agent file for "${artifact.name}" in "${targetDir}"`);
+      }
+
+      const raw = await fs.promises.readFile(agentFile, 'utf-8');
+      const content = parseClaudeAgentMarkdown(raw);
+      return { artifact, content };
+    }
+
+    throw new Error(`Unsupported artifact kind: "${artifact.kind}"`);
   });
 }

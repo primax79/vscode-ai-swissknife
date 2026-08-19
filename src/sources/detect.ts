@@ -1,11 +1,15 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import type { DetectedSkillDir, SkillDetectionResult, DetectionDiagnostic } from './types';
+import type {
+  DetectedSkillDir,
+  DetectedAgentFile,
+  SkillDetectionResult,
+  DetectionDiagnostic,
+} from './types';
 
 /**
- * Minimal, self-contained frontmatter parser to extract `name` and optional `description` from a SKILL.md file.
- * (Note: When task 03.2 lands, this can be consolidated with the Claude adapter's frontmatter helper).
+ * Minimal, self-contained frontmatter parser to extract `name` and optional `description` from a markdown file.
  */
 export function extractSkillFrontmatter(content: string): { name?: string; description?: string } {
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
@@ -50,11 +54,6 @@ export function extractSkillFrontmatter(content: string): { name?: string; descr
 
 /**
  * Recursively walks `rootDir` looking for directories that directly contain a SKILL.md file.
- *
- * Rules:
- * - Stops recursing into a directory once it is identified as a skill directory.
- * - Skips node_modules, .git, and any dotfile-prefixed directory during the walk.
- * - Extracts `name` from SKILL.md frontmatter (falling back to directory basename if missing).
  */
 export async function findSkillDirs(rootDir: string): Promise<SkillDetectionResult> {
   const resolvedRoot = path.resolve(rootDir);
@@ -98,7 +97,7 @@ export async function findSkillDirs(rootDir: string): Promise<SkillDetectionResu
           });
         }
         description = frontmatter.description;
-      } catch (err) {
+      } catch {
         diagnostics.push({
           severity: 'error',
           path: dir,
@@ -113,7 +112,6 @@ export async function findSkillDirs(rootDir: string): Promise<SkillDetectionResu
         name,
         description,
       });
-      // Stop recursing into subdirectories once identified as a skill directory
       return;
     }
 
@@ -129,4 +127,87 @@ export async function findSkillDirs(rootDir: string): Promise<SkillDetectionResu
 
   await walk(resolvedRoot);
   return { skills, diagnostics };
+}
+
+/**
+ * Recursively walks `rootDir` looking for agent markdown files (*.agent.md, or *.md inside agents/ / agent/ directories).
+ */
+export async function findAgentFiles(
+  rootDir: string
+): Promise<{ agents: DetectedAgentFile[]; diagnostics: DetectionDiagnostic[] }> {
+  const resolvedRoot = path.resolve(rootDir);
+  const agents: DetectedAgentFile[] = [];
+  const diagnostics: DetectionDiagnostic[] = [];
+
+  async function walk(dir: string): Promise<void> {
+    let entries: fs.Dirent[];
+    try {
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        if (entry.name === '.git' || entry.name === 'node_modules') {
+          continue;
+        }
+        await walk(path.join(dir, entry.name));
+      } else if (entry.isFile() && entry.name.endsWith('.md')) {
+        const fullPath = path.join(dir, entry.name);
+        const relDir = path.relative(resolvedRoot, dir).split(path.sep).join('/');
+
+        const isAgentNamed =
+          entry.name.endsWith('.agent.md') ||
+          relDir === 'agents' ||
+          relDir === 'agent' ||
+          relDir.endsWith('/agents') ||
+          relDir.endsWith('/agent') ||
+          relDir.includes('/agents/') ||
+          relDir.includes('/agent/');
+
+        if (entry.name.toLowerCase() === 'readme.md' || entry.name === 'SKILL.md') {
+          continue;
+        }
+
+        if (isAgentNamed) {
+          let name = entry.name.replace(/(\.agent)?\.md$/, '');
+          let description: string | undefined;
+
+          try {
+            const content = await fs.promises.readFile(fullPath, 'utf-8');
+            const frontmatter = extractSkillFrontmatter(content);
+            if (frontmatter.name) {
+              name = frontmatter.name;
+            } else {
+              diagnostics.push({
+                severity: 'warning',
+                path: fullPath,
+                message: 'Missing name in agent frontmatter, falling back to file name',
+                code: 'invalid-frontmatter',
+              });
+            }
+            description = frontmatter.description;
+          } catch {
+            diagnostics.push({
+              severity: 'error',
+              path: fullPath,
+              message: 'Failed to read agent file',
+              code: 'unreadable-skill',
+            });
+            continue;
+          }
+
+          agents.push({
+            path: fullPath,
+            name,
+            description,
+          });
+        }
+      }
+    }
+  }
+
+  await walk(resolvedRoot);
+  return { agents, diagnostics };
 }

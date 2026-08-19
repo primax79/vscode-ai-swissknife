@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import * as assert from 'node:assert';
 import * as fs from 'fs';
 import * as path from 'path';
-import { findSkillDirs, extractSkillFrontmatter } from './detect';
+import { findSkillDirs, findAgentFiles, extractSkillFrontmatter } from './detect';
 
 function getFixturesRoot(): string {
   const candidateOut = path.join(__dirname, '__fixtures__');
@@ -62,13 +62,12 @@ describe('detect — findSkillDirs with committed fixtures', () => {
     assert.deepStrictEqual(names, ['nested-skill-a', 'nested-skill-b']);
     assert.strictEqual(diagnostics.length, 0);
 
-    // Verify helper.sh was not treated as a skill
     assert.strictEqual(skills.some((s) => s.path.includes('scripts')), false);
   });
 
   it('captures detection diagnostics for malformed skill frontmatter beside valid skills', async () => {
     const { skills, diagnostics } = await findSkillDirs(mixedFixture);
-    assert.strictEqual(skills.length, 2); // both valid-skill and fallback-named malformed-skill
+    assert.strictEqual(skills.length, 2);
 
     const valid = skills.find((s) => s.name === 'valid-skill');
     assert.ok(valid);
@@ -90,5 +89,17 @@ describe('detect — findSkillDirs with committed fixtures', () => {
     } catch (err: unknown) {
       assert.strictEqual((err as NodeJS.ErrnoException).code, 'ENOENT');
     }
+  });
+});
+
+describe('detect — findAgentFiles', () => {
+  const fixturesRoot = getFixturesRoot();
+
+  it('detects agent files inside agents/ directory', async () => {
+    const { agents, diagnostics } = await findAgentFiles(fixturesRoot);
+    const reviewer = agents.find((a) => a.name === 'code-reviewer');
+    assert.ok(reviewer);
+    assert.strictEqual(reviewer.description, 'Automated code reviewer agent');
+    assert.strictEqual(diagnostics.length, 0);
   });
 });
