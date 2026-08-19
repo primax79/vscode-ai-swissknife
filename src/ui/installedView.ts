@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
-import type { ManagedInstallation, Source } from '../domain/types';
+import type { ManagedInstallation, ObservedArtifact, Source } from '../domain/types';
 import { readState, readManifest, fromDesiredSource } from '../domain/registry';
 import { analyzeLocalDrift, checkForUpstreamUpdate } from '../engine/drift';
+import { scanInstalledInventory, promoteObservedArtifact } from '../engine/discovery';
 import { planInstall } from '../engine/plan';
 import { applyInstall } from '../engine/apply';
 import { ClaudeAdapter } from '../adapters/claude';
@@ -10,7 +11,11 @@ import { CopilotAdapter } from '../adapters/copilot';
 import type { DriftReport } from '../engine/types';
 import { getWorkspaceRoot } from './workspacePicker';
 
-export type InstalledTreeItem = InstalledGroupItem | InstalledInstallationItem;
+export type InstalledTreeItem =
+  | InstalledGroupItem
+  | UnmanagedGroupItem
+  | InstalledInstallationItem
+  | ObservedArtifactItem;
 
 export class InstalledGroupItem {
   constructor(
@@ -20,11 +25,23 @@ export class InstalledGroupItem {
   ) {}
 }
 
+export class UnmanagedGroupItem {
+  constructor(
+    public readonly groupKey: string,
+    public readonly label: string,
+    public readonly observed: ObservedArtifact[]
+  ) {}
+}
+
 export class InstalledInstallationItem {
   constructor(
     public readonly installation: ManagedInstallation,
     public report?: DriftReport
   ) {}
+}
+
+export class ObservedArtifactItem {
+  constructor(public readonly observed: ObservedArtifact) {}
 }
 
 export class InstalledTreeDataProvider
@@ -52,8 +69,32 @@ export class InstalledTreeDataProvider
         element.label,
         vscode.TreeItemCollapsibleState.Expanded
       );
-      item.description = `${element.installations.length} installed`;
+      item.description = `${element.installations.length} managed`;
       item.contextValue = 'installedGroup';
+      return item;
+    }
+
+    if (element instanceof UnmanagedGroupItem) {
+      const item = new vscode.TreeItem(
+        element.label,
+        vscode.TreeItemCollapsibleState.Collapsed
+      );
+      item.description = `${element.observed.length} unmanaged`;
+      item.iconPath = new vscode.ThemeIcon('eye');
+      item.contextValue = 'unmanagedGroup';
+      return item;
+    }
+
+    if (element instanceof ObservedArtifactItem) {
+      const obs = element.observed;
+      const item = new vscode.TreeItem(
+        obs.name,
+        vscode.TreeItemCollapsibleState.None
+      );
+      item.description = `${obs.kind} [unmanaged]`;
+      item.tooltip = `Name: ${obs.name}\nKind: ${obs.kind}\nAssistant: ${obs.assistant}\nScope: ${obs.scope}\nPath: ${obs.path}\nDiscovered: ${obs.discoveredAt}`;
+      item.iconPath = new vscode.ThemeIcon('eye');
+      item.contextValue = 'observedArtifactItem';
       return item;
     }
 
@@ -61,7 +102,14 @@ export class InstalledTreeDataProvider
     const report = element.report ?? this.driftReports.get(this.getInstallKey(inst));
 
     let desc = `${inst.kind} (${inst.scope})`;
-    let iconName = inst.kind === 'agent' ? 'robot' : inst.kind === 'command' ? 'terminal' : inst.kind === 'mcp-server' ? 'plug' : 'check';
+    let iconName =
+      inst.kind === 'agent'
+        ? 'robot'
+        : inst.kind === 'command'
+        ? 'terminal'
+        : inst.kind === 'mcp-server'
+        ? 'plug'
+        : 'check';
 
     if (report) {
       if (report.status === 'modified-locally') {
@@ -94,37 +142,57 @@ export class InstalledTreeDataProvider
 
   async getChildren(element?: InstalledTreeItem): Promise<InstalledTreeItem[]> {
     if (!element) {
-      const allInstallations: ManagedInstallation[] = [];
+      const allManaged: ManagedInstallation[] = [];
+      const allObserved: ObservedArtifact[] = [];
 
+      // Global scan
       try {
-        const globalState = await readState('global');
-        allInstallations.push(...globalState.installations);
+        const globalInv = await scanInstalledInventory('global');
+        allManaged.push(...globalInv.managed);
+        allObserved.push(...globalInv.observed);
       } catch {
         // ignore
       }
 
+      // Project scan
       const folders = vscode.workspace.workspaceFolders;
       if (folders && folders.length > 0) {
         const projectRoot = folders[0].uri.fsPath;
         try {
-          const projectState = await readState('project', projectRoot);
-          allInstallations.push(...projectState.installations);
+          const projectInv = await scanInstalledInventory('project', projectRoot);
+          allManaged.push(...projectInv.managed);
+          allObserved.push(...projectInv.observed);
         } catch {
           // ignore
         }
       }
 
-      const groups = new Map<string, ManagedInstallation[]>();
-      for (const inst of allInstallations) {
+      const result: InstalledTreeItem[] = [];
+
+      // Group managed installations
+      const managedGroups = new Map<string, ManagedInstallation[]>();
+      for (const inst of allManaged) {
         const key = `${inst.assistant} (${inst.scope})`;
-        const list = groups.get(key) ?? [];
+        const list = managedGroups.get(key) ?? [];
         list.push(inst);
-        groups.set(key, list);
+        managedGroups.set(key, list);
       }
 
-      const result: InstalledGroupItem[] = [];
-      for (const [key, list] of groups.entries()) {
+      for (const [key, list] of managedGroups.entries()) {
         result.push(new InstalledGroupItem(key, key, list));
+      }
+
+      // Group unmanaged items
+      const unmanagedGroups = new Map<string, ObservedArtifact[]>();
+      for (const obs of allObserved) {
+        const key = `Unmanaged: ${obs.assistant} (${obs.scope})`;
+        const list = unmanagedGroups.get(key) ?? [];
+        list.push(obs);
+        unmanagedGroups.set(key, list);
+      }
+
+      for (const [key, list] of unmanagedGroups.entries()) {
+        result.push(new UnmanagedGroupItem(key, key, list));
       }
 
       return result;
@@ -135,6 +203,10 @@ export class InstalledTreeDataProvider
         const report = this.driftReports.get(this.getInstallKey(inst));
         return new InstalledInstallationItem(inst, report);
       });
+    }
+
+    if (element instanceof UnmanagedGroupItem) {
+      return element.observed.map((obs) => new ObservedArtifactItem(obs));
     }
 
     return [];
@@ -207,7 +279,6 @@ export class InstalledTreeDataProvider
       return;
     }
 
-    // Find source
     let source: Source | undefined;
     let projectRoot: string | undefined;
 
@@ -278,6 +349,31 @@ export class InstalledTreeDataProvider
       await this.checkDrift();
     } else {
       vscode.window.showErrorMessage(`Update failed: ${outcome.reason}`);
+    }
+  }
+
+  async promoteItem(item?: ObservedArtifactItem): Promise<void> {
+    if (!item) {
+      vscode.window.showWarningMessage('Please select an unmanaged item to promote.');
+      return;
+    }
+
+    const obs = item.observed;
+    const confirm = await vscode.window.showInformationMessage(
+      `Promote unmanaged ${obs.kind} "${obs.name}" (${obs.assistant}, ${obs.scope}) to managed installation?`,
+      { modal: true },
+      'Promote'
+    );
+
+    if (confirm !== 'Promote') return;
+
+    try {
+      await promoteObservedArtifact(obs);
+      vscode.window.showInformationMessage(`Successfully promoted "${obs.name}" to managed installation.`);
+      this.refresh();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      vscode.window.showErrorMessage(`Failed to promote "${obs.name}": ${msg}`);
     }
   }
 
