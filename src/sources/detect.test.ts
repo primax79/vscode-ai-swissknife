@@ -1,9 +1,14 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { findSkillDirs, extractSkillFrontmatter } from './detect';
+
+function getFixturesRoot(): string {
+  const candidateOut = path.join(__dirname, '__fixtures__');
+  if (fs.existsSync(candidateOut)) return candidateOut;
+  return path.resolve(__dirname, '../../src/sources/__fixtures__');
+}
 
 describe('detect — extractSkillFrontmatter', () => {
   it('extracts name and description with quotes', () => {
@@ -35,53 +40,52 @@ description: Simple description text
   });
 });
 
-describe('detect — findSkillDirs with real fixtures', () => {
-  const fixture1Path = '/Users/Alfredo/works/ai-coding-tools/agentic-coding-kit/plugins/common-tools/skills/gitignore';
-  const fixture2Path = fs.existsSync(path.resolve(process.cwd(), 'references/cc-swiss-knife/plugins/core/skills/documentation-standards'))
-    ? path.resolve(process.cwd(), 'references/cc-swiss-knife/plugins/core/skills/documentation-standards')
-    : '/Users/Alfredo/works/ai-coding-tools/ai-swissknife/references/cc-swiss-knife/plugins/core/skills/documentation-standards';
-  const fixture3Path = path.join(os.homedir(), '.claude/skills');
+describe('detect — findSkillDirs with committed fixtures', () => {
+  const fixturesRoot = getFixturesRoot();
+  const rootSkillFixture = path.join(fixturesRoot, 'root-skill');
+  const nestedSkillsFixture = path.join(fixturesRoot, 'nested-skills');
+  const mixedFixture = path.join(fixturesRoot, 'mixed');
 
-  it('detects skill in fixture 1 (agentic-coding-kit gitignore) with exact count 1', async () => {
-    const { skills: results } = await findSkillDirs(fixture1Path);
-    assert.strictEqual(results.length, 1);
-    assert.strictEqual(results[0].name, 'gitignore');
-    assert.strictEqual(results[0].path, fixture1Path);
-    assert.ok(results[0].description?.includes('.gitignore'));
-
-    // Verify nested subdirectories (scripts/, config/) were not scanned as separate skills
-    const paths = results.map((r) => r.path);
-    assert.strictEqual(paths.some((p) => p.includes('scripts') || p.includes('config')), false);
+  it('detects single root skill', async () => {
+    const { skills, diagnostics } = await findSkillDirs(rootSkillFixture);
+    assert.strictEqual(skills.length, 1);
+    assert.strictEqual(skills[0].name, 'root-skill');
+    assert.strictEqual(skills[0].description, 'A standalone root skill fixture');
+    assert.strictEqual(diagnostics.length, 0);
   });
 
-  it('detects skill in fixture 2 (cc-swiss-knife documentation-standards) with exact count 1', async () => {
-    const { skills: results } = await findSkillDirs(fixture2Path);
-    assert.strictEqual(results.length, 1);
-    assert.strictEqual(results[0].name, 'documentation-standards');
-    assert.strictEqual(results[0].path, fixture2Path);
-    assert.ok(results[0].description?.includes('documentation'));
+  it('detects nested skills and ignores auxiliary directories', async () => {
+    const { skills, diagnostics } = await findSkillDirs(nestedSkillsFixture);
+    assert.strictEqual(skills.length, 2);
+
+    const names = skills.map((s) => s.name).sort();
+    assert.deepStrictEqual(names, ['nested-skill-a', 'nested-skill-b']);
+    assert.strictEqual(diagnostics.length, 0);
+
+    // Verify helper.sh was not treated as a skill
+    assert.strictEqual(skills.some((s) => s.path.includes('scripts')), false);
   });
 
-  it('detects skills in fixture 3 (~/.claude/skills) with exact count 25', async () => {
-    const { skills: results } = await findSkillDirs(fixture3Path);
-    assert.strictEqual(results.length, 25);
+  it('captures detection diagnostics for malformed skill frontmatter beside valid skills', async () => {
+    const { skills, diagnostics } = await findSkillDirs(mixedFixture);
+    assert.strictEqual(skills.length, 2); // both valid-skill and fallback-named malformed-skill
 
-    const names = new Set(results.map((r) => r.name));
-    assert.ok(names.has('gitignore'));
-    assert.ok(names.has('terraform'));
-    assert.ok(names.has('theme-factory'));
-    assert.ok(names.has('playwright'));
-    assert.ok(names.has('impeccable'));
+    const valid = skills.find((s) => s.name === 'valid-skill');
+    assert.ok(valid);
+    assert.strictEqual(valid.description, 'A valid skill in mixed directory');
 
-    // Check frontmatter matches for spot-checked skills
-    const gitignoreSkill = results.find((r) => r.name === 'gitignore');
-    assert.ok(gitignoreSkill);
-    assert.ok(gitignoreSkill.description && gitignoreSkill.description.length > 0);
+    const malformed = skills.find((s) => s.name === 'malformed-skill');
+    assert.ok(malformed);
+
+    assert.strictEqual(diagnostics.length, 1);
+    assert.strictEqual(diagnostics[0].code, 'invalid-frontmatter');
+    assert.strictEqual(diagnostics[0].severity, 'warning');
+    assert.ok(diagnostics[0].path.includes('malformed-skill'));
   });
 
-  it('returns empty array for non-existent directory', async () => {
+  it('throws ENOENT for non-existent directory', async () => {
     try {
-      await findSkillDirs('/tmp/non-existent-directory-' + Date.now());
+      await findSkillDirs(path.join(fixturesRoot, 'does-not-exist-' + Date.now()));
       assert.fail('Should have thrown an error for unreadable root');
     } catch (err: unknown) {
       assert.strictEqual((err as NodeJS.ErrnoException).code, 'ENOENT');

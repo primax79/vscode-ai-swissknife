@@ -2,32 +2,33 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { Source, Package, Artifact, ResolvedArtifact } from '../domain/types';
 import type { CanonicalSkill } from '../adapters/types';
+import type { SourceResolution, SkillDetectionResult } from './types';
 import { readSkill } from '../adapters/codec';
 import { findSkillDirs } from './detect';
 
 /**
  * Resolves a `Source` of type `local-folder` by detecting all skill directories within `source.localPath`.
  *
+ * Returns a `SourceResolution` containing detected `Package` items and structured `DetectionDiagnostic`s.
  * Each detected skill directory is mapped to a degenerate `Package` containing exactly one `Artifact` of kind `skill`.
  * Package and Artifact IDs are deterministically derived from `source.id` and the relative path / skill name.
  */
-export async function resolveLocalFolder(source: Source): Promise<Package[]> {
+export async function resolveLocalFolder(source: Source): Promise<SourceResolution> {
   if (!source.localPath) {
-    return [];
+    return { packages: [], diagnostics: [] };
   }
 
-  let skills;
+  let detectionResult: SkillDetectionResult;
   try {
-    const result = await findSkillDirs(source.localPath);
-    skills = result.skills;
+    detectionResult = await findSkillDirs(source.localPath);
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-      return [];
+      return { packages: [], diagnostics: [] };
     }
     throw err;
   }
 
-  return skills.map((skillDir) => {
+  const packages: Package[] = detectionResult.skills.map((skillDir) => {
     const relPath = path.relative(source.localPath!, skillDir.path);
     const pathId = relPath === '' ? skillDir.name : relPath;
     const packageId = `${source.id}:${pathId}`;
@@ -51,6 +52,11 @@ export async function resolveLocalFolder(source: Source): Promise<Package[]> {
 
     return pkg;
   });
+
+  return {
+    packages,
+    diagnostics: detectionResult.diagnostics,
+  };
 }
 
 /**

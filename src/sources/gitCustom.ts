@@ -5,6 +5,7 @@ import * as path from 'path';
 import { promisify } from 'util';
 import type { Source, Package, Artifact, ResolvedRevision, ResolvedArtifact } from '../domain/types';
 import type { CanonicalSkill } from '../adapters/types';
+import type { SourceResolution } from './types';
 import { readSkill } from '../adapters/codec';
 import { findSkillDirs } from './detect';
 
@@ -79,11 +80,13 @@ async function getDefaultBranch(cwd: string): Promise<string> {
 /**
  * Resolves a `Source` of type `git-custom` by cloning or fetching the git repository into a local cache directory,
  * checking out the requested ref (commit > tag > branch > default branch), and scanning for skills.
+ *
+ * Returns a `SourceResolution` containing detected `Package` items and structured `DetectionDiagnostic`s.
  */
 export async function resolveGitCustom(
   source: Source,
   opts?: GitCustomResolveOptions
-): Promise<Package[]> {
+): Promise<SourceResolution> {
   if (!source.url || source.url.trim() === '') {
     throw new Error(`source.url is required for git-custom source "${source.id}"`);
   }
@@ -142,9 +145,9 @@ export async function resolveGitCustom(
       ...(requestedRef ? { requestedRef } : {}),
     };
 
-    const { skills } = await findSkillDirs(targetDir);
+    const detectionResult = await findSkillDirs(targetDir);
 
-    return skills.map((skillDir) => {
+    const packages = detectionResult.skills.map((skillDir) => {
       const relPath = path.relative(targetDir, skillDir.path);
       const pathId = relPath === '' ? skillDir.name : relPath;
       const packageId = `${source.id}:${pathId}`;
@@ -169,6 +172,11 @@ export async function resolveGitCustom(
 
       return pkg;
     });
+
+    return {
+      packages,
+      diagnostics: detectionResult.diagnostics,
+    };
   });
 }
 

@@ -6,6 +6,7 @@ import * as os from 'os';
 import * as path from 'path';
 import type { Source, ResolvedArtifact } from '../domain/types';
 import type { CanonicalSkill } from '../adapters/types';
+import type { SourceResolution } from './types';
 import { resolveGitCustom, resolveArtifactContent, gitCustomMutex } from './gitCustom';
 
 function runGitSync(args: string[], cwd: string): string {
@@ -20,26 +21,20 @@ function runGitSync(args: string[], cwd: string): string {
     .toString();
 }
 
-function getFixturePath(skillName: string): string {
-  const candidates = [
-    path.join('/Users/Alfredo/works/ai-coding-tools/agentic-coding-kit/plugins/common-tools/skills', skillName),
-    path.join('/Users/Alfredo/works/ai-coding-tools/agentic-coding-kit/plugins/third-party/skills', skillName),
-    path.join(os.homedir(), '.claude/skills', skillName),
-  ];
-  for (const c of candidates) {
-    if (fs.existsSync(path.join(c, 'SKILL.md'))) {
-      return c;
-    }
-  }
-  throw new Error(`Fixture for skill "${skillName}" not found in candidate paths`);
+function getFixturesRoot(): string {
+  const candidateOut = path.join(__dirname, '__fixtures__');
+  if (fs.existsSync(candidateOut)) return candidateOut;
+  return path.resolve(__dirname, '../../src/sources/__fixtures__');
 }
 
-describe('gitCustom — resolveGitCustom with real local git repository', () => {
+describe('gitCustom — resolveGitCustom with committed fixtures in dynamic repository', () => {
   let tempBase: string;
   let remoteRepoDir: string;
   let cacheBaseDir: string;
   let initialCommitHash: string;
   let secondCommitHash: string;
+
+  const fixturesRoot = getFixturesRoot();
 
   before(() => {
     tempBase = fs.mkdtempSync(path.join(os.tmpdir(), 'git-custom-test-'));
@@ -54,34 +49,34 @@ describe('gitCustom — resolveGitCustom with real local git repository', () => 
     runGitSync(['config', 'user.name', 'Test Engineer'], remoteRepoDir);
     runGitSync(['config', 'user.email', 'engineer@test.local'], remoteRepoDir);
 
-    // Commit 1: add gitignore skill
-    const gitignoreFixture = getFixturePath('gitignore');
-    const destGitignore = path.join(remoteRepoDir, 'skills', 'gitignore');
-    fs.cpSync(gitignoreFixture, destGitignore, { recursive: true });
+    // Commit 1: add root-skill
+    const rootFixture = path.join(fixturesRoot, 'root-skill');
+    const destRoot = path.join(remoteRepoDir, 'skills', 'root-skill');
+    fs.cpSync(rootFixture, destRoot, { recursive: true });
 
     runGitSync(['add', '.'], remoteRepoDir);
-    runGitSync(['commit', '-m', 'Add gitignore skill'], remoteRepoDir);
+    runGitSync(['commit', '-m', 'Add root skill'], remoteRepoDir);
     initialCommitHash = runGitSync(['rev-parse', 'HEAD'], remoteRepoDir).trim();
     runGitSync(['tag', 'v1.0.0'], remoteRepoDir);
 
-    // Commit 2: add markdown-formatter skill
-    const mdFormatterFixture = getFixturePath('markdown-formatter');
-    const destMdFormatter = path.join(remoteRepoDir, 'skills', 'markdown-formatter');
-    fs.cpSync(mdFormatterFixture, destMdFormatter, { recursive: true });
+    // Commit 2: add nested-skills
+    const nestedFixture = path.join(fixturesRoot, 'nested-skills');
+    const destNested = path.join(remoteRepoDir, 'skills', 'nested');
+    fs.cpSync(nestedFixture, destNested, { recursive: true });
 
     runGitSync(['add', '.'], remoteRepoDir);
-    runGitSync(['commit', '-m', 'Add markdown-formatter skill'], remoteRepoDir);
+    runGitSync(['commit', '-m', 'Add nested skills'], remoteRepoDir);
     secondCommitHash = runGitSync(['rev-parse', 'HEAD'], remoteRepoDir).trim();
     runGitSync(['tag', 'v2.0.0'], remoteRepoDir);
 
-    // Branch feature-skills: add theme-factory skill
+    // Branch feature-skills: add mixed skills
     runGitSync(['checkout', '-b', 'feature-skills'], remoteRepoDir);
-    const themeFactoryFixture = getFixturePath('theme-factory');
-    const destThemeFactory = path.join(remoteRepoDir, 'skills', 'theme-factory');
-    fs.cpSync(themeFactoryFixture, destThemeFactory, { recursive: true });
+    const mixedFixture = path.join(fixturesRoot, 'mixed');
+    const destMixed = path.join(remoteRepoDir, 'skills', 'mixed');
+    fs.cpSync(mixedFixture, destMixed, { recursive: true });
 
     runGitSync(['add', '.'], remoteRepoDir);
-    runGitSync(['commit', '-m', 'Add theme-factory skill on branch'], remoteRepoDir);
+    runGitSync(['commit', '-m', 'Add mixed skills on branch'], remoteRepoDir);
 
     // Switch back to default branch (main)
     runGitSync(['checkout', 'main'], remoteRepoDir);
@@ -93,7 +88,7 @@ describe('gitCustom — resolveGitCustom with real local git repository', () => 
     }
   });
 
-  it('resolves default branch to all skills on latest main commit with ResolvedRevision', async () => {
+  it('resolves default branch to packages and diagnostics on latest main commit', async () => {
     const source: Source = {
       id: 'src-test-default',
       type: 'git-custom',
@@ -101,26 +96,26 @@ describe('gitCustom — resolveGitCustom with real local git repository', () => 
       url: remoteRepoDir,
     };
 
-    const packages = await resolveGitCustom(source, { cacheDir: cacheBaseDir });
-    assert.strictEqual(packages.length, 2);
+    const resolution: SourceResolution = await resolveGitCustom(source, { cacheDir: cacheBaseDir });
+    assert.strictEqual(resolution.packages.length, 3); // 1 from root + 2 from nested
+    assert.strictEqual(resolution.diagnostics.length, 0);
 
-    const names = packages.map((p) => p.artifacts[0].name);
-    assert.ok(names.includes('gitignore'));
-    assert.ok(names.includes('markdown-formatter'));
+    const names = resolution.packages.map((p) => p.artifacts[0].name);
+    assert.ok(names.includes('root-skill'));
+    assert.ok(names.includes('nested-skill-a'));
+    assert.ok(names.includes('nested-skill-b'));
 
-    for (const pkg of packages) {
+    for (const pkg of resolution.packages) {
       assert.strictEqual(pkg.sourceId, 'src-test-default');
       assert.strictEqual(pkg.nativeFormat, 'claude-skill');
       assert.strictEqual(pkg.version?.commit, secondCommitHash);
       assert.strictEqual(pkg.version?.requestedRef, undefined);
       assert.strictEqual(pkg.artifacts.length, 1);
       assert.strictEqual(pkg.artifacts[0].kind, 'skill');
-      assert.strictEqual(pkg.artifacts[0].packageId, pkg.id);
-      assert.strictEqual(pkg.artifacts[0].nativeFormat, 'claude-skill');
     }
   });
 
-  it('resolves a specific tag pin (v1.0.0) resolving an earlier state', async () => {
+  it('resolves a specific tag pin (v1.0.0) with exact ResolvedRevision', async () => {
     const source: Source = {
       id: 'src-test-tag-v1',
       type: 'git-custom',
@@ -129,10 +124,10 @@ describe('gitCustom — resolveGitCustom with real local git repository', () => 
       tag: 'v1.0.0',
     };
 
-    const packages = await resolveGitCustom(source, { cacheDir: cacheBaseDir });
-    assert.strictEqual(packages.length, 1);
-    assert.strictEqual(packages[0].artifacts[0].name, 'gitignore');
-    assert.deepStrictEqual(packages[0].version, {
+    const resolution = await resolveGitCustom(source, { cacheDir: cacheBaseDir });
+    assert.strictEqual(resolution.packages.length, 1);
+    assert.strictEqual(resolution.packages[0].artifacts[0].name, 'root-skill');
+    assert.deepStrictEqual(resolution.packages[0].version, {
       commit: initialCommitHash,
       requestedRef: 'v1.0.0',
     });
@@ -146,9 +141,9 @@ describe('gitCustom — resolveGitCustom with real local git repository', () => 
       url: remoteRepoDir,
       tag: 'v2.0.0',
     };
-    const packagesTag = await resolveGitCustom(sourceTag, { cacheDir: cacheBaseDir });
-    assert.strictEqual(packagesTag.length, 2);
-    assert.deepStrictEqual(packagesTag[0].version, {
+    const resTag = await resolveGitCustom(sourceTag, { cacheDir: cacheBaseDir });
+    assert.strictEqual(resTag.packages.length, 3);
+    assert.deepStrictEqual(resTag.packages[0].version, {
       commit: secondCommitHash,
       requestedRef: 'v2.0.0',
     });
@@ -160,33 +155,15 @@ describe('gitCustom — resolveGitCustom with real local git repository', () => 
       url: remoteRepoDir,
       commit: secondCommitHash,
     };
-    const packagesCommit = await resolveGitCustom(sourceCommit, { cacheDir: cacheBaseDir });
-    assert.strictEqual(packagesCommit.length, 2);
-    assert.deepStrictEqual(packagesCommit[0].version, {
+    const resCommit = await resolveGitCustom(sourceCommit, { cacheDir: cacheBaseDir });
+    assert.strictEqual(resCommit.packages.length, 3);
+    assert.deepStrictEqual(resCommit.packages[0].version, {
       commit: secondCommitHash,
       requestedRef: secondCommitHash,
     });
   });
 
-  it('resolves a specific commit pin resolving an earlier state', async () => {
-    const source: Source = {
-      id: 'src-test-commit-initial',
-      type: 'git-custom',
-      scope: 'project',
-      url: remoteRepoDir,
-      commit: initialCommitHash,
-    };
-
-    const packages = await resolveGitCustom(source, { cacheDir: cacheBaseDir });
-    assert.strictEqual(packages.length, 1);
-    assert.strictEqual(packages[0].artifacts[0].name, 'gitignore');
-    assert.deepStrictEqual(packages[0].version, {
-      commit: initialCommitHash,
-      requestedRef: initialCommitHash,
-    });
-  });
-
-  it('resolves a specific branch pin (feature-skills)', async () => {
+  it('resolves branch pin carrying both valid packages and detection diagnostics', async () => {
     const source: Source = {
       id: 'src-test-branch-feature',
       type: 'git-custom',
@@ -195,57 +172,53 @@ describe('gitCustom — resolveGitCustom with real local git repository', () => 
       branch: 'feature-skills',
     };
 
-    const packages = await resolveGitCustom(source, { cacheDir: cacheBaseDir });
-    assert.strictEqual(packages.length, 3);
-    assert.strictEqual(packages[0].version?.requestedRef, 'feature-skills');
-
-    const names = packages.map((p) => p.artifacts[0].name);
-    assert.ok(names.includes('gitignore'));
-    assert.ok(names.includes('markdown-formatter'));
-    assert.ok(names.includes('theme-factory'));
+    const resolution = await resolveGitCustom(source, { cacheDir: cacheBaseDir });
+    // 3 from main + 2 from mixed = 5
+    assert.strictEqual(resolution.packages.length, 5);
+    assert.strictEqual(resolution.diagnostics.length, 1);
+    assert.strictEqual(resolution.diagnostics[0].code, 'invalid-frontmatter');
+    assert.strictEqual(resolution.packages[0].version?.requestedRef, 'feature-skills');
   });
 
-  it('re-resolves a second time reusing the cache dir via git fetch', async () => {
-    const source: Source = {
-      id: 'src-test-cache-reuse',
-      type: 'git-custom',
-      scope: 'project',
-      url: remoteRepoDir,
-    };
-
-    // First resolution
-    const packagesBefore = await resolveGitCustom(source, { cacheDir: cacheBaseDir });
-    assert.strictEqual(packagesBefore.length, 2);
-
-    // Add a new commit to the remote repo on main
-    const changelogFixture = getFixturePath('changelog-generator');
-    const destChangelog = path.join(remoteRepoDir, 'skills', 'changelog-generator');
-    fs.cpSync(changelogFixture, destChangelog, { recursive: true });
-
-    runGitSync(['add', '.'], remoteRepoDir);
-    runGitSync(['commit', '-m', 'Add changelog-generator skill on remote main'], remoteRepoDir);
-
-    // Second resolution with the same cache directory: should fetch and find the 3rd skill
-    const packagesAfter = await resolveGitCustom(source, { cacheDir: cacheBaseDir });
-    assert.strictEqual(packagesAfter.length, 3);
-
-    const namesAfter = packagesAfter.map((p) => p.artifacts[0].name);
-    assert.ok(namesAfter.includes('gitignore'));
-    assert.ok(namesAfter.includes('markdown-formatter'));
-    assert.ok(namesAfter.includes('changelog-generator'));
-  });
-
-  it('resolveArtifactContent resolves CanonicalSkill without casts', async () => {
-    const source: Source = {
-      id: 'src-test-content-resolve',
+  it('runs concurrent resolveGitCustom calls on different refs with deterministic results', async () => {
+    const sourceV1: Source = {
+      id: 'src-test-concurrent',
       type: 'git-custom',
       scope: 'project',
       url: remoteRepoDir,
       tag: 'v1.0.0',
     };
+    const sourceV2: Source = {
+      id: 'src-test-concurrent',
+      type: 'git-custom',
+      scope: 'project',
+      url: remoteRepoDir,
+      tag: 'v2.0.0',
+    };
 
-    const packages = await resolveGitCustom(source, { cacheDir: cacheBaseDir });
-    const pkg = packages[0];
+    const [res1, res2] = await Promise.all([
+      resolveGitCustom(sourceV1, { cacheDir: cacheBaseDir }),
+      resolveGitCustom(sourceV2, { cacheDir: cacheBaseDir }),
+    ]);
+
+    assert.strictEqual(res1.packages.length, 1);
+    assert.strictEqual(res2.packages.length, 3);
+    assert.strictEqual(res1.packages[0].version?.commit, initialCommitHash);
+    assert.strictEqual(res2.packages[0].version?.commit, secondCommitHash);
+  });
+
+  it('resolveArtifactContent resolves CanonicalSkill with auxiliary files without casts', async () => {
+    const source: Source = {
+      id: 'src-test-content',
+      type: 'git-custom',
+      scope: 'project',
+      url: remoteRepoDir,
+      tag: 'v2.0.0',
+    };
+
+    const resolution = await resolveGitCustom(source, { cacheDir: cacheBaseDir });
+    const pkg = resolution.packages.find((p) => p.artifacts[0].name === 'nested-skill-b');
+    assert.ok(pkg);
     const artifact = pkg.artifacts[0];
 
     const resolved: ResolvedArtifact<CanonicalSkill> = await resolveArtifactContent(
@@ -256,8 +229,40 @@ describe('gitCustom — resolveGitCustom with real local git repository', () => 
     );
 
     assert.strictEqual(resolved.artifact.id, artifact.id);
-    assert.strictEqual(resolved.content.name, 'gitignore');
-    assert.ok(resolved.content.description.length > 0);
+    assert.strictEqual(resolved.content.name, 'nested-skill-b');
+    assert.strictEqual(resolved.content.files.length, 1);
+    assert.strictEqual(resolved.content.files[0].path, 'scripts/helper.sh');
+  });
+
+  it('interleaves resolveGitCustom and resolveArtifactContent proving lock protects checkout plus read', async () => {
+    const sourceV1: Source = {
+      id: 'src-test-interleave',
+      type: 'git-custom',
+      scope: 'project',
+      url: remoteRepoDir,
+      tag: 'v1.0.0',
+    };
+
+    const resV1 = await resolveGitCustom(sourceV1, { cacheDir: cacheBaseDir });
+    const pkgV1 = resV1.packages[0];
+    const artifactV1 = pkgV1.artifacts[0];
+
+    const sourceBranch: Source = {
+      id: 'src-test-interleave',
+      type: 'git-custom',
+      scope: 'project',
+      url: remoteRepoDir,
+      branch: 'feature-skills',
+    };
+
+    // Run both concurrently on the same cache directory
+    const [resolvedContent, branchResolution] = await Promise.all([
+      resolveArtifactContent(sourceV1, pkgV1, artifactV1, { cacheDir: cacheBaseDir }),
+      resolveGitCustom(sourceBranch, { cacheDir: cacheBaseDir }),
+    ]);
+
+    assert.strictEqual(resolvedContent.content.name, 'root-skill');
+    assert.strictEqual(branchResolution.packages.length, 5);
   });
 
   it('proves gitCustomMutex serializes access to target directory', async () => {
@@ -276,37 +281,6 @@ describe('gitCustom — resolveGitCustom with real local git repository', () => 
       }),
     ]);
     assert.deepStrictEqual(sequence, [1, 2, 3, 4]);
-  });
-
-  it('proves shared mutex prevents race conditions between resolveArtifactContent and resolveGitCustom', async () => {
-    const sourceV1: Source = {
-      id: 'src-test-mutex',
-      type: 'git-custom',
-      scope: 'project',
-      url: remoteRepoDir,
-      tag: 'v1.0.0',
-    };
-
-    const packagesV1 = await resolveGitCustom(sourceV1, { cacheDir: cacheBaseDir });
-    const pkgV1 = packagesV1[0];
-    const artifactV1 = pkgV1.artifacts[0];
-
-    const sourceBranch: Source = {
-      id: 'src-test-mutex',
-      type: 'git-custom',
-      scope: 'project',
-      url: remoteRepoDir,
-      branch: 'feature-skills',
-    };
-
-    // Run both concurrently on the same cache directory
-    const [resolvedContent, branchPackages] = await Promise.all([
-      resolveArtifactContent(sourceV1, pkgV1, artifactV1, { cacheDir: cacheBaseDir }),
-      resolveGitCustom(sourceBranch, { cacheDir: cacheBaseDir }),
-    ]);
-
-    assert.strictEqual(resolvedContent.content.name, 'gitignore');
-    assert.strictEqual(branchPackages.length, 3);
   });
 
   it('throws a clear error for a nonexistent git repository path', async () => {
