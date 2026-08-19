@@ -46,12 +46,25 @@ Module.prototype.require = function (id: string, ...rest: unknown[]) {
           dispose: () => {},
         }),
       },
+      ViewColumn: {
+        One: 1,
+      },
       window: {
         showInformationMessage: async () => undefined,
         showWarningMessage: async () => undefined,
         showErrorMessage: async () => undefined,
         showQuickPick: async () => undefined,
         showInputBox: async () => undefined,
+        createWebviewPanel: () => ({
+          reveal: () => {},
+          dispose: () => {},
+          onDidDispose: () => ({ dispose: () => {} }),
+          webview: {
+            html: '',
+            onDidReceiveMessage: () => ({ dispose: () => {} }),
+            postMessage: async () => {},
+          },
+        }),
       },
     };
   }
@@ -73,6 +86,7 @@ import {
 } from './availableView';
 import { InstalledTreeDataProvider, InstalledGroupItem, InstalledInstallationItem } from './installedView';
 import { setupFileWatchers } from './watchers';
+import { DashboardPanel } from './dashboard';
 
 describe('UI TreeDataProviders', () => {
   let testTempDir: string;
@@ -329,6 +343,34 @@ describe('UI TreeDataProviders', () => {
       for (const d of disposables) {
         d.dispose();
       }
+    });
+  });
+
+  describe('DashboardPanel', () => {
+    it('renders dashboard HTML with metrics and item rows', () => {
+      const panel = DashboardPanel.render();
+      assert.ok(panel);
+
+      const html = panel.getHtml(
+        [],
+        [
+          {
+            assistant: 'claude-code',
+            scope: 'project',
+            kind: 'skill',
+            name: 'demo-skill',
+            path: '/tmp/demo-skill',
+            installedAt: '2026-08-19T12:00:00.000Z',
+          },
+        ],
+        [],
+        []
+      );
+
+      assert.ok(html.includes('AI Swissknife Dashboard'));
+      assert.ok(html.includes('demo-skill'));
+      assert.ok(html.includes('claude-code'));
+      panel.dispose();
     });
   });
 });

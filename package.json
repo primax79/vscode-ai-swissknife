@@ -111,10 +111,21 @@
         "title": "Promote to Managed",
         "icon": "$(shield)",
         "category": "AI Swissknife"
+      },
+      {
+        "command": "aiSwissknife.openDashboard",
+        "title": "Open Dashboard",
+        "icon": "$(dashboard)",
+        "category": "AI Swissknife"
       }
     ],
     "menus": {
       "view/title": [
+        {
+          "command": "aiSwissknife.openDashboard",
+          "when": "view == aiSwissknife.sources || view == aiSwissknife.available || view == aiSwissknife.installed",
+          "group": "navigation@0"
+        },
         {
           "command": "aiSwissknife.addSource",
           "when": "view == aiSwissknife.sources",
