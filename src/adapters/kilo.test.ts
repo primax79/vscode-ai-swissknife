@@ -5,7 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { KiloAdapter, kiloAdapter } from './kilo';
 import { ClaudeAdapter, claudeAdapter } from './claude';
-import type { CanonicalRule, CanonicalSkill, CanonicalAgent } from './types';
+import type { CanonicalRule, CanonicalSkill, CanonicalAgent, CanonicalCommand } from './types';
 
 describe('KiloAdapter', () => {
   let testTempDir: string;
@@ -107,6 +107,23 @@ describe('KiloAdapter', () => {
       assert.strictEqual(
         projectPath,
         path.join(testProjectDir, '.kilo', 'agents', 'tester.md')
+      );
+    });
+
+    it('commandPath returns correct global and project paths', () => {
+      const globalPath = adapter.commandPath('build', { scope: 'global' });
+      assert.strictEqual(
+        globalPath,
+        path.join(testHomeDir, '.config', 'kilo', 'command', 'build.md')
+      );
+
+      const projectPath = adapter.commandPath('build', {
+        scope: 'project',
+        projectRoot: testProjectDir,
+      });
+      assert.strictEqual(
+        projectPath,
+        path.join(testProjectDir, '.kilo', 'command', 'build.md')
       );
     });
 
@@ -289,6 +306,47 @@ describe('KiloAdapter', () => {
 
       const list = await adapter.listAgents({ scope: 'project', projectRoot: testProjectDir });
       assert.ok(list.includes('legacy-agent'));
+    });
+  });
+
+  describe('commands', () => {
+    it('Round-trip: writeCommand then readCommand strictly enforces Kilo E77 schema', async () => {
+      const cmd: CanonicalCommand = {
+        name: 'build-project',
+        description: 'Build project bundle',
+        agent: 'kilo-expert',
+        model: 'gemini-3.7-flash',
+        subtask: true,
+        body: 'npm run build\n',
+        extraFields: {
+          // Extra keys must not be emitted in frontmatter
+          invalidKey: 'forbidden',
+        },
+      };
+
+      await adapter.writeCommand(cmd, { scope: 'project', projectRoot: testProjectDir });
+      const filePath = adapter.commandPath(cmd.name, { scope: 'project', projectRoot: testProjectDir });
+      const rawContent = await fs.promises.readFile(filePath, 'utf-8');
+
+      // Verify strict schema: invalidKey and name: are NOT in frontmatter
+      assert.strictEqual(rawContent.includes('invalidKey:'), false);
+      assert.strictEqual(rawContent.includes('name:'), false);
+      assert.ok(rawContent.includes('Build project bundle'));
+      assert.ok(rawContent.includes('kilo-expert'));
+      assert.ok(rawContent.includes('subtask: true'));
+
+      const loaded = await adapter.readCommand(cmd.name, {
+        scope: 'project',
+        projectRoot: testProjectDir,
+      });
+      assert.ok(loaded);
+      assert.strictEqual(loaded.name, 'build-project');
+      assert.strictEqual(loaded.description, 'Build project bundle');
+      assert.strictEqual(loaded.agent, 'kilo-expert');
+      assert.strictEqual(loaded.subtask, true);
+
+      const list = await adapter.listCommands({ scope: 'project', projectRoot: testProjectDir });
+      assert.deepStrictEqual(list, ['build-project']);
     });
   });
 

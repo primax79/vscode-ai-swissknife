@@ -8,6 +8,7 @@ import type {
   CanonicalSkill,
   CanonicalSkillDocument,
   CanonicalAgent,
+  CanonicalCommand,
   LocationRef,
 } from './types';
 import { readSkill as codecReadSkill, writeSkill as codecWriteSkill } from './codec';
@@ -252,6 +253,99 @@ export function serializeClaudeAgentMarkdown(agent: CanonicalAgent): string {
   return agent.body ? `${fm}\n${agent.body}` : `${fm}\n`;
 }
 
+/**
+ * Parses Claude command markdown into CanonicalCommand.
+ */
+export function parseClaudeCommandMarkdown(content: string, defaultName = ''): CanonicalCommand {
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n([\s\S]*))?$/);
+  if (!match) {
+    return {
+      name: defaultName,
+      description: '',
+      body: content,
+      extraFields: {},
+    };
+  }
+
+  const fmBlock = match[1];
+  const body = match[2] ?? '';
+  const lines = fmBlock.split(/\r?\n/);
+
+  let name = defaultName;
+  let description = '';
+  let agent: string | undefined;
+  let model: string | undefined;
+  let subtask: boolean | undefined;
+  const extraFields: Record<string, unknown> = {};
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) {
+      continue;
+    }
+    const colonIdx = trimmed.indexOf(':');
+    if (colonIdx === -1) {
+      continue;
+    }
+    const key = trimmed.slice(0, colonIdx).trim();
+    const rawVal = trimmed.slice(colonIdx + 1).trim();
+    const parsedVal = parseYamlValue(rawVal);
+
+    if (key === 'name') {
+      name = typeof parsedVal === 'string' ? parsedVal : String(parsedVal ?? '');
+    } else if (key === 'description') {
+      description = typeof parsedVal === 'string' ? parsedVal : String(parsedVal ?? '');
+    } else if (key === 'agent') {
+      agent = typeof parsedVal === 'string' ? parsedVal : String(parsedVal ?? '');
+    } else if (key === 'model') {
+      model = typeof parsedVal === 'string' ? parsedVal : String(parsedVal ?? '');
+    } else if (key === 'subtask') {
+      subtask = typeof parsedVal === 'boolean' ? parsedVal : Boolean(parsedVal);
+    } else {
+      extraFields[key] = parsedVal;
+    }
+  }
+
+  return {
+    name,
+    description,
+    ...(agent ? { agent } : {}),
+    ...(model ? { model } : {}),
+    ...(subtask !== undefined ? { subtask } : {}),
+    body,
+    extraFields,
+  };
+}
+
+/**
+ * Serializes a CanonicalCommand into Claude command markdown.
+ */
+export function serializeClaudeCommandMarkdown(cmd: CanonicalCommand): string {
+  let fm = '---\n';
+  if (cmd.description) {
+    fm += `description: ${serializeYamlValue(cmd.description)}\n`;
+  }
+  if (cmd.agent) {
+    fm += `agent: ${serializeYamlValue(cmd.agent)}\n`;
+  }
+  if (cmd.model) {
+    fm += `model: ${serializeYamlValue(cmd.model)}\n`;
+  }
+  if (cmd.subtask !== undefined) {
+    fm += `subtask: ${cmd.subtask}\n`;
+  }
+  if (cmd.extraFields) {
+    for (const [key, value] of Object.entries(cmd.extraFields)) {
+      if (key === 'name' || key === 'description' || key === 'agent' || key === 'model' || key === 'subtask') {
+        continue;
+      }
+      fm += `${key}: ${serializeYamlValue(value)}\n`;
+    }
+  }
+  fm += '---';
+  return cmd.body ? `${fm}\n${cmd.body}` : `${fm}\n`;
+}
+
 export class ClaudeAdapter implements Adapter {
   readonly assistant: AssistantId = 'claude-code';
 
@@ -382,6 +476,66 @@ export class ClaudeAdapter implements Adapter {
 
     try {
       const entries = await fs.promises.readdir(agentsDir, { withFileTypes: true });
+      return entries
+        .filter((e) => e.isFile() && e.name.endsWith('.md'))
+        .map((e) => e.name.replace(/\.md$/, ''));
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        return [];
+      }
+      throw err;
+    }
+  }
+
+  commandPath(name: string, loc: LocationRef): string {
+    const fileName = name.endsWith('.md') ? name : `${name}.md`;
+    if (loc.scope === 'global') {
+      return path.join(this.getHomedir(), '.claude', 'commands', fileName);
+    }
+    if (loc.scope === 'project') {
+      if (!loc.projectRoot) {
+        throw new Error('projectRoot is required when scope is "project"');
+      }
+      return path.join(loc.projectRoot, '.claude', 'commands', fileName);
+    }
+    throw new Error(`Unsupported scope: ${(loc as { scope: string }).scope}`);
+  }
+
+  async readCommand(name: string, loc: LocationRef): Promise<CanonicalCommand | null> {
+    const filePath = this.commandPath(name, loc);
+    try {
+      const content = await fs.promises.readFile(filePath, 'utf-8');
+      return parseClaudeCommandMarkdown(content, name);
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        return null;
+      }
+      throw err;
+    }
+  }
+
+  async writeCommand(command: CanonicalCommand, loc: LocationRef): Promise<void> {
+    const filePath = this.commandPath(command.name, loc);
+    await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+    const serialized = serializeClaudeCommandMarkdown(command);
+    await fs.promises.writeFile(filePath, serialized, 'utf-8');
+  }
+
+  async listCommands(loc: LocationRef): Promise<string[]> {
+    let commandsDir: string;
+    if (loc.scope === 'global') {
+      commandsDir = path.join(this.getHomedir(), '.claude', 'commands');
+    } else if (loc.scope === 'project') {
+      if (!loc.projectRoot) {
+        throw new Error('projectRoot is required when scope is "project"');
+      }
+      commandsDir = path.join(loc.projectRoot, '.claude', 'commands');
+    } else {
+      throw new Error(`Unsupported scope: ${(loc as { scope: string }).scope}`);
+    }
+
+    try {
+      const entries = await fs.promises.readdir(commandsDir, { withFileTypes: true });
       return entries
         .filter((e) => e.isFile() && e.name.endsWith('.md'))
         .map((e) => e.name.replace(/\.md$/, ''));
