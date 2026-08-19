@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { ClaudeAdapter, claudeAdapter } from './claude';
-import type { CanonicalRule, CanonicalSkill } from './types';
+import type { CanonicalRule, CanonicalSkill, CanonicalAgent } from './types';
 
 describe('ClaudeAdapter', () => {
   let testTempDir: string;
@@ -92,6 +92,20 @@ describe('ClaudeAdapter', () => {
       );
     });
 
+    it('agentPath returns correct global and project paths', () => {
+      const globalPath = adapter.agentPath('tester', { scope: 'global' });
+      assert.strictEqual(globalPath, path.join(testHomeDir, '.claude', 'agents', 'tester.md'));
+
+      const projectPath = adapter.agentPath('tester', {
+        scope: 'project',
+        projectRoot: testProjectDir,
+      });
+      assert.strictEqual(
+        projectPath,
+        path.join(testProjectDir, '.claude', 'agents', 'tester.md')
+      );
+    });
+
     it('rulePath returns correct global (~/.claude/CLAUDE.md) and project (<root>/CLAUDE.md) paths', () => {
       const defaultGlobalRule = claudeAdapter.rulePath({ scope: 'global' });
       assert.strictEqual(defaultGlobalRule, path.join(os.homedir(), '.claude', 'CLAUDE.md'));
@@ -136,7 +150,6 @@ describe('ClaudeAdapter', () => {
         files: [],
       };
 
-      // Test in project scope
       await adapter.writeSkill(skill, { scope: 'project', projectRoot: testProjectDir });
       const loadedProjectSkill = await adapter.readSkill(skill.name, {
         scope: 'project',
@@ -144,7 +157,6 @@ describe('ClaudeAdapter', () => {
       });
       assert.deepStrictEqual(loadedProjectSkill, skill);
 
-      // Test in global scope
       await adapter.writeSkill(skill, { scope: 'global' });
       const loadedGlobalSkill = await adapter.readSkill(skill.name, { scope: 'global' });
       assert.deepStrictEqual(loadedGlobalSkill, skill);
@@ -162,7 +174,6 @@ describe('ClaudeAdapter', () => {
     });
 
     it('listSkills returns only directories containing SKILL.md, given a fixture directory with one valid skill dir and one dir without SKILL.md', async () => {
-      // Create .claude/skills in testProjectDir
       const skillsDir = path.join(testProjectDir, '.claude', 'skills');
       const validSkillDir = path.join(skillsDir, 'valid-skill');
       const invalidDir = path.join(skillsDir, 'not-a-skill');
@@ -171,21 +182,18 @@ describe('ClaudeAdapter', () => {
       await fs.promises.mkdir(validSkillDir, { recursive: true });
       await fs.promises.mkdir(invalidDir, { recursive: true });
 
-      // Add SKILL.md to valid-skill
       await fs.promises.writeFile(
         path.join(validSkillDir, 'SKILL.md'),
         '---\nname: valid-skill\ndescription: A valid skill\n---\n# Body\n',
         'utf-8'
       );
 
-      // Add another file (not SKILL.md) to not-a-skill
       await fs.promises.writeFile(
         path.join(invalidDir, 'OTHER.md'),
         '# Not a skill',
         'utf-8'
       );
 
-      // Add a stray regular file in skillsDir
       await fs.promises.writeFile(strayFile, 'some text', 'utf-8');
 
       const listed = await adapter.listSkills({
@@ -205,6 +213,38 @@ describe('ClaudeAdapter', () => {
     });
   });
 
+  describe('agents', () => {
+    it('Round-trip: writeAgent then readAgent preserves agent structure and tools', async () => {
+      const agent: CanonicalAgent = {
+        name: 'qa-engineer',
+        description: 'Performs QA and verification',
+        tools: ['read', 'bash', 'edit'],
+        permissions: {},
+        model: 'claude-3-5-sonnet',
+        body: '# QA Engineer\n\nYou are responsible for tests and QA.\n',
+        extraFields: {
+          category: 'qa',
+        },
+      };
+
+      await adapter.writeAgent(agent, { scope: 'project', projectRoot: testProjectDir });
+      const loaded = await adapter.readAgent(agent.name, {
+        scope: 'project',
+        projectRoot: testProjectDir,
+      });
+
+      assert.deepStrictEqual(loaded, agent);
+
+      const list = await adapter.listAgents({ scope: 'project', projectRoot: testProjectDir });
+      assert.deepStrictEqual(list, ['qa-engineer']);
+    });
+
+    it('readAgent on nonexistent agent returns null', async () => {
+      const loaded = await adapter.readAgent('nonexistent', { scope: 'global' });
+      assert.strictEqual(loaded, null);
+    });
+  });
+
   describe('rules', () => {
     it('rulePath/readRule/writeRule round-trip for both scopes', async () => {
       const projectRule: CanonicalRule = {
@@ -215,7 +255,6 @@ describe('ClaudeAdapter', () => {
         content: '# Global Rules\n\n- Global user preferences\n',
       };
 
-      // Project scope
       const projectRuleLocation = { scope: 'project' as const, projectRoot: testProjectDir };
       assert.strictEqual(adapter.rulePath(projectRuleLocation), path.join(testProjectDir, 'CLAUDE.md'));
       const initialProjectRule = await adapter.readRule(projectRuleLocation);
@@ -225,7 +264,6 @@ describe('ClaudeAdapter', () => {
       const readProjectRule = await adapter.readRule(projectRuleLocation);
       assert.deepStrictEqual(readProjectRule, projectRule);
 
-      // Global scope
       const globalRuleLocation = { scope: 'global' as const };
       assert.strictEqual(adapter.rulePath(globalRuleLocation), path.join(testHomeDir, '.claude', 'CLAUDE.md'));
       const initialGlobalRule = await adapter.readRule(globalRuleLocation);

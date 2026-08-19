@@ -16,6 +16,18 @@ export interface CanonicalSkill {
 
 export type CanonicalSkillDocument = Omit<CanonicalSkill, 'files'>;
 
+export interface CanonicalAgent {
+  name: string;
+  description: string;
+  mode?: 'primary' | 'subagent' | 'all';
+  tools: string[];
+  permissions: Record<string, 'allow' | 'deny' | 'ask'>;
+  model?: string;
+  variant?: string;
+  body: string; // markdown instructions/prompt
+  extraFields: Record<string, unknown>;
+}
+
 export interface CanonicalRule {
   content: string; // raw file content, no frontmatter parsing — CLAUDE.md/AGENTS.md are plain markdown (SPEC.md §1)
 }
@@ -33,6 +45,11 @@ export interface Adapter {
   readSkill(name: string, loc: LocationRef): Promise<CanonicalSkill | null>; // null if not found, not an error
   writeSkill(skill: CanonicalSkill, loc: LocationRef): Promise<void>;
   listSkills(loc: LocationRef): Promise<string[]>; // names only
+
+  agentPath(name: string, loc: LocationRef): string;
+  readAgent(name: string, loc: LocationRef): Promise<CanonicalAgent | null>;
+  writeAgent(agent: CanonicalAgent, loc: LocationRef): Promise<void>;
+  listAgents(loc: LocationRef): Promise<string[]>;
 
   rulePath(loc: LocationRef): string;
   readRule(loc: LocationRef): Promise<CanonicalRule | null>;

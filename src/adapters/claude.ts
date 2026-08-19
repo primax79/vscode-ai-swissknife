@@ -2,7 +2,14 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import type { AssistantId } from '../domain/types';
-import type { Adapter, CanonicalRule, CanonicalSkill, CanonicalSkillDocument, LocationRef } from './types';
+import type {
+  Adapter,
+  CanonicalRule,
+  CanonicalSkill,
+  CanonicalSkillDocument,
+  CanonicalAgent,
+  LocationRef,
+} from './types';
 import { readSkill as codecReadSkill, writeSkill as codecWriteSkill } from './codec';
 
 /**
@@ -155,6 +162,96 @@ export function serializeSkillMarkdown(skill: CanonicalSkillDocument): string {
   return skill.body ? `${fm}\n${skill.body}` : `${fm}\n`;
 }
 
+/**
+ * Parses Claude agent markdown into CanonicalAgent.
+ */
+export function parseClaudeAgentMarkdown(content: string): CanonicalAgent {
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n([\s\S]*))?$/);
+  if (!match) {
+    return {
+      name: '',
+      description: '',
+      tools: [],
+      permissions: {},
+      body: content,
+      extraFields: {},
+    };
+  }
+
+  const fmBlock = match[1];
+  const body = match[2] ?? '';
+  const lines = fmBlock.split(/\r?\n/);
+
+  let name = '';
+  let description = '';
+  let model: string | undefined;
+  let tools: string[] = [];
+  const extraFields: Record<string, unknown> = {};
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) {
+      continue;
+    }
+    const colonIdx = trimmed.indexOf(':');
+    if (colonIdx === -1) {
+      continue;
+    }
+    const key = trimmed.slice(0, colonIdx).trim();
+    const rawVal = trimmed.slice(colonIdx + 1).trim();
+    const parsedVal = parseYamlValue(rawVal);
+
+    if (key === 'name') {
+      name = typeof parsedVal === 'string' ? parsedVal : String(parsedVal ?? '');
+    } else if (key === 'description') {
+      description = typeof parsedVal === 'string' ? parsedVal : String(parsedVal ?? '');
+    } else if (key === 'model') {
+      model = typeof parsedVal === 'string' ? parsedVal : String(parsedVal ?? '');
+    } else if (key === 'tools') {
+      if (Array.isArray(parsedVal)) {
+        tools = parsedVal.map(String);
+      } else if (typeof parsedVal === 'string' && parsedVal) {
+        tools = [parsedVal];
+      }
+    } else {
+      extraFields[key] = parsedVal;
+    }
+  }
+
+  return {
+    name,
+    description,
+    tools,
+    permissions: {},
+    ...(model ? { model } : {}),
+    body,
+    extraFields,
+  };
+}
+
+/**
+ * Serializes a CanonicalAgent into Claude agent markdown.
+ */
+export function serializeClaudeAgentMarkdown(agent: CanonicalAgent): string {
+  let fm = `---\nname: ${serializeYamlValue(agent.name)}\ndescription: ${serializeYamlValue(agent.description)}\n`;
+  if (agent.tools && agent.tools.length > 0) {
+    fm += `tools: ${JSON.stringify(agent.tools)}\n`;
+  }
+  if (agent.model) {
+    fm += `model: ${serializeYamlValue(agent.model)}\n`;
+  }
+  if (agent.extraFields) {
+    for (const [key, value] of Object.entries(agent.extraFields)) {
+      if (key === 'name' || key === 'description' || key === 'tools' || key === 'model' || key === 'permissions' || key === 'mode' || key === 'variant') {
+        continue;
+      }
+      fm += `${key}: ${serializeYamlValue(value)}\n`;
+    }
+  }
+  fm += '---';
+  return agent.body ? `${fm}\n${agent.body}` : `${fm}\n`;
+}
+
 export class ClaudeAdapter implements Adapter {
   readonly assistant: AssistantId = 'claude-code';
 
@@ -229,11 +326,71 @@ export class ClaudeAdapter implements Adapter {
             skillNames.push(entry.name);
           }
         } catch {
-          // Not a valid skill directory if SKILL.md is missing or unreadable
+          // ignore
         }
       }
     }
     return skillNames;
+  }
+
+  agentPath(name: string, loc: LocationRef): string {
+    const fileName = name.endsWith('.md') ? name : `${name}.md`;
+    if (loc.scope === 'global') {
+      return path.join(this.getHomedir(), '.claude', 'agents', fileName);
+    }
+    if (loc.scope === 'project') {
+      if (!loc.projectRoot) {
+        throw new Error('projectRoot is required when scope is "project"');
+      }
+      return path.join(loc.projectRoot, '.claude', 'agents', fileName);
+    }
+    throw new Error(`Unsupported scope: ${(loc as { scope: string }).scope}`);
+  }
+
+  async readAgent(name: string, loc: LocationRef): Promise<CanonicalAgent | null> {
+    const filePath = this.agentPath(name, loc);
+    try {
+      const content = await fs.promises.readFile(filePath, 'utf-8');
+      return parseClaudeAgentMarkdown(content);
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        return null;
+      }
+      throw err;
+    }
+  }
+
+  async writeAgent(agent: CanonicalAgent, loc: LocationRef): Promise<void> {
+    const filePath = this.agentPath(agent.name, loc);
+    await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+    const serialized = serializeClaudeAgentMarkdown(agent);
+    await fs.promises.writeFile(filePath, serialized, 'utf-8');
+  }
+
+  async listAgents(loc: LocationRef): Promise<string[]> {
+    let agentsDir: string;
+    if (loc.scope === 'global') {
+      agentsDir = path.join(this.getHomedir(), '.claude', 'agents');
+    } else if (loc.scope === 'project') {
+      if (!loc.projectRoot) {
+        throw new Error('projectRoot is required when scope is "project"');
+      }
+      agentsDir = path.join(loc.projectRoot, '.claude', 'agents');
+    } else {
+      throw new Error(`Unsupported scope: ${(loc as { scope: string }).scope}`);
+    }
+
+    try {
+      const entries = await fs.promises.readdir(agentsDir, { withFileTypes: true });
+      return entries
+        .filter((e) => e.isFile() && e.name.endsWith('.md'))
+        .map((e) => e.name.replace(/\.md$/, ''));
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        return [];
+      }
+      throw err;
+    }
   }
 
   rulePath(loc: LocationRef): string {
