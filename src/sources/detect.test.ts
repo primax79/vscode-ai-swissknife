@@ -43,7 +43,7 @@ describe('detect — findSkillDirs with real fixtures', () => {
   const fixture3Path = path.join(os.homedir(), '.claude/skills');
 
   it('detects skill in fixture 1 (agentic-coding-kit gitignore) with exact count 1', async () => {
-    const results = await findSkillDirs(fixture1Path);
+    const { skills: results } = await findSkillDirs(fixture1Path);
     assert.strictEqual(results.length, 1);
     assert.strictEqual(results[0].name, 'gitignore');
     assert.strictEqual(results[0].path, fixture1Path);
@@ -55,7 +55,7 @@ describe('detect — findSkillDirs with real fixtures', () => {
   });
 
   it('detects skill in fixture 2 (cc-swiss-knife documentation-standards) with exact count 1', async () => {
-    const results = await findSkillDirs(fixture2Path);
+    const { skills: results } = await findSkillDirs(fixture2Path);
     assert.strictEqual(results.length, 1);
     assert.strictEqual(results[0].name, 'documentation-standards');
     assert.strictEqual(results[0].path, fixture2Path);
@@ -63,7 +63,7 @@ describe('detect — findSkillDirs with real fixtures', () => {
   });
 
   it('detects skills in fixture 3 (~/.claude/skills) with exact count 25', async () => {
-    const results = await findSkillDirs(fixture3Path);
+    const { skills: results } = await findSkillDirs(fixture3Path);
     assert.strictEqual(results.length, 25);
 
     const names = new Set(results.map((r) => r.name));
@@ -80,7 +80,11 @@ describe('detect — findSkillDirs with real fixtures', () => {
   });
 
   it('returns empty array for non-existent directory', async () => {
-    const results = await findSkillDirs('/tmp/non-existent-directory-' + Date.now());
-    assert.deepStrictEqual(results, []);
+    try {
+      await findSkillDirs('/tmp/non-existent-directory-' + Date.now());
+      assert.fail('Should have thrown an error for unreadable root');
+    } catch (err: unknown) {
+      assert.strictEqual((err as NodeJS.ErrnoException).code, 'ENOENT');
+    }
   });
 });
