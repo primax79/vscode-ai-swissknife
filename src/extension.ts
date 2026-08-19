@@ -11,6 +11,7 @@ import {
   InstalledInstallationItem,
   ObservedArtifactItem,
 } from './ui/installedView';
+import { setupFileWatchers } from './ui/watchers';
 
 export function activate(context: vscode.ExtensionContext) {
   const sourcesProvider = new SourcesTreeDataProvider();
@@ -21,7 +22,13 @@ export function activate(context: vscode.ExtensionContext) {
     installedProvider.refresh();
   });
 
+  const watchers = setupFileWatchers(() => {
+    sourcesProvider.refresh();
+    installedProvider.refresh();
+  });
+
   context.subscriptions.push(
+    ...watchers,
     vscode.window.registerTreeDataProvider('aiSwissknife.sources', sourcesProvider),
     vscode.window.registerTreeDataProvider('aiSwissknife.available', availableProvider),
     vscode.window.registerTreeDataProvider('aiSwissknife.installed', installedProvider),
