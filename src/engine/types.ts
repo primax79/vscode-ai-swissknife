@@ -7,7 +7,7 @@ import type {
   ResolvedRevision,
   ManagedInstallation,
 } from '../domain/types';
-import type { CanonicalSkill } from '../adapters/types';
+import type { CanonicalSkill, CanonicalAgent } from '../adapters/types';
 import type { TranslationDiagnostic } from '../translator/skill';
 
 export interface UnsupportedInstallPlan {
@@ -50,8 +50,16 @@ export type PreparedInstall =
   | { supported: false; plan: UnsupportedInstallPlan }
   | {
       supported: true;
+      kind: 'skill';
       plan: SupportedInstallPlan;
       content: CanonicalSkill;
+      contentHash: string;
+    }
+  | {
+      supported: true;
+      kind: 'agent';
+      plan: SupportedInstallPlan;
+      content: CanonicalAgent;
       contentHash: string;
     };
 
@@ -68,6 +76,7 @@ export interface PlanInstallParams {
   targetAdapter: {
     assistant: AssistantId;
     skillDir(name: string, loc: { scope: Scope; projectRoot?: string }): string;
+    agentPath?(name: string, loc: { scope: Scope; projectRoot?: string }): string;
   };
   targetScope: Scope;
   projectRoot?: string;
