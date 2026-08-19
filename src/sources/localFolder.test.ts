@@ -1,9 +1,10 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import type { Source, ResolvedArtifact } from '../domain/types';
-import type { CanonicalSkill, CanonicalCommand } from '../adapters/types';
+import type { CanonicalSkill, CanonicalCommand, CanonicalMcpServer } from '../adapters/types';
 import type { SourceResolution } from './types';
 import { resolveLocalFolder, resolveArtifactContent } from './localFolder';
 
@@ -105,6 +106,49 @@ describe('localFolder — resolveLocalFolder with committed fixtures', () => {
 
     assert.strictEqual(resolved.content.name, 'review');
     assert.strictEqual(resolved.content.agent, 'code-reviewer');
+  });
+
+  it('resolves MCP server from mcp.json in local folder', async () => {
+    const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'local-mcp-'));
+    try {
+      await fs.promises.writeFile(
+        path.join(tempDir, 'mcp.json'),
+        JSON.stringify({
+          mcpServers: {
+            'github-mcp': {
+              command: 'npx',
+              args: ['-y', '@modelcontextprotocol/server-github'],
+              description: 'GitHub MCP Server',
+            },
+          },
+        }),
+        'utf-8'
+      );
+
+      const source: Source = {
+        id: 'src-local-mcp',
+        type: 'local-folder',
+        scope: 'project',
+        localPath: tempDir,
+      };
+
+      const resolution = await resolveLocalFolder(source);
+      assert.strictEqual(resolution.packages.length, 1);
+      const pkg = resolution.packages[0];
+      assert.strictEqual(pkg.artifacts[0].kind, 'mcp-server');
+      assert.strictEqual(pkg.artifacts[0].name, 'github-mcp');
+
+      const resolved = (await resolveArtifactContent(
+        source,
+        pkg,
+        pkg.artifacts[0]
+      )) as ResolvedArtifact<CanonicalMcpServer>;
+
+      assert.strictEqual(resolved.content.id, 'github-mcp');
+      assert.strictEqual(resolved.content.command, 'npx');
+    } finally {
+      await fs.promises.rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   it('returns empty packages and diagnostics when source has no localPath or path does not exist', async () => {

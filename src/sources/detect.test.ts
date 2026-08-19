@@ -1,11 +1,13 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import {
   findSkillDirs,
   findAgentFiles,
   findCommandFiles,
+  findMcpDefinitions,
   extractSkillFrontmatter,
 } from './detect';
 
@@ -118,5 +120,35 @@ describe('detect — findCommandFiles', () => {
     assert.ok(reviewCmd);
     assert.strictEqual(reviewCmd.description, 'Review current git changes');
     assert.strictEqual(diagnostics.length, 0);
+  });
+});
+
+describe('detect — findMcpDefinitions', () => {
+  it('detects MCP servers from mcp.json file', async () => {
+    const tempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'detect-mcp-'));
+    try {
+      await fs.promises.writeFile(
+        path.join(tempDir, 'mcp.json'),
+        JSON.stringify({
+          mcpServers: {
+            'sqlite-mcp': {
+              command: 'uvx',
+              args: ['mcp-server-sqlite'],
+              description: 'SQLite server',
+            },
+          },
+        }),
+        'utf-8'
+      );
+
+      const { mcpServers, diagnostics } = await findMcpDefinitions(tempDir);
+      assert.strictEqual(mcpServers.length, 1);
+      assert.strictEqual(mcpServers[0].id, 'sqlite-mcp');
+      assert.strictEqual(mcpServers[0].command, 'uvx');
+      assert.strictEqual(mcpServers[0].description, 'SQLite server');
+      assert.strictEqual(diagnostics.length, 0);
+    } finally {
+      await fs.promises.rm(tempDir, { recursive: true, force: true });
+    }
   });
 });

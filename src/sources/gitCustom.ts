@@ -13,7 +13,12 @@ import type {
 import type { SourceResolution } from './types';
 import { readSkill } from '../adapters/codec';
 import { parseClaudeAgentMarkdown, parseClaudeCommandMarkdown } from '../adapters/claude';
-import { findSkillDirs, findAgentFiles, findCommandFiles } from './detect';
+import {
+  findSkillDirs,
+  findAgentFiles,
+  findCommandFiles,
+  findMcpDefinitions,
+} from './detect';
 
 const execFileAsync = promisify(child_process.execFile);
 
@@ -84,7 +89,7 @@ async function getDefaultBranch(cwd: string): Promise<string> {
 }
 
 /**
- * Resolves a `Source` of type `git-custom` detecting skills, agents, and commands.
+ * Resolves a `Source` of type `git-custom` detecting skills, agents, commands, and mcp servers.
  */
 export async function resolveGitCustom(
   source: Source,
@@ -147,6 +152,7 @@ export async function resolveGitCustom(
     const skillDetection = await findSkillDirs(targetDir);
     const agentDetection = await findAgentFiles(targetDir);
     const commandDetection = await findCommandFiles(targetDir);
+    const mcpDetection = await findMcpDefinitions(targetDir);
 
     const skillPackages: Package[] = skillDetection.skills.map((skillDir) => {
       const relPath = path.relative(targetDir, skillDir.path);
@@ -224,12 +230,38 @@ export async function resolveGitCustom(
       return pkg;
     });
 
+    const mcpPackages: Package[] = mcpDetection.mcpServers.map((mcpServer) => {
+      const relPath = path.relative(targetDir, mcpServer.path);
+      const packageId = `${source.id}:${relPath}:${mcpServer.id}`;
+      const artifactId = `${packageId}:${mcpServer.id}`;
+
+      const artifact: Artifact = {
+        id: artifactId,
+        packageId,
+        kind: 'mcp-server',
+        name: mcpServer.id,
+        description: mcpServer.description ?? `MCP Server (${mcpServer.type})`,
+        nativeFormat: 'mcp-config',
+      };
+
+      const pkg: Package = {
+        id: packageId,
+        sourceId: source.id,
+        version,
+        nativeFormat: 'mcp-config',
+        artifacts: [artifact],
+      };
+
+      return pkg;
+    });
+
     return {
-      packages: [...skillPackages, ...agentPackages, ...commandPackages],
+      packages: [...skillPackages, ...agentPackages, ...commandPackages, ...mcpPackages],
       diagnostics: [
         ...skillDetection.diagnostics,
         ...agentDetection.diagnostics,
         ...commandDetection.diagnostics,
+        ...mcpDetection.diagnostics,
       ],
     };
   });
@@ -334,7 +366,7 @@ export async function resolveArtifactContent(
       const candidate1 = path.join(targetDir, 'mcp.json');
       const candidate2 = path.join(targetDir, '.mcp.json');
       const candidate3 = path.join(targetDir, 'mcps', `${artifact.name}.json`);
-      const candidate4 = path.join(targetDir, pathId);
+      const candidate4 = path.join(targetDir, pathId.split(':')[0]);
 
       let raw = '';
       for (const cand of [candidate1, candidate2, candidate3, candidate4]) {
@@ -348,7 +380,7 @@ export async function resolveArtifactContent(
       }
 
       const parsed = JSON.parse(raw);
-      const serverConfig = (parsed.mcpServers?.[artifact.name] ?? parsed.mcp?.[artifact.name] ?? parsed) as Record<string, unknown>;
+      const serverConfig = (parsed.mcpServers?.[artifact.name] ?? parsed.mcp?.[artifact.name] ?? (parsed.command || parsed.url ? parsed : {})) as Record<string, unknown>;
       const extraFields: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(serverConfig)) {
         if (!['id', 'type', 'command', 'args', 'url', 'env', 'headers'].includes(k)) {

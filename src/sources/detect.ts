@@ -5,6 +5,7 @@ import type {
   DetectedSkillDir,
   DetectedAgentFile,
   DetectedCommandFile,
+  DetectedMcpServer,
   SkillDetectionResult,
   DetectionDiagnostic,
 } from './types';
@@ -287,4 +288,67 @@ export async function findCommandFiles(
 
   await walk(resolvedRoot);
   return { commands, diagnostics };
+}
+
+/**
+ * Scans `rootDir` for MCP configuration files (mcp.json, .mcp.json, mcps/*.json).
+ */
+export async function findMcpDefinitions(
+  rootDir: string
+): Promise<{ mcpServers: DetectedMcpServer[]; diagnostics: DetectionDiagnostic[] }> {
+  const resolvedRoot = path.resolve(rootDir);
+  const mcpServers: DetectedMcpServer[] = [];
+  const diagnostics: DetectionDiagnostic[] = [];
+
+  const candidateFiles = [
+    path.join(resolvedRoot, 'mcp.json'),
+    path.join(resolvedRoot, '.mcp.json'),
+  ];
+
+  const mcpsDir = path.join(resolvedRoot, 'mcps');
+  if (fs.existsSync(mcpsDir) && fs.statSync(mcpsDir).isDirectory()) {
+    try {
+      const entries = await fs.promises.readdir(mcpsDir, { withFileTypes: true });
+      for (const e of entries) {
+        if (e.isFile() && e.name.endsWith('.json')) {
+          candidateFiles.push(path.join(mcpsDir, e.name));
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  for (const filePath of candidateFiles) {
+    if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
+      try {
+        const raw = await fs.promises.readFile(filePath, 'utf-8');
+        const parsed = JSON.parse(raw);
+        const map = (parsed.mcpServers ?? parsed.mcp ?? (parsed.command || parsed.url ? { [path.basename(filePath, '.json')]: parsed } : {})) as Record<string, Record<string, unknown>>;
+
+        for (const [id, conf] of Object.entries(map)) {
+          if (conf && typeof conf === 'object') {
+            mcpServers.push({
+              id,
+              type: String(conf.type ?? (conf.command ? 'stdio' : 'sse')),
+              command: conf.command ? String(conf.command) : undefined,
+              url: conf.url ? String(conf.url) : undefined,
+              description: conf.description ? String(conf.description) : undefined,
+              path: filePath,
+            });
+          }
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        diagnostics.push({
+          severity: 'error',
+          path: filePath,
+          message: `Failed to parse MCP JSON: ${msg}`,
+          code: 'invalid-frontmatter',
+        });
+      }
+    }
+  }
+
+  return { mcpServers, diagnostics };
 }
