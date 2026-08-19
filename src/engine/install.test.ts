@@ -47,8 +47,8 @@ describe('Install Engine — planInstall and applyInstall', () => {
       const artifact: Artifact = {
         id: 'art-1',
         packageId: 'src-1:pkg',
-        kind: 'command',
-        name: 'test-cmd',
+        kind: 'hook',
+        name: 'test-hook',
         nativeFormat: 'raw',
       };
 
@@ -62,7 +62,7 @@ describe('Install Engine — planInstall and applyInstall', () => {
       });
 
       assert.strictEqual(prepared.supported, false);
-      assert.ok(prepared.plan.reason.includes('Artifact kind "command" is not supported'));
+      assert.ok(prepared.plan.reason.includes('Artifact kind "hook" is not supported'));
     });
 
     it('refuses unsupported target assistant', async () => {
@@ -129,7 +129,7 @@ describe('Install Engine — planInstall and applyInstall', () => {
       if (prepared.supported) {
         assert.strictEqual(prepared.plan.conflict, false);
         assert.strictEqual(prepared.plan.existingFiles.length, 0);
-        assert.strictEqual(prepared.plan.proposedFiles.length, 2); // SKILL.md + scripts/helper.sh
+        assert.strictEqual(prepared.plan.proposedFiles.length, 2);
         assert.strictEqual(prepared.content.name, 'nested-skill-b');
         assert.ok(prepared.contentHash.length > 0);
       }
@@ -175,6 +175,49 @@ describe('Install Engine — planInstall and applyInstall', () => {
         assert.strictEqual(prepared.content.permissions.bash, 'allow');
         assert.strictEqual(prepared.plan.proposedFiles.length, 1);
         assert.strictEqual(prepared.plan.proposedFiles[0].path, 'architect.md');
+      }
+    });
+
+    it('plans command install for Kilo', async () => {
+      const cmdFolder = path.join(testTempDir, 'src-cmd-folder');
+      await fs.promises.mkdir(cmdFolder, { recursive: true });
+      await fs.promises.writeFile(
+        path.join(cmdFolder, 'deploy.md'),
+        '---\ndescription: Deploy service\nagent: devops\nmodel: claude-3-5-sonnet\nsubtask: true\n---\nRun deploy script.\n',
+        'utf-8'
+      );
+
+      const source: Source = {
+        id: 'src-cmd',
+        type: 'local-folder',
+        scope: 'project',
+        localPath: cmdFolder,
+      };
+      const pkg: Package = { id: 'src-cmd:deploy', sourceId: 'src-cmd', nativeFormat: 'claude-command', artifacts: [] };
+      const artifact: Artifact = {
+        id: 'src-cmd:deploy:deploy',
+        packageId: 'src-cmd:deploy',
+        kind: 'command',
+        name: 'deploy',
+        nativeFormat: 'claude-command',
+      };
+
+      const prepared = await planInstall({
+        source,
+        pkg,
+        artifact,
+        targetAdapter: kiloAdapter,
+        targetScope: 'project',
+        projectRoot: testTempDir,
+      });
+
+      assert.strictEqual(prepared.supported, true);
+      if (prepared.supported && prepared.kind === 'command') {
+        assert.strictEqual(prepared.content.name, 'deploy');
+        assert.strictEqual(prepared.content.description, 'Deploy service');
+        assert.strictEqual(prepared.content.agent, 'devops');
+        assert.strictEqual(prepared.plan.proposedFiles.length, 1);
+        assert.strictEqual(prepared.plan.proposedFiles[0].path, 'deploy.md');
       }
     });
 
@@ -313,6 +356,59 @@ describe('Install Engine — planInstall and applyInstall', () => {
         assert.strictEqual(state.installations.length, 1);
         assert.strictEqual(state.installations[0].name, 'architect');
         assert.strictEqual(state.installations[0].kind, 'agent');
+      }
+    });
+
+    it('applies fresh command install end-to-end and updates state', async () => {
+      const cmdFolder = path.join(testTempDir, 'src-cmd-folder');
+      await fs.promises.mkdir(cmdFolder, { recursive: true });
+      await fs.promises.writeFile(
+        path.join(cmdFolder, 'deploy.md'),
+        '---\ndescription: Deploy service\nagent: devops\n---\nRun deploy.\n',
+        'utf-8'
+      );
+
+      const source: Source = {
+        id: 'src-cmd',
+        type: 'local-folder',
+        scope: 'project',
+        localPath: cmdFolder,
+      };
+      const pkg: Package = { id: 'src-cmd:deploy', sourceId: 'src-cmd', nativeFormat: 'claude-command', artifacts: [] };
+      const artifact: Artifact = {
+        id: 'src-cmd:deploy:deploy',
+        packageId: 'src-cmd:deploy',
+        kind: 'command',
+        name: 'deploy',
+        nativeFormat: 'claude-command',
+      };
+
+      const prepared: PreparedInstall = await planInstall({
+        source,
+        pkg,
+        artifact,
+        targetAdapter: kiloAdapter,
+        targetScope: 'project',
+        projectRoot: testTempDir,
+      });
+
+      assert.strictEqual(prepared.supported, true);
+
+      const outcome = await applyInstall(prepared, testHomeDir);
+      assert.strictEqual(outcome.status, 'applied');
+
+      if (outcome.status === 'applied') {
+        assert.strictEqual(outcome.installation.name, 'deploy');
+        assert.strictEqual(outcome.installation.kind, 'command');
+        assert.strictEqual(outcome.installation.assistant, 'kilo-code');
+
+        const targetFile = outcome.installation.path;
+        assert.ok(fs.existsSync(targetFile));
+
+        const state = await readState('project', testTempDir, testHomeDir);
+        assert.strictEqual(state.installations.length, 1);
+        assert.strictEqual(state.installations[0].name, 'deploy');
+        assert.strictEqual(state.installations[0].kind, 'command');
       }
     });
 

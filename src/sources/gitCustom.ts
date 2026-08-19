@@ -4,10 +4,10 @@ import * as os from 'os';
 import * as path from 'path';
 import { promisify } from 'util';
 import type { Source, Package, Artifact, ResolvedRevision, ResolvedArtifact } from '../domain/types';
-import type { CanonicalSkill, CanonicalAgent } from '../adapters/types';
+import type { CanonicalSkill, CanonicalAgent, CanonicalCommand } from '../adapters/types';
 import type { SourceResolution } from './types';
 import { readSkill } from '../adapters/codec';
-import { parseClaudeAgentMarkdown } from '../adapters/claude';
+import { parseClaudeAgentMarkdown, parseClaudeCommandMarkdown } from '../adapters/claude';
 import { findSkillDirs, findAgentFiles } from './detect';
 
 const execFileAsync = promisify(child_process.execFile);
@@ -79,7 +79,7 @@ async function getDefaultBranch(cwd: string): Promise<string> {
 }
 
 /**
- * Resolves a `Source` of type `git-custom` detecting both skills and agents.
+ * Resolves a `Source` of type `git-custom` detecting skills and agents.
  */
 export async function resolveGitCustom(
   source: Source,
@@ -201,14 +201,14 @@ export async function resolveGitCustom(
 }
 
 /**
- * Resolves content for a skill or agent artifact from a git-custom source.
+ * Resolves content for a skill, agent, or command artifact from a git-custom source.
  */
 export async function resolveArtifactContent(
   source: Source,
   pkg: Package,
   artifact: Artifact,
   opts?: GitCustomResolveOptions
-): Promise<ResolvedArtifact<CanonicalSkill | CanonicalAgent>> {
+): Promise<ResolvedArtifact<CanonicalSkill | CanonicalAgent | CanonicalCommand>> {
   if (source.type !== 'git-custom') {
     throw new Error(`Expected source.type === "git-custom", got "${source.type}"`);
   }
@@ -258,18 +258,40 @@ export async function resolveArtifactContent(
       const candidate3 = path.join(targetDir, 'agents', `${artifact.name}.md`);
 
       let agentFile = '';
-      if (fs.existsSync(candidate1) && fs.statSync(candidate1).isFile()) {
-        agentFile = candidate1;
-      } else if (fs.existsSync(candidate2)) {
-        agentFile = candidate2;
-      } else if (fs.existsSync(candidate3)) {
-        agentFile = candidate3;
-      } else {
+      for (const cand of [candidate1, candidate2, candidate3]) {
+        if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
+          agentFile = cand;
+          break;
+        }
+      }
+      if (!agentFile) {
         throw new Error(`Cannot locate agent file for "${artifact.name}" in "${targetDir}"`);
       }
 
       const raw = await fs.promises.readFile(agentFile, 'utf-8');
       const content = parseClaudeAgentMarkdown(raw);
+      return { artifact, content };
+    }
+
+    if (artifact.kind === 'command') {
+      const candidate1 = path.join(targetDir, pathId);
+      const candidate2 = path.join(targetDir, `${artifact.name}.md`);
+      const candidate3 = path.join(targetDir, 'commands', `${artifact.name}.md`);
+      const candidate4 = path.join(targetDir, 'command', `${artifact.name}.md`);
+
+      let cmdFile = '';
+      for (const cand of [candidate1, candidate2, candidate3, candidate4]) {
+        if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
+          cmdFile = cand;
+          break;
+        }
+      }
+      if (!cmdFile) {
+        throw new Error(`Cannot locate command file for "${artifact.name}" in "${targetDir}"`);
+      }
+
+      const raw = await fs.promises.readFile(cmdFile, 'utf-8');
+      const content = parseClaudeCommandMarkdown(raw, artifact.name);
       return { artifact, content };
     }
 
