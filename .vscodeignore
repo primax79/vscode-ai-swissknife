@@ -1,0 +1,10 @@
+.vscode/**
+.kilo/**
+references/**
+src/**
+tasks/**
+out/**
+esbuild.config.js
+tsconfig.json
+SPEC.md
+.eslintrc.json
