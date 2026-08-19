@@ -4,6 +4,7 @@ import { readManifest, fromDesiredSource } from '../domain/registry';
 import { scanInstalledInventory, promoteObservedArtifact } from '../engine/discovery';
 import { analyzeLocalDrift, checkForUpstreamUpdate } from '../engine/drift';
 import type { DriftReport } from '../engine/types';
+import { FormEditorPanel } from './formEditor';
 
 export class DashboardPanel {
   public static currentPanel: DashboardPanel | undefined;
@@ -40,6 +41,25 @@ export class DashboardPanel {
               }
               vscode.window.showInformationMessage(`Promoted ${count} identical item(s) to managed installations.`);
               await this.update();
+            }
+            break;
+          case 'edit':
+            if (message.installation) {
+              const inst = message.installation as ManagedInstallation;
+              await FormEditorPanel.open(
+                {
+                  mode: 'edit',
+                  assistant: inst.assistant,
+                  scope: inst.scope,
+                  projectRoot: inst.projectPath,
+                  kind: inst.kind,
+                  name: inst.name,
+                  sourceInstallation: inst,
+                },
+                () => {
+                  this.update();
+                }
+              );
             }
             break;
         }
@@ -147,7 +167,7 @@ export class DashboardPanel {
     const reportMap = new Map(reports.map((r) => [`${r.installation.assistant}:${r.installation.scope}:${r.installation.name}`, r]));
 
     const managedRows = managed
-      .map((inst) => {
+      .map((inst, idx) => {
         const report = reportMap.get(`${inst.assistant}:${inst.scope}:${inst.name}`);
         const status = report?.status ?? 'up-to-date';
         const badgeClass =
@@ -168,7 +188,9 @@ export class DashboardPanel {
           <td>${inst.assistant}</td>
           <td><span class="scope-pill scope-${inst.scope}">${inst.scope}</span></td>
           <td><span class="badge ${badgeClass}">${status}</span></td>
-          <td><code class="path-cell">${inst.path}</code></td>
+          <td>
+            <button class="btn btn-sm btn-secondary" onclick="editItem(${idx})">Edit</button>
+          </td>
         </tr>
       `;
       })
@@ -445,7 +467,7 @@ export class DashboardPanel {
         <th>Assistant</th>
         <th>Scope</th>
         <th>Drift / Status</th>
-        <th>Path</th>
+        <th>Action</th>
       </tr>
     </thead>
     <tbody id="managedTable">
@@ -485,12 +507,18 @@ export class DashboardPanel {
 
   <script>
     const vscode = acquireVsCodeApi();
+    const managedData = ${JSON.stringify(managed)};
     const observedData = ${JSON.stringify(observed)};
 
     let currentKind = 'all';
 
     function refreshState() {
       vscode.postMessage({ command: 'refresh' });
+    }
+
+    function editItem(index) {
+      const item = managedData[index];
+      vscode.postMessage({ command: 'edit', installation: item });
     }
 
     function promoteItem(index) {

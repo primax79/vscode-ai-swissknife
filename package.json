@@ -113,6 +113,18 @@
         "category": "AI Swissknife"
       },
       {
+        "command": "aiSwissknife.createArtifact",
+        "title": "Create New Artifact",
+        "icon": "$(new-file)",
+        "category": "AI Swissknife"
+      },
+      {
+        "command": "aiSwissknife.editArtifact",
+        "title": "Edit Artifact",
+        "icon": "$(edit)",
+        "category": "AI Swissknife"
+      },
+      {
         "command": "aiSwissknife.openDashboard",
         "title": "Open Dashboard",
         "icon": "$(dashboard)",
@@ -123,7 +135,17 @@
       "view/title": [
         {
           "command": "aiSwissknife.openDashboard",
-          "when": "view == aiSwissknife.sources || view == aiSwissknife.available || view == aiSwissknife.installed",
+          "when": "view == aiSwissknife.sources",
+          "group": "navigation@0"
+        },
+        {
+          "command": "aiSwissknife.openDashboard",
+          "when": "view == aiSwissknife.available",
+          "group": "navigation@0"
+        },
+        {
+          "command": "aiSwissknife.openDashboard",
+          "when": "view == aiSwissknife.installed",
           "group": "navigation@0"
         },
         {
@@ -142,14 +164,19 @@
           "group": "navigation@1"
         },
         {
-          "command": "aiSwissknife.checkDrift",
+          "command": "aiSwissknife.createArtifact",
           "when": "view == aiSwissknife.installed",
           "group": "navigation@1"
         },
         {
-          "command": "aiSwissknife.refreshInstalled",
+          "command": "aiSwissknife.checkDrift",
           "when": "view == aiSwissknife.installed",
           "group": "navigation@2"
+        },
+        {
+          "command": "aiSwissknife.refreshInstalled",
+          "when": "view == aiSwissknife.installed",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
@@ -172,6 +199,16 @@
           "command": "aiSwissknife.updateItem",
           "when": "view == aiSwissknife.installed && viewItem == installedInstallation",
           "group": "inline@1"
+        },
+        {
+          "command": "aiSwissknife.editArtifact",
+          "when": "view == aiSwissknife.installed && viewItem == installedInstallation",
+          "group": "inline@2"
+        },
+        {
+          "command": "aiSwissknife.editArtifact",
+          "when": "view == aiSwissknife.installed && viewItem == observedArtifactItem",
+          "group": "inline@2"
         },
         {
           "command": "aiSwissknife.promoteItem",

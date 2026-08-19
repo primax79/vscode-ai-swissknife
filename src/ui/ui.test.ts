@@ -87,6 +87,7 @@ import {
 import { InstalledTreeDataProvider, InstalledGroupItem, InstalledInstallationItem } from './installedView';
 import { setupFileWatchers } from './watchers';
 import { DashboardPanel } from './dashboard';
+import { FormEditorPanel } from './formEditor';
 
 describe('UI TreeDataProviders', () => {
   let testTempDir: string;
@@ -370,6 +371,32 @@ describe('UI TreeDataProviders', () => {
       assert.ok(html.includes('AI Swissknife Dashboard'));
       assert.ok(html.includes('demo-skill'));
       assert.ok(html.includes('claude-code'));
+      panel.dispose();
+    });
+  });
+
+  describe('FormEditorPanel', () => {
+    it('renders form editor HTML for skill, agent, command, and mcp-server', async () => {
+      const panel = await FormEditorPanel.open({
+        mode: 'create',
+        assistant: 'kilo-code',
+        scope: 'project',
+        kind: 'agent',
+      });
+      assert.ok(panel);
+
+      const html = panel.getHtml({
+        name: 'test-agent',
+        description: 'Testing form editor',
+        mode: 'subagent',
+        tools: ['read', 'edit'],
+        body: '# Test Agent\nInstructions here.',
+      });
+
+      assert.ok(html.includes('Create agent'));
+      assert.ok(html.includes('test-agent'));
+      assert.ok(html.includes('kilo-code'));
+      assert.ok(html.includes('subagent'));
       panel.dispose();
     });
   });
