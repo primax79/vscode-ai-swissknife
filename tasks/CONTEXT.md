@@ -141,7 +141,7 @@ review, `_inbox/analyzed/codex-analysis-2.md` — don't let it drift again).
   original document verbatim (comments/anchors/quoting style) when the
   implementation doesn't actually do that. *Why:* SPEC.md §7 / Codex
   review finding B6 — don't overclaim a guarantee the code doesn't meet.
-- **`rule` is deferred to Phase 2 for the resolver/install/UI path** — the
+- **`rule` is deferred past Phase 1 for the resolver/install/UI path** — the
   Claude/Kilo `rule` *adapters* stay as already built (dormant, unused by
   any resolver yet), but no resolver discovers a `rule` `Artifact` and no
   install-engine/UI task exposes installing one in Phase 1. *Why:* SPEC.md
@@ -150,7 +150,11 @@ review, `_inbox/analyzed/codex-analysis-2.md` — don't let it drift again).
   shared document, not something to overwrite wholesale) that doesn't
   exist yet; claiming rule as "validated by the vertical slice" when
   nothing actually exercises it end-to-end would be dishonest about what
-  Phase 1 proved.
+  Phase 1 proved. **Update 2026-08-19**: this stayed dormant through Phase
+  2 and 3 too (never actually closed despite the earlier "Phase 2" label) —
+  it's now scheduled as initiative 19 (`specs/phase-4-spec.md` §5), which
+  defines the merge policy (demarcated managed block, append-or-replace,
+  never touching surrounding content) that unblocks it.
 
 ## Conventions
 
