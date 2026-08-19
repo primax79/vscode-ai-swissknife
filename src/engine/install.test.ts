@@ -126,7 +126,7 @@ describe('Install Engine — planInstall and applyInstall', () => {
       });
 
       assert.strictEqual(prepared.supported, true);
-      if (prepared.supported) {
+      if (prepared.supported && prepared.kind === 'skill') {
         assert.strictEqual(prepared.plan.conflict, false);
         assert.strictEqual(prepared.plan.existingFiles.length, 0);
         assert.strictEqual(prepared.plan.proposedFiles.length, 2);
@@ -218,6 +218,54 @@ describe('Install Engine — planInstall and applyInstall', () => {
         assert.strictEqual(prepared.content.agent, 'devops');
         assert.strictEqual(prepared.plan.proposedFiles.length, 1);
         assert.strictEqual(prepared.plan.proposedFiles[0].path, 'deploy.md');
+      }
+    });
+
+    it('plans mcp-server install for Claude and Kilo', async () => {
+      const mcpFolder = path.join(testTempDir, 'src-mcp-folder');
+      await fs.promises.mkdir(mcpFolder, { recursive: true });
+      await fs.promises.writeFile(
+        path.join(mcpFolder, 'mcp.json'),
+        JSON.stringify({
+          mcpServers: {
+            sqlite: {
+              command: 'uvx',
+              args: ['mcp-server-sqlite'],
+            },
+          },
+        }),
+        'utf-8'
+      );
+
+      const source: Source = {
+        id: 'src-mcp',
+        type: 'local-folder',
+        scope: 'project',
+        localPath: mcpFolder,
+      };
+      const pkg: Package = { id: 'src-mcp:sqlite', sourceId: 'src-mcp', nativeFormat: 'mcp-config', artifacts: [] };
+      const artifact: Artifact = {
+        id: 'src-mcp:sqlite:sqlite',
+        packageId: 'src-mcp:sqlite',
+        kind: 'mcp-server',
+        name: 'sqlite',
+        nativeFormat: 'mcp-config',
+      };
+
+      const prepared = await planInstall({
+        source,
+        pkg,
+        artifact,
+        targetAdapter: claudeAdapter,
+        targetScope: 'project',
+        projectRoot: testTempDir,
+      });
+
+      assert.strictEqual(prepared.supported, true);
+      if (prepared.supported && prepared.kind === 'mcp-server') {
+        assert.strictEqual(prepared.content.id, 'sqlite');
+        assert.strictEqual(prepared.content.command, 'uvx');
+        assert.strictEqual(prepared.plan.conflict, false);
       }
     });
 
@@ -409,6 +457,70 @@ describe('Install Engine — planInstall and applyInstall', () => {
         assert.strictEqual(state.installations.length, 1);
         assert.strictEqual(state.installations[0].name, 'deploy');
         assert.strictEqual(state.installations[0].kind, 'command');
+      }
+    });
+
+    it('applies mcp-server install into config file and updates state', async () => {
+      const mcpFolder = path.join(testTempDir, 'src-mcp-folder');
+      await fs.promises.mkdir(mcpFolder, { recursive: true });
+      await fs.promises.writeFile(
+        path.join(mcpFolder, 'mcp.json'),
+        JSON.stringify({
+          mcpServers: {
+            sqlite: {
+              command: 'uvx',
+              args: ['mcp-server-sqlite'],
+            },
+          },
+        }),
+        'utf-8'
+      );
+
+      const source: Source = {
+        id: 'src-mcp',
+        type: 'local-folder',
+        scope: 'project',
+        localPath: mcpFolder,
+      };
+      const pkg: Package = { id: 'src-mcp:sqlite', sourceId: 'src-mcp', nativeFormat: 'mcp-config', artifacts: [] };
+      const artifact: Artifact = {
+        id: 'src-mcp:sqlite:sqlite',
+        packageId: 'src-mcp:sqlite',
+        kind: 'mcp-server',
+        name: 'sqlite',
+        nativeFormat: 'mcp-config',
+      };
+
+      const prepared: PreparedInstall = await planInstall({
+        source,
+        pkg,
+        artifact,
+        targetAdapter: kiloAdapter,
+        targetScope: 'project',
+        projectRoot: testTempDir,
+      });
+
+      assert.strictEqual(prepared.supported, true);
+
+      const outcome = await applyInstall(prepared, testHomeDir);
+      assert.strictEqual(outcome.status, 'applied');
+
+      if (outcome.status === 'applied') {
+        assert.strictEqual(outcome.installation.name, 'sqlite');
+        assert.strictEqual(outcome.installation.kind, 'mcp-server');
+
+        const loaded = await kiloAdapter.readMcpServer('sqlite', {
+          scope: 'project',
+          projectRoot: testTempDir,
+        });
+        assert.ok(loaded);
+        assert.strictEqual(loaded.id, 'sqlite');
+        assert.strictEqual(loaded.command, 'uvx');
+
+        const state = await readState('project', testTempDir, testHomeDir);
+        assert.strictEqual(state.installations.length, 1);
+        assert.strictEqual(state.installations[0].name, 'sqlite');
+        assert.strictEqual(state.installations[0].kind, 'mcp-server');
       }
     });
 

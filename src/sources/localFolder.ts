@@ -1,7 +1,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import type { Source, Package, Artifact, ResolvedArtifact } from '../domain/types';
-import type { CanonicalSkill, CanonicalAgent, CanonicalCommand } from '../adapters/types';
+import type {
+  CanonicalSkill,
+  CanonicalAgent,
+  CanonicalCommand,
+  CanonicalMcpServer,
+} from '../adapters/types';
 import type { SourceResolution } from './types';
 import { readSkill } from '../adapters/codec';
 import { parseClaudeAgentMarkdown, parseClaudeCommandMarkdown } from '../adapters/claude';
@@ -114,13 +119,13 @@ export async function resolveLocalFolder(source: Source): Promise<SourceResoluti
 }
 
 /**
- * Resolves content for a skill, agent, or command artifact from a local-folder source.
+ * Resolves content for a skill, agent, command, or mcp-server artifact from a local-folder source.
  */
 export async function resolveArtifactContent(
   source: Source,
   pkg: Package,
   artifact: Artifact
-): Promise<ResolvedArtifact<CanonicalSkill | CanonicalAgent | CanonicalCommand>> {
+): Promise<ResolvedArtifact<CanonicalSkill | CanonicalAgent | CanonicalCommand | CanonicalMcpServer>> {
   if (source.type !== 'local-folder') {
     throw new Error(`Expected source.type === "local-folder", got "${source.type}"`);
   }
@@ -193,6 +198,45 @@ export async function resolveArtifactContent(
 
     const raw = await fs.promises.readFile(cmdFile, 'utf-8');
     const content = parseClaudeCommandMarkdown(raw, artifact.name);
+    return { artifact, content };
+  }
+
+  if (artifact.kind === 'mcp-server') {
+    const candidate1 = path.join(source.localPath, 'mcp.json');
+    const candidate2 = path.join(source.localPath, '.mcp.json');
+    const candidate3 = path.join(source.localPath, 'mcps', `${artifact.name}.json`);
+    const candidate4 = path.join(source.localPath, pathId);
+
+    let raw = '';
+    for (const cand of [candidate1, candidate2, candidate3, candidate4]) {
+      if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
+        raw = await fs.promises.readFile(cand, 'utf-8');
+        break;
+      }
+    }
+    if (!raw) {
+      throw new Error(`Cannot locate MCP server definition for "${artifact.name}" in "${source.localPath}"`);
+    }
+
+    const parsed = JSON.parse(raw);
+    const serverConfig = (parsed.mcpServers?.[artifact.name] ?? parsed.mcp?.[artifact.name] ?? parsed) as Record<string, unknown>;
+    const extraFields: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(serverConfig)) {
+      if (!['id', 'type', 'command', 'args', 'url', 'env', 'headers'].includes(k)) {
+        extraFields[k] = v;
+      }
+    }
+
+    const content: CanonicalMcpServer = {
+      id: artifact.name,
+      type: (serverConfig.type as 'stdio' | 'http' | 'sse') ?? (serverConfig.command ? 'stdio' : 'sse'),
+      ...(serverConfig.command ? { command: String(serverConfig.command) } : {}),
+      ...(Array.isArray(serverConfig.args) ? { args: serverConfig.args.map(String) } : {}),
+      ...(serverConfig.url ? { url: String(serverConfig.url) } : {}),
+      ...(serverConfig.env ? { env: serverConfig.env as Record<string, string> } : {}),
+      ...(serverConfig.headers ? { headers: serverConfig.headers as Record<string, string> } : {}),
+      extraFields,
+    };
     return { artifact, content };
   }
 

@@ -6,6 +6,7 @@ import {
   canonicalSkillHash,
   canonicalAgentHash,
   canonicalCommandHash,
+  canonicalMcpServerHash,
   readSkill,
   writeSkill,
 } from '../adapters/codec';
@@ -14,12 +15,14 @@ import {
   parseClaudeAgentMarkdown,
   serializeClaudeCommandMarkdown,
   parseClaudeCommandMarkdown,
+  claudeAdapter,
 } from '../adapters/claude';
 import {
   serializeKiloAgentMarkdown,
   parseKiloAgentMarkdown,
   serializeKiloCommandMarkdown,
   parseKiloCommandMarkdown,
+  kiloAdapter,
 } from '../adapters/kilo';
 import { readState, writeState } from '../domain/registry';
 import type { PreparedInstall, ApplyOutcome } from './types';
@@ -41,6 +44,156 @@ export async function applyInstall(
   }
 
   const plan = prepared.plan;
+
+  // --- MCP-SERVER KIND APPLY ---
+  if (prepared.kind === 'mcp-server') {
+    const mcp = prepared.content;
+    const recomputedHash = canonicalMcpServerHash(mcp);
+    if (recomputedHash !== prepared.contentHash) {
+      return {
+        status: 'refused',
+        reason: 'MCP server content was mutated after preview (hash mismatch)',
+      };
+    }
+
+    const adapter = plan.targetAssistant === 'claude-code' ? claudeAdapter : kiloAdapter;
+    const targetFilePath = plan.targetDir;
+    const randomId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const backupPath = `${targetFilePath}.backup-${randomId}`;
+
+    let backupCreated = false;
+    try {
+      if (fs.existsSync(targetFilePath)) {
+        await fs.promises.copyFile(targetFilePath, backupPath);
+        backupCreated = true;
+      }
+      await adapter.writeMcpServer(mcp, {
+        scope: plan.targetScope,
+        projectRoot: plan.projectRoot,
+      });
+    } catch (writeErr: unknown) {
+      const msg = writeErr instanceof Error ? writeErr.message : String(writeErr);
+      if (backupCreated) {
+        try {
+          await fs.promises.copyFile(backupPath, targetFilePath);
+          await fs.promises.unlink(backupPath);
+          return { status: 'rolled-back', reason: `MCP write failed and restored from backup: ${msg}` };
+        } catch {
+          return {
+            status: 'manual-recovery-required',
+            reason: `MCP write failed and backup restore failed: ${msg}`,
+            paths: [targetFilePath, backupPath],
+          };
+        }
+      }
+      return { status: 'refused', reason: `MCP write failed: ${msg}` };
+    }
+
+    // Final verification
+    try {
+      const verified = await adapter.readMcpServer(mcp.id, {
+        scope: plan.targetScope,
+        projectRoot: plan.projectRoot,
+      });
+      const vHash = verified ? canonicalMcpServerHash(verified) : '';
+      if (!verified || vHash !== prepared.contentHash) {
+        console.error('MCP MISMATCH DETAIL:', {
+          vHash,
+          pHash: prepared.contentHash,
+          verified,
+          prepared: prepared.content,
+        });
+        throw new Error(`Final MCP server verification hash mismatch: verifiedHash=${vHash} vs preparedHash=${prepared.contentHash}`);
+      }
+    } catch (verifyErr: unknown) {
+      const msg = verifyErr instanceof Error ? verifyErr.message : String(verifyErr);
+      if (backupCreated) {
+        try {
+          await fs.promises.copyFile(backupPath, targetFilePath);
+          await fs.promises.unlink(backupPath);
+          return { status: 'rolled-back', reason: `Final MCP verification failed and restored: ${msg}` };
+        } catch {
+          return {
+            status: 'manual-recovery-required',
+            reason: `Final MCP verification failed and restore failed: ${msg}`,
+            paths: [targetFilePath, backupPath],
+          };
+        }
+      }
+      return { status: 'rolled-back', reason: `Final MCP verification failed: ${msg}` };
+    }
+
+    // State persistence
+    const installation: ManagedInstallation = {
+      assistant: plan.targetAssistant,
+      scope: plan.targetScope,
+      projectPath: plan.projectRoot,
+      kind: 'mcp-server',
+      name: mcp.id,
+      path: targetFilePath,
+      sourceId: plan.sourceId,
+      packageId: plan.packageId,
+      artifactId: plan.artifactId,
+      sourceRevision: plan.sourceRevision,
+      installedAt: new Date().toISOString(),
+      contentHash: prepared.contentHash,
+    };
+
+    try {
+      const state = await readState(plan.targetScope, plan.projectRoot, homeRoot);
+      const filtered = state.installations.filter(
+        (inst) =>
+          !(
+            inst.assistant === plan.targetAssistant &&
+            inst.scope === plan.targetScope &&
+            inst.projectPath === plan.projectRoot &&
+            inst.path === targetFilePath &&
+            inst.name === mcp.id
+          )
+      );
+      filtered.push(installation);
+
+      await writeState(
+        plan.targetScope,
+        {
+          schemaVersion: state.schemaVersion,
+          installations: filtered,
+        },
+        plan.projectRoot,
+        homeRoot
+      );
+    } catch (stateErr: unknown) {
+      const msg = stateErr instanceof Error ? stateErr.message : String(stateErr);
+      if (backupCreated) {
+        try {
+          await fs.promises.copyFile(backupPath, targetFilePath);
+          await fs.promises.unlink(backupPath);
+          return { status: 'rolled-back', reason: `State persistence failed and restored config: ${msg}` };
+        } catch {
+          return {
+            status: 'manual-recovery-required',
+            reason: `State persistence failed and rollback failed: ${msg}`,
+            paths: [targetFilePath, backupPath],
+          };
+        }
+      }
+      return { status: 'rolled-back', reason: `State persistence failed: ${msg}` };
+    }
+
+    // Cleanup backup
+    if (backupCreated) {
+      try {
+        await fs.promises.unlink(backupPath);
+      } catch {
+        // ignore
+      }
+    }
+
+    return {
+      status: 'applied',
+      installation,
+    };
+  }
 
   // --- COMMAND KIND APPLY ---
   if (prepared.kind === 'command') {
@@ -788,7 +941,7 @@ export async function applyInstall(
     } catch {
       return {
         status: 'manual-recovery-required',
-        reason: `State persistence failed and filesystem rollback failed: ${msg}`,
+        reason: `State persistence failed and rollback failed: ${msg}`,
         paths: [targetDir, backupDir].filter((p) => fs.existsSync(p)),
       };
     }

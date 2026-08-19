@@ -495,6 +495,13 @@ export class KiloAdapter implements Adapter {
       if (!conf) return null;
 
       const type: 'stdio' | 'http' | 'sse' = conf.type ?? (conf.command ? 'stdio' : 'sse');
+      const extraFields: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(conf)) {
+        if (!['id', 'type', 'command', 'args', 'url', 'env', 'headers'].includes(k)) {
+          extraFields[k] = v;
+        }
+      }
+
       return {
         id,
         type,
@@ -503,9 +510,12 @@ export class KiloAdapter implements Adapter {
         ...(conf.url ? { url: conf.url } : {}),
         ...(conf.env ? { env: conf.env } : {}),
         ...(conf.headers ? { headers: conf.headers } : {}),
-        extraFields: { ...conf },
+        extraFields,
       };
-    } catch {
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+        console.error('DEBUG KILO READ MCP ERROR:', err);
+      }
       return null;
     }
   }
@@ -537,7 +547,7 @@ export class KiloAdapter implements Adapter {
 
     if (server.extraFields) {
       for (const [k, v] of Object.entries(server.extraFields)) {
-        if (!entry[k] && k !== 'id') {
+        if (!['id', 'type', 'command', 'args', 'url', 'env', 'headers'].includes(k)) {
           entry[k] = v;
         }
       }

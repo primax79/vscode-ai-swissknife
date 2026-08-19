@@ -352,10 +352,11 @@ export class AvailableTreeDataProvider
     }
 
     const plan = prepared.plan;
+    const itemName = prepared.kind === 'mcp-server' ? prepared.content.id : prepared.content.name;
 
     if (plan.conflict) {
       const conflictChoice = await vscode.window.showWarningMessage(
-        `${artifact.kind} "${prepared.content.name}" already exists at "${plan.targetDir}". Overwrite existing installation?`,
+        `${artifact.kind} "${itemName}" already exists at "${plan.targetDir}". Overwrite existing installation?`,
         { modal: true },
         'Overwrite'
       );
@@ -364,7 +365,7 @@ export class AvailableTreeDataProvider
       }
     }
 
-    const confirmMessage = `Install ${artifact.kind} "${prepared.content.name}" to ${targetAssistant} (${targetScope})?\nTarget path: ${plan.targetDir}\nFiles proposed: ${plan.proposedFiles.length} file(s)`;
+    const confirmMessage = `Install ${artifact.kind} "${itemName}" to ${targetAssistant} (${targetScope})?\nTarget path: ${plan.targetDir}\nFiles proposed: ${plan.proposedFiles.length} file(s)`;
     const confirmChoice = await vscode.window.showInformationMessage(
       confirmMessage,
       { modal: true },
@@ -379,7 +380,7 @@ export class AvailableTreeDataProvider
 
     switch (outcome.status) {
       case 'applied': {
-        let msg = `Successfully installed "${prepared.content.name}" to ${targetAssistant} (${targetScope}).`;
+        let msg = `Successfully installed "${itemName}" to ${targetAssistant} (${targetScope}).`;
         if (outcome.warnings && outcome.warnings.length > 0) {
           msg += ` Warnings: ${outcome.warnings.join('; ')}`;
         }
@@ -510,10 +511,11 @@ export class AvailableTreeDataProvider
     for (const prepared of preparedList) {
       if (!prepared.supported) continue;
       const outcome = await applyInstall(prepared);
+      const itemName = prepared.kind === 'mcp-server' ? prepared.content.id : prepared.content.name;
       if (outcome.status === 'applied') {
         appliedCount++;
       } else {
-        failedNames.push(`${prepared.content.name} (${outcome.status})`);
+        failedNames.push(`${itemName} (${outcome.status})`);
       }
     }
 
