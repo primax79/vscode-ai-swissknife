@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import type { CanonicalRule } from '../adapters/types';
+import type { AssistantId } from '../domain/types';
 import { translateRule } from './rule';
 
 function getRealRuleFixturePath(): string {
@@ -26,33 +27,29 @@ describe('translateRule', () => {
   const rawContent = fs.readFileSync(fixturePath, 'utf-8');
   const realCanonicalRule: CanonicalRule = { content: rawContent };
 
-  it('translates Claude -> Kilo losslessly with unchanged content using real rule fixture', () => {
+  it('translates to claude-code and kilo-code losslessly with unchanged content', () => {
     assert.ok(realCanonicalRule.content.length > 0);
 
-    const result = translateRule(realCanonicalRule, 'claude-code', 'kilo-code');
+    const claudeResult = translateRule(realCanonicalRule, 'claude-code');
+    assert.strictEqual(claudeResult.overall, 'lossless');
+    assert.deepStrictEqual(claudeResult.diagnostics, []);
+    assert.deepStrictEqual(claudeResult.value, realCanonicalRule);
 
-    assert.strictEqual(result.diagnostic, 'lossless');
-    assert.deepStrictEqual(result.notes, []);
-    assert.deepStrictEqual(result.value, realCanonicalRule);
+    const kiloResult = translateRule(realCanonicalRule, 'kilo-code');
+    assert.strictEqual(kiloResult.overall, 'lossless');
+    assert.deepStrictEqual(kiloResult.diagnostics, []);
+    assert.deepStrictEqual(kiloResult.value, realCanonicalRule);
   });
 
-  it('translates Kilo -> Claude losslessly with unchanged content using real rule fixture', () => {
-    const result = translateRule(realCanonicalRule, 'kilo-code', 'claude-code');
+  it('returns unsupported for non-Phase-1 target assistants', () => {
+    const unsupportedTargets: AssistantId[] = ['github-copilot', 'codex-cli', 'gemini-cli'];
 
-    assert.strictEqual(result.diagnostic, 'lossless');
-    assert.deepStrictEqual(result.notes, []);
-    assert.deepStrictEqual(result.value, realCanonicalRule);
-  });
-
-  it('short-circuits same-assistant translation explicitly as lossless (claude-code -> claude-code and kilo-code -> kilo-code)', () => {
-    const claudeToClaude = translateRule(realCanonicalRule, 'claude-code', 'claude-code');
-    assert.strictEqual(claudeToClaude.diagnostic, 'lossless');
-    assert.deepStrictEqual(claudeToClaude.notes, []);
-    assert.deepStrictEqual(claudeToClaude.value, realCanonicalRule);
-
-    const kiloToKilo = translateRule(realCanonicalRule, 'kilo-code', 'kilo-code');
-    assert.strictEqual(kiloToKilo.diagnostic, 'lossless');
-    assert.deepStrictEqual(kiloToKilo.notes, []);
-    assert.deepStrictEqual(kiloToKilo.value, realCanonicalRule);
+    for (const target of unsupportedTargets) {
+      const result = translateRule(realCanonicalRule, target);
+      assert.strictEqual(result.overall, 'unsupported');
+      assert.strictEqual(result.diagnostics.length, 1);
+      assert.strictEqual(result.diagnostics[0].code, 'unsupported-target');
+      assert.strictEqual(result.diagnostics[0].severity, 'error');
+    }
   });
 });
