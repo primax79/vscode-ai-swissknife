@@ -6,7 +6,7 @@ import {
   AvailableFolderItem,
   AvailableSourceGroupItem,
 } from './ui/availableView';
-import { InstalledTreeDataProvider } from './ui/installedView';
+import { InstalledTreeDataProvider, InstalledInstallationItem } from './ui/installedView';
 
 export function activate(context: vscode.ExtensionContext) {
   const sourcesProvider = new SourcesTreeDataProvider();
@@ -36,6 +36,10 @@ export function activate(context: vscode.ExtensionContext) {
     ),
     vscode.commands.registerCommand('aiSwissknife.installSourceGroup', (item?: AvailableSourceGroupItem) =>
       availableProvider.installSourceGroup(item)
+    ),
+    vscode.commands.registerCommand('aiSwissknife.checkDrift', () => installedProvider.checkDrift()),
+    vscode.commands.registerCommand('aiSwissknife.updateItem', (item?: InstalledInstallationItem) =>
+      installedProvider.updateInstallation(item)
     ),
     vscode.commands.registerCommand('aiSwissknife.refreshInstalled', () => installedProvider.refresh())
   );

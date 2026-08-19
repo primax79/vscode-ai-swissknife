@@ -93,6 +93,18 @@
         "title": "Refresh Installed",
         "icon": "$(refresh)",
         "category": "AI Swissknife"
+      },
+      {
+        "command": "aiSwissknife.checkDrift",
+        "title": "Check Drift & Updates",
+        "icon": "$(sync)",
+        "category": "AI Swissknife"
+      },
+      {
+        "command": "aiSwissknife.updateItem",
+        "title": "Update to Latest Version",
+        "icon": "$(arrow-circle-up)",
+        "category": "AI Swissknife"
       }
     ],
     "menus": {
@@ -113,9 +125,14 @@
           "group": "navigation@1"
         },
         {
-          "command": "aiSwissknife.refreshInstalled",
+          "command": "aiSwissknife.checkDrift",
           "when": "view == aiSwissknife.installed",
           "group": "navigation@1"
+        },
+        {
+          "command": "aiSwissknife.refreshInstalled",
+          "when": "view == aiSwissknife.installed",
+          "group": "navigation@2"
         }
       ],
       "view/item/context": [
@@ -132,6 +149,11 @@
         {
           "command": "aiSwissknife.installSourceGroup",
           "when": "view == aiSwissknife.available && viewItem == availableSourceGroup",
+          "group": "inline@1"
+        },
+        {
+          "command": "aiSwissknife.updateItem",
+          "when": "view == aiSwissknife.installed && viewItem == installedInstallation",
           "group": "inline@1"
         },
         {
