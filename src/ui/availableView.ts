@@ -1,3 +1,4 @@
+import * as path from 'path';
 import * as vscode from 'vscode';
 import type { Source, Package, Artifact, AssistantId, Scope } from '../domain/types';
 import type { DetectionDiagnostic, SourceResolution } from '../sources/types';
@@ -8,10 +9,12 @@ import { ClaudeAdapter } from '../adapters/claude';
 import { KiloAdapter } from '../adapters/kilo';
 import { planInstall } from '../engine/plan';
 import { applyInstall } from '../engine/apply';
+import type { PreparedInstall } from '../engine/types';
 import { getWorkspaceRoot } from './workspacePicker';
 
 export type AvailableTreeItem =
   | AvailableSourceGroupItem
+  | AvailableFolderItem
   | AvailableArtifactItem
   | DiagnosticTreeItem;
 
@@ -20,6 +23,27 @@ export class AvailableSourceGroupItem {
     public readonly source: Source,
     public readonly resolution: SourceResolution
   ) {}
+}
+
+export class AvailableFolderItem {
+  constructor(
+    public readonly source: Source,
+    public readonly folderPath: string,
+    public readonly label: string,
+    public readonly items: Array<AvailableFolderItem | AvailableArtifactItem>
+  ) {}
+
+  getAllArtifacts(): AvailableArtifactItem[] {
+    const result: AvailableArtifactItem[] = [];
+    for (const child of this.items) {
+      if (child instanceof AvailableArtifactItem) {
+        result.push(child);
+      } else if (child instanceof AvailableFolderItem) {
+        result.push(...child.getAllArtifacts());
+      }
+    }
+    return result;
+  }
 }
 
 export class AvailableArtifactItem {
@@ -32,6 +56,90 @@ export class AvailableArtifactItem {
 
 export class DiagnosticTreeItem {
   constructor(public readonly diagnostic: DetectionDiagnostic) {}
+}
+
+interface RawTreeNode {
+  segment: string;
+  folders: Map<string, RawTreeNode>;
+  artifacts: AvailableArtifactItem[];
+}
+
+export function buildHierarchy(
+  source: Source,
+  packages: Package[]
+): Array<AvailableFolderItem | AvailableArtifactItem> {
+  const rootNode: RawTreeNode = {
+    segment: '',
+    folders: new Map(),
+    artifacts: [],
+  };
+
+  for (const pkg of packages) {
+    const prefix = `${source.id}:`;
+    const pathId = pkg.id.startsWith(prefix) ? pkg.id.slice(prefix.length) : pkg.id;
+    const normalized = pathId.split(path.sep).join('/');
+    const parts = normalized.split('/').filter(Boolean);
+
+    // If path is just the skill name (e.g. ['gitignore']), it's at root level
+    // If path is ['_attic', 'skills', 'skill-a'], folder parts are ['_attic', 'skills']
+    const folderParts = parts.length > 1 ? parts.slice(0, -1) : [];
+
+    let current = rootNode;
+    for (const part of folderParts) {
+      if (!current.folders.has(part)) {
+        current.folders.set(part, {
+          segment: part,
+          folders: new Map(),
+          artifacts: [],
+        });
+      }
+      current = current.folders.get(part)!;
+    }
+
+    for (const art of pkg.artifacts) {
+      current.artifacts.push(new AvailableArtifactItem(source, pkg, art));
+    }
+  }
+
+  function convertNode(
+    node: RawTreeNode,
+    parentPath: string
+  ): Array<AvailableFolderItem | AvailableArtifactItem> {
+    const result: Array<AvailableFolderItem | AvailableArtifactItem> = [];
+
+    for (const [segment, childNode] of node.folders.entries()) {
+      // Compact single-child folder chains (e.g. _attic -> skills becomes _attic/skills)
+      let compactedSegment = segment;
+      let targetNode = childNode;
+
+      while (targetNode.folders.size === 1 && targetNode.artifacts.length === 0) {
+        const [nextSegment, nextNode] = targetNode.folders.entries().next().value as [string, RawTreeNode];
+        compactedSegment = `${compactedSegment}/${nextSegment}`;
+        targetNode = nextNode;
+      }
+
+      const currentFolderPath = parentPath
+        ? `${parentPath}/${compactedSegment}`
+        : compactedSegment;
+      const childItems = convertNode(targetNode, currentFolderPath);
+      childItems.push(...targetNode.artifacts);
+
+      result.push(
+        new AvailableFolderItem(
+          source,
+          currentFolderPath,
+          compactedSegment,
+          childItems
+        )
+      );
+    }
+
+    return result;
+  }
+
+  const converted = convertNode(rootNode, '');
+  converted.push(...rootNode.artifacts);
+  return converted;
 }
 
 export class AvailableTreeDataProvider
@@ -132,6 +240,19 @@ export class AvailableTreeDataProvider
       return item;
     }
 
+    if (element instanceof AvailableFolderItem) {
+      const allArts = element.getAllArtifacts();
+      const item = new vscode.TreeItem(
+        element.label,
+        vscode.TreeItemCollapsibleState.Collapsed
+      );
+      item.description = `${allArts.length} skill(s)`;
+      item.contextValue = 'availableFolder';
+      item.iconPath = new vscode.ThemeIcon('folder');
+      item.tooltip = `Folder: ${element.folderPath}\nContains ${allArts.length} skill(s)`;
+      return item;
+    }
+
     if (element instanceof DiagnosticTreeItem) {
       const diag = element.diagnostic;
       const item = new vscode.TreeItem(
@@ -166,7 +287,6 @@ export class AvailableTreeDataProvider
   async getChildren(element?: AvailableTreeItem): Promise<AvailableTreeItem[]> {
     if (!element) {
       if (this.cachedSourceGroups.length === 0) {
-        // Trigger lazy load
         await this.refreshCatalog();
       }
       return this.cachedSourceGroups;
@@ -180,14 +300,15 @@ export class AvailableTreeDataProvider
         children.push(new DiagnosticTreeItem(diag));
       }
 
-      // Packages and artifacts
-      for (const pkg of element.resolution.packages) {
-        for (const art of pkg.artifacts) {
-          children.push(new AvailableArtifactItem(element.source, pkg, art));
-        }
-      }
+      // Hierarchy
+      const hierarchy = buildHierarchy(element.source, element.resolution.packages);
+      children.push(...hierarchy);
 
       return children;
+    }
+
+    if (element instanceof AvailableFolderItem) {
+      return element.items;
     }
 
     return [];
@@ -291,6 +412,133 @@ export class AvailableTreeDataProvider
         );
         break;
       }
+    }
+  }
+
+  async installFolder(folderItem?: AvailableFolderItem): Promise<void> {
+    if (!folderItem) {
+      vscode.window.showWarningMessage('Please select a folder to install.');
+      return;
+    }
+    const artifacts = folderItem.getAllArtifacts();
+    await this.installBatch(artifacts, `folder "${folderItem.label}"`);
+  }
+
+  async installSourceGroup(groupItem?: AvailableSourceGroupItem): Promise<void> {
+    if (!groupItem) {
+      vscode.window.showWarningMessage('Please select a source to install.');
+      return;
+    }
+    const artifacts: AvailableArtifactItem[] = [];
+    for (const pkg of groupItem.resolution.packages) {
+      for (const art of pkg.artifacts) {
+        artifacts.push(new AvailableArtifactItem(groupItem.source, pkg, art));
+      }
+    }
+    await this.installBatch(artifacts, `source "${groupItem.source.name ?? groupItem.source.id}"`);
+  }
+
+  private async installBatch(
+    items: AvailableArtifactItem[],
+    groupLabel: string
+  ): Promise<void> {
+    if (items.length === 0) {
+      vscode.window.showWarningMessage(`No skills found in ${groupLabel}.`);
+      return;
+    }
+
+    const assistantPick = await vscode.window.showQuickPick(['claude-code', 'kilo-code'], {
+      placeHolder: `Select target AI assistant for ${items.length} skill(s)`,
+    });
+    if (!assistantPick) return;
+    const targetAssistant = assistantPick as AssistantId;
+    const targetAdapter = targetAssistant === 'claude-code' ? this.claudeAdapter : this.kiloAdapter;
+
+    const scopePick = await vscode.window.showQuickPick(['project', 'global'], {
+      placeHolder: 'Select installation scope (project or global)',
+    });
+    if (!scopePick) return;
+    const targetScope = scopePick as Scope;
+
+    let projectRoot: string | undefined;
+    if (targetScope === 'project') {
+      projectRoot = await getWorkspaceRoot();
+      if (!projectRoot) return;
+    }
+
+    // Plan all items
+    const preparedList: PreparedInstall[] = [];
+    let supportedCount = 0;
+    let conflictCount = 0;
+
+    for (const item of items) {
+      const prepared = await planInstall({
+        source: item.source,
+        pkg: item.pkg,
+        artifact: item.artifact,
+        targetAdapter,
+        targetScope,
+        projectRoot,
+      });
+      preparedList.push(prepared);
+      if (prepared.supported) {
+        supportedCount++;
+        if (prepared.plan.conflict) {
+          conflictCount++;
+        }
+      }
+    }
+
+    if (supportedCount === 0) {
+      vscode.window.showErrorMessage(`None of the ${items.length} skill(s) could be planned for installation.`);
+      return;
+    }
+
+    // Check conflict policy
+    if (conflictCount > 0) {
+      const conflictChoice = await vscode.window.showWarningMessage(
+        `${conflictCount} of ${supportedCount} skill(s) already exist at target. Overwrite existing installations?`,
+        { modal: true },
+        'Overwrite All'
+      );
+      if (conflictChoice !== 'Overwrite All') {
+        return;
+      }
+    }
+
+    // Modal confirmation
+    const confirmMessage = `Install ${supportedCount} skill(s) from ${groupLabel} to ${targetAssistant} (${targetScope})?`;
+    const confirmChoice = await vscode.window.showInformationMessage(
+      confirmMessage,
+      { modal: true },
+      'Install All'
+    );
+    if (confirmChoice !== 'Install All') {
+      return;
+    }
+
+    let appliedCount = 0;
+    const failedNames: string[] = [];
+
+    for (const prepared of preparedList) {
+      if (!prepared.supported) continue;
+      const outcome = await applyInstall(prepared);
+      if (outcome.status === 'applied') {
+        appliedCount++;
+      } else {
+        failedNames.push(`${prepared.content.name} (${outcome.status})`);
+      }
+    }
+
+    if (appliedCount > 0) {
+      let msg = `Successfully installed ${appliedCount}/${supportedCount} skill(s) to ${targetAssistant} (${targetScope}).`;
+      if (failedNames.length > 0) {
+        msg += ` Failures: ${failedNames.join(', ')}`;
+      }
+      vscode.window.showInformationMessage(msg);
+      this.onInstalledRefreshCallback?.();
+    } else {
+      vscode.window.showErrorMessage(`Failed to install skills. ${failedNames.join(', ')}`);
     }
   }
 }

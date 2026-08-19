@@ -1,6 +1,11 @@
 import * as vscode from 'vscode';
 import { SourcesTreeDataProvider, SourceItem } from './ui/sourcesView';
-import { AvailableTreeDataProvider, AvailableArtifactItem } from './ui/availableView';
+import {
+  AvailableTreeDataProvider,
+  AvailableArtifactItem,
+  AvailableFolderItem,
+  AvailableSourceGroupItem,
+} from './ui/availableView';
 import { InstalledTreeDataProvider } from './ui/installedView';
 
 export function activate(context: vscode.ExtensionContext) {
@@ -25,6 +30,12 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('aiSwissknife.refreshCatalog', () => availableProvider.refreshCatalog()),
     vscode.commands.registerCommand('aiSwissknife.installArtifact', (item?: AvailableArtifactItem) =>
       availableProvider.installArtifact(item)
+    ),
+    vscode.commands.registerCommand('aiSwissknife.installFolder', (item?: AvailableFolderItem) =>
+      availableProvider.installFolder(item)
+    ),
+    vscode.commands.registerCommand('aiSwissknife.installSourceGroup', (item?: AvailableSourceGroupItem) =>
+      availableProvider.installSourceGroup(item)
     ),
     vscode.commands.registerCommand('aiSwissknife.refreshInstalled', () => installedProvider.refresh())
   );

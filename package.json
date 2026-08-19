@@ -77,6 +77,18 @@
         "category": "AI Swissknife"
       },
       {
+        "command": "aiSwissknife.installFolder",
+        "title": "Install All in Folder",
+        "icon": "$(cloud-download)",
+        "category": "AI Swissknife"
+      },
+      {
+        "command": "aiSwissknife.installSourceGroup",
+        "title": "Install All in Source",
+        "icon": "$(cloud-download)",
+        "category": "AI Swissknife"
+      },
+      {
         "command": "aiSwissknife.refreshInstalled",
         "title": "Refresh Installed",
         "icon": "$(refresh)",
@@ -110,6 +122,16 @@
         {
           "command": "aiSwissknife.installArtifact",
           "when": "view == aiSwissknife.available && viewItem == availableArtifact",
+          "group": "inline@1"
+        },
+        {
+          "command": "aiSwissknife.installFolder",
+          "when": "view == aiSwissknife.available && viewItem == availableFolder",
+          "group": "inline@1"
+        },
+        {
+          "command": "aiSwissknife.installSourceGroup",
+          "when": "view == aiSwissknife.available && viewItem == availableSourceGroup",
           "group": "inline@1"
         },
         {

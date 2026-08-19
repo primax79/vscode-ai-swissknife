@@ -16,6 +16,7 @@ Module.prototype.require = function (id: string, ...rest: unknown[]) {
         contextValue?: string;
         tooltip?: string;
         iconPath?: unknown;
+        command?: unknown;
         constructor(public label: string, public collapsibleState?: number) {}
       },
       TreeItemCollapsibleState: {
@@ -51,13 +52,19 @@ Module.prototype.require = function (id: string, ...rest: unknown[]) {
   return originalRequire.apply(this, [id, ...rest]);
 };
 
-import type { ManagedInstallation } from '../domain/types';
+import type { ManagedInstallation, Source, Package } from '../domain/types';
 import {
   writeManifest,
   writeState,
   SCHEMA_VERSION,
 } from '../domain/registry';
 import { SourcesTreeDataProvider, ScopeGroupItem } from './sourcesView';
+import {
+  AvailableTreeDataProvider,
+  AvailableFolderItem,
+  AvailableArtifactItem,
+  buildHierarchy,
+} from './availableView';
 import { InstalledTreeDataProvider, InstalledGroupItem, InstalledInstallationItem } from './installedView';
 
 describe('UI TreeDataProviders', () => {
@@ -119,6 +126,96 @@ describe('UI TreeDataProviders', () => {
       const globalGroup = new ScopeGroupItem('global', 'Global Sources');
       const items = await provider.getChildren(globalGroup);
       assert.ok(Array.isArray(items));
+    });
+  });
+
+  describe('AvailableTreeDataProvider & buildHierarchy', () => {
+    it('builds hierarchy grouping nested skills into compact folder items and root skills', () => {
+      const source: Source = {
+        id: 'gcube-ai-toolkit',
+        type: 'local-folder',
+        scope: 'project',
+      };
+
+      const packages: Package[] = [
+        {
+          id: 'gcube-ai-toolkit:_attic/skills/skill-1',
+          sourceId: 'gcube-ai-toolkit',
+          nativeFormat: 'claude-skill',
+          artifacts: [
+            {
+              id: 'gcube-ai-toolkit:_attic/skills/skill-1:skill-1',
+              packageId: 'gcube-ai-toolkit:_attic/skills/skill-1',
+              kind: 'skill',
+              name: 'skill-1',
+              nativeFormat: 'claude-skill',
+            },
+          ],
+        },
+        {
+          id: 'gcube-ai-toolkit:_attic/skills/skill-2',
+          sourceId: 'gcube-ai-toolkit',
+          nativeFormat: 'claude-skill',
+          artifacts: [
+            {
+              id: 'gcube-ai-toolkit:_attic/skills/skill-2:skill-2',
+              packageId: 'gcube-ai-toolkit:_attic/skills/skill-2',
+              kind: 'skill',
+              name: 'skill-2',
+              nativeFormat: 'claude-skill',
+            },
+          ],
+        },
+        {
+          id: 'gcube-ai-toolkit:root-skill',
+          sourceId: 'gcube-ai-toolkit',
+          nativeFormat: 'claude-skill',
+          artifacts: [
+            {
+              id: 'gcube-ai-toolkit:root-skill:root-skill',
+              packageId: 'gcube-ai-toolkit:root-skill',
+              kind: 'skill',
+              name: 'root-skill',
+              nativeFormat: 'claude-skill',
+            },
+          ],
+        },
+      ];
+
+      const hierarchy = buildHierarchy(source, packages);
+      assert.strictEqual(hierarchy.length, 2); // 1 folder (_attic/skills) + 1 root artifact
+
+      const folderItem = hierarchy.find((h) => h instanceof AvailableFolderItem) as AvailableFolderItem;
+      assert.ok(folderItem);
+      assert.strictEqual(folderItem.label, '_attic/skills');
+      assert.strictEqual(folderItem.items.length, 2);
+
+      const allFolderArtifacts = folderItem.getAllArtifacts();
+      assert.strictEqual(allFolderArtifacts.length, 2);
+      assert.strictEqual(allFolderArtifacts[0].artifact.name, 'skill-1');
+      assert.strictEqual(allFolderArtifacts[1].artifact.name, 'skill-2');
+
+      const rootArtifact = hierarchy.find((h) => h instanceof AvailableArtifactItem) as AvailableArtifactItem;
+      assert.ok(rootArtifact);
+      assert.strictEqual(rootArtifact.artifact.name, 'root-skill');
+    });
+
+    it('AvailableTreeDataProvider sets command on artifact items for single-click install', () => {
+      const provider = new AvailableTreeDataProvider();
+      const source: Source = { id: 'src-1', type: 'local-folder', scope: 'project' };
+      const pkg: Package = { id: 'src-1:pkg', sourceId: 'src-1', nativeFormat: 'claude-skill', artifacts: [] };
+      const artItem = new AvailableArtifactItem(source, pkg, {
+        id: 'art-1',
+        packageId: 'src-1:pkg',
+        kind: 'skill',
+        name: 'test-skill',
+        nativeFormat: 'claude-skill',
+      });
+
+      const treeItem = provider.getTreeItem(artItem);
+      assert.strictEqual(treeItem.label, 'test-skill');
+      assert.ok(treeItem.command);
+      assert.strictEqual((treeItem.command as { command: string }).command, 'aiSwissknife.installArtifact');
     });
   });
 
