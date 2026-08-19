@@ -34,8 +34,8 @@ target adapters (GitHub Copilot). See [`specs/phase-2-spec.md`](specs/phase-2-sp
 | 10       | 10  | [MCP-server artifact support](10-mcp-support/plan.md)                     | ✅ done                         | 08                   | L    |
 | 11       | 11  | [Marketplace sources resolver](11-marketplace-sources/plan.md)            | ✅ done                         | 08, 09, 10           | M    |
 | 12       | 12  | [GitHub Copilot adapter](12-copilot-adapter/plan.md)                      | ✅ done                         | 08, 09, 10           | M    |
-| 13       | 13  | [Drift & update detection](13-drift-and-updates/plan.md)                  | 🟡 ready                        | 12                   | M    |
-| 14       | 14  | [Discovery & promotion](14-discovery-promotion/plan.md)                   | ⚪ planned                      | 13                   | M    |
+| 13       | 13  | [Drift & update detection](13-drift-and-updates/plan.md)                  | ✅ done                         | 12                   | M    |
+| 14       | 14  | [Discovery & promotion](14-discovery-promotion/plan.md)                   | 🟡 ready                        | 13                   | M    |
 | 15       | 15  | [File watchers for consistency](15-file-watchers/plan.md)                 | ⚪ planned                      | 13                   | S    |
 | 16       | 16  | [Management dashboard webview](16-dashboard-webview/plan.md)              | ⚪ planned                      | 13, 14, 15           | L    |
 
