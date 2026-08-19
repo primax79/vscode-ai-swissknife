@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert';
 import type { CanonicalMcpServer } from '../adapters/types';
+import type { AssistantId } from '../domain/types';
 import { translateMcpServer } from './mcp';
 
 describe('translateMcpServer', () => {
@@ -30,8 +31,8 @@ describe('translateMcpServer', () => {
     assert.strictEqual(resCopilot.value.id, 'sqlite');
   });
 
-  it('returns unsupported for non-Phase-2 target assistants', () => {
-    const res = translateMcpServer(mcp, 'codex-cli');
+  it('returns unsupported for non-supported target assistants', () => {
+    const res = translateMcpServer(mcp, 'cursor' as unknown as AssistantId);
     assert.strictEqual(res.overall, 'unsupported');
     assert.strictEqual(res.diagnostics.length, 1);
     assert.strictEqual(res.diagnostics[0].code, 'unsupported-target');

@@ -1,6 +1,6 @@
 import type { CanonicalAgent } from '../adapters/types';
 import type { AssistantId } from '../domain/types';
-import type { TranslationResult, TranslationDiagnostic } from './skill';
+import type { TranslationResult } from './skill';
 
 export function translateAgent(
   source: CanonicalAgent,
@@ -16,7 +16,7 @@ export function translateAgent(
   delete extraFields.description;
   delete extraFields.model;
 
-  if (targetAssistant === 'claude-code' || targetAssistant === 'github-copilot') {
+  if (targetAssistant === 'claude-code' || targetAssistant === 'github-copilot' || targetAssistant === 'gemini-cli') {
     const tools = [...source.tools];
     if (tools.length === 0 && Object.keys(source.permissions).length > 0) {
       for (const [permKey, permVal] of Object.entries(source.permissions)) {
@@ -66,15 +66,21 @@ export function translateAgent(
     };
   }
 
-  const diagnostics: TranslationDiagnostic[] = [
-    {
-      code: 'unsupported-target',
-      severity: 'error',
-      field: 'target',
-      impact: 'unsupported',
-      message: `Target assistant "${targetAssistant}" is not supported for agents in Phase 2`,
-    },
-  ];
+  if (targetAssistant === 'codex-cli') {
+    return {
+      value: {
+        name: source.name,
+        description: source.description,
+        tools: [],
+        permissions: {},
+        ...(source.model ? { model: source.model } : {}),
+        body: source.body,
+        extraFields,
+      },
+      overall: 'lossless',
+      diagnostics: [],
+    };
+  }
 
   return {
     value: {
@@ -84,6 +90,14 @@ export function translateAgent(
       extraFields: { ...source.extraFields },
     },
     overall: 'unsupported',
-    diagnostics,
+    diagnostics: [
+      {
+        code: 'unsupported-target',
+        severity: 'error',
+        field: 'target',
+        impact: 'unsupported',
+        message: `Target assistant "${targetAssistant}" is not supported for agents`,
+      },
+    ],
   };
 }

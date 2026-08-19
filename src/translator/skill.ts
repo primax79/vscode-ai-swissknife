@@ -16,15 +16,19 @@ export interface TranslationResult<T> {
   diagnostics: TranslationDiagnostic[];
 }
 
+const SUPPORTED_ASSISTANTS: AssistantId[] = [
+  'claude-code',
+  'kilo-code',
+  'github-copilot',
+  'codex-cli',
+  'gemini-cli',
+];
+
 export function translateSkill(
   source: CanonicalSkill,
   targetAssistant: AssistantId
 ): TranslationResult<CanonicalSkill> {
-  if (
-    targetAssistant === 'claude-code' ||
-    targetAssistant === 'kilo-code' ||
-    targetAssistant === 'github-copilot'
-  ) {
+  if (SUPPORTED_ASSISTANTS.includes(targetAssistant)) {
     return {
       value: {
         name: source.name,
@@ -61,7 +65,7 @@ export function translateSkill(
         severity: 'error',
         field: 'target',
         impact: 'unsupported',
-        message: `Target assistant "${targetAssistant}" is not supported in Phase 2`,
+        message: `Target assistant "${targetAssistant}" is not supported`,
       },
     ],
   };

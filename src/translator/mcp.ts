@@ -2,15 +2,19 @@ import type { CanonicalMcpServer } from '../adapters/types';
 import type { AssistantId } from '../domain/types';
 import type { TranslationResult, TranslationDiagnostic } from './skill';
 
+const SUPPORTED_ASSISTANTS: AssistantId[] = [
+  'claude-code',
+  'kilo-code',
+  'github-copilot',
+  'codex-cli',
+  'gemini-cli',
+];
+
 export function translateMcpServer(
   source: CanonicalMcpServer,
   targetAssistant: AssistantId
 ): TranslationResult<CanonicalMcpServer> {
-  if (
-    targetAssistant === 'claude-code' ||
-    targetAssistant === 'kilo-code' ||
-    targetAssistant === 'github-copilot'
-  ) {
+  if (SUPPORTED_ASSISTANTS.includes(targetAssistant)) {
     return {
       value: {
         id: source.id,
@@ -33,7 +37,7 @@ export function translateMcpServer(
       severity: 'error',
       field: 'target',
       impact: 'unsupported',
-      message: `Target assistant "${targetAssistant}" is not supported for MCP servers in Phase 2`,
+      message: `Target assistant "${targetAssistant}" is not supported for MCP servers`,
     },
   ];
 

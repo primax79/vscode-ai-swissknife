@@ -17,6 +17,8 @@ import {
 import { serializeSkillMarkdown, serializeClaudeAgentMarkdown, serializeClaudeCommandMarkdown, ClaudeAdapter, claudeAdapter } from '../adapters/claude';
 import { serializeKiloAgentMarkdown, serializeKiloCommandMarkdown, KiloAdapter, kiloAdapter } from '../adapters/kilo';
 import { CopilotAdapter, copilotAdapter } from '../adapters/copilot';
+import { CodexAdapter, codexAdapter } from '../adapters/codex';
+import { GeminiAdapter, geminiAdapter } from '../adapters/gemini';
 import { translateSkill } from '../translator/skill';
 import { translateAgent } from '../translator/agent';
 import { translateCommand } from '../translator/command';
@@ -36,10 +38,14 @@ function getAdapter(assistant: AssistantId, homeRoot?: string) {
     if (assistant === 'claude-code') return new ClaudeAdapter(() => homeRoot);
     if (assistant === 'kilo-code') return new KiloAdapter(() => homeRoot);
     if (assistant === 'github-copilot') return new CopilotAdapter(() => homeRoot);
+    if (assistant === 'codex-cli') return new CodexAdapter(() => homeRoot);
+    if (assistant === 'gemini-cli') return new GeminiAdapter(() => homeRoot);
   }
   if (assistant === 'claude-code') return claudeAdapter;
   if (assistant === 'kilo-code') return kiloAdapter;
   if (assistant === 'github-copilot') return copilotAdapter;
+  if (assistant === 'codex-cli') return codexAdapter;
+  if (assistant === 'gemini-cli') return geminiAdapter;
   throw new Error(`Unsupported assistant: ${assistant}`);
 }
 
