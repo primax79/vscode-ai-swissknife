@@ -46,8 +46,8 @@ initiatives — do not skip straight to implementation there.
 | 14       | 14  | [Discovery & promotion](14-discovery-promotion/plan.md)                                   | ✅ done                         | 13                     | M    |
 | 15       | 15  | [File watchers for consistency](15-file-watchers/plan.md)                                 | ✅ done                         | 13                     | S    |
 | 16       | 16  | [Management dashboard webview](16-dashboard-webview/plan.md)                              | ✅ done                         | 13, 14, 15             | L    |
-| 17       | 17  | [Form editor webview](17-form-editor/plan.md)                                             | 📋 planned                      | 08, 09, 10, 16         | M    |
-| 18       | 18  | [Cross-assistant sync](18-cross-assistant-sync/plan.md)                                   | 📋 planned                      | 06, 13, 14, 16         | M    |
+| 17       | 17  | [Form editor webview](17-form-editor/plan.md)                                             | ✅ done                         | 08, 09, 10, 16         | M    |
+| 18       | 18  | [Cross-assistant sync](18-cross-assistant-sync/plan.md)                                   | 🟡 ready                        | 06, 13, 14, 16         | M    |
 | 19       | 19  | [`hook` kind + active `rule` merge](19-hook-and-rule-merge/plan.md)                       | 📋 planned                      | 03, 06, 12             | L    |
 | 20       | 20  | [`remote-url` & `git-single-item` sources](20-remote-url-and-single-item-sources/plan.md) | 📋 planned                      | 04, 11                 | M    |
 | 21       | 21  | [Codex CLI & Gemini CLI adapters](21-codex-gemini-adapters/plan.md)                       | 📋 planned                      | 03, 05, 08, 09, 10, 12 | L    |
