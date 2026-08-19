@@ -36,8 +36,8 @@ target adapters (GitHub Copilot). See [`specs/phase-2-spec.md`](specs/phase-2-sp
 | 12       | 12  | [GitHub Copilot adapter](12-copilot-adapter/plan.md)                      | ✅ done                         | 08, 09, 10           | M    |
 | 13       | 13  | [Drift & update detection](13-drift-and-updates/plan.md)                  | ✅ done                         | 12                   | M    |
 | 14       | 14  | [Discovery & promotion](14-discovery-promotion/plan.md)                   | ✅ done                         | 13                   | M    |
-| 15       | 15  | [File watchers for consistency](15-file-watchers/plan.md)                 | 🟡 ready                        | 13                   | S    |
-| 16       | 16  | [Management dashboard webview](16-dashboard-webview/plan.md)              | ⚪ planned                      | 13, 14, 15           | L    |
+| 15       | 15  | [File watchers for consistency](15-file-watchers/plan.md)                 | ✅ done                         | 13                   | S    |
+| 16       | 16  | [Management dashboard webview](16-dashboard-webview/plan.md)              | 🟡 ready                        | 13, 14, 15           | L    |
 
 ## Specs
 
