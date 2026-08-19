@@ -32,8 +32,8 @@ target adapters (GitHub Copilot). See [`specs/phase-2-spec.md`](specs/phase-2-sp
 | 8        | 08  | [Agent artifact support](08-agent-support/plan.md)                        | ✅ done                         | 07                   | M    |
 | 9        | 09  | [Command artifact support](09-command-support/plan.md)                    | ✅ done                         | 08                   | M    |
 | 10       | 10  | [MCP-server artifact support](10-mcp-support/plan.md)                     | ✅ done                         | 08                   | L    |
-| 11       | 11  | [Marketplace sources resolver](11-marketplace-sources/plan.md)            | 🟡 ready                        | 08, 09, 10           | M    |
-| 12       | 12  | [GitHub Copilot adapter](12-copilot-adapter/plan.md)                      | ⚪ planned                      | 08, 09, 10           | M    |
+| 11       | 11  | [Marketplace sources resolver](11-marketplace-sources/plan.md)            | ✅ done                         | 08, 09, 10           | M    |
+| 12       | 12  | [GitHub Copilot adapter](12-copilot-adapter/plan.md)                      | 🟡 ready                        | 08, 09, 10           | M    |
 
 ## Specs
 
