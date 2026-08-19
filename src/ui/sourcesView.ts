@@ -123,9 +123,12 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
       if (!projectRoot) return;
     }
 
-    const typePick = await vscode.window.showQuickPick(['git-custom', 'local-folder'], {
-      placeHolder: 'Select source type',
-    });
+    const typePick = await vscode.window.showQuickPick(
+      ['git-custom', 'git-marketplace', 'local-folder'],
+      {
+        placeHolder: 'Select source type',
+      }
+    );
     if (!typePick) return;
 
     const id = await vscode.window.showInputBox({
@@ -144,7 +147,7 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
     let tag: string | undefined;
     let localPath: string | undefined;
 
-    if (typePick === 'git-custom') {
+    if (typePick === 'git-custom' || typePick === 'git-marketplace') {
       url = await vscode.window.showInputBox({
         prompt: 'Git repository URL (HTTPS or SSH, e.g. https://github.com/org/repo.git)',
         validateInput: (v) => (v.trim().length > 0 ? null : 'URL cannot be empty'),

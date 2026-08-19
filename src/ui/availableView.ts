@@ -5,6 +5,7 @@ import type { DetectionDiagnostic, SourceResolution } from '../sources/types';
 import { readManifest, fromDesiredSource } from '../domain/registry';
 import { resolveLocalFolder } from '../sources/localFolder';
 import { resolveGitCustom } from '../sources/gitCustom';
+import { resolveGitMarketplace } from '../sources/gitMarketplace';
 import { ClaudeAdapter } from '../adapters/claude';
 import { KiloAdapter } from '../adapters/kilo';
 import { planInstall } from '../engine/plan';
@@ -198,6 +199,8 @@ export class AvailableTreeDataProvider
           resolution = await resolveLocalFolder(src);
         } else if (src.type === 'git-custom') {
           resolution = await resolveGitCustom(src);
+        } else if (src.type === 'git-marketplace') {
+          resolution = await resolveGitMarketplace(src);
         } else {
           resolution = { packages: [], diagnostics: [] };
         }
