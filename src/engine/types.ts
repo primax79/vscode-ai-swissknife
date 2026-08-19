@@ -12,6 +12,8 @@ import type {
   CanonicalAgent,
   CanonicalCommand,
   CanonicalMcpServer,
+  CanonicalHook,
+  CanonicalRule,
   LocationRef,
 } from '../adapters/types';
 import type { TranslationDiagnostic } from '../translator/skill';
@@ -81,6 +83,20 @@ export type PreparedInstall =
       plan: SupportedInstallPlan;
       content: CanonicalMcpServer;
       contentHash: string;
+    }
+  | {
+      supported: true;
+      kind: 'hook';
+      plan: SupportedInstallPlan;
+      content: CanonicalHook;
+      contentHash: string;
+    }
+  | {
+      supported: true;
+      kind: 'rule';
+      plan: SupportedInstallPlan;
+      content: CanonicalRule;
+      contentHash: string;
     };
 
 export type ApplyOutcome =
@@ -116,6 +132,12 @@ export interface PlanInstallParams {
     mcpConfigPath?(loc: LocationRef): string;
     readMcpServer?(id: string, loc: LocationRef): Promise<CanonicalMcpServer | null>;
     writeMcpServer?(server: CanonicalMcpServer, loc: LocationRef): Promise<void>;
+    hookPath?(name: string, loc: LocationRef): string;
+    readHook?(name: string, loc: LocationRef): Promise<CanonicalHook | null>;
+    writeHook?(hook: CanonicalHook, loc: LocationRef): Promise<void>;
+    rulePath?(loc: LocationRef): string;
+    readRule?(loc: LocationRef): Promise<CanonicalRule | null>;
+    writeRule?(rule: CanonicalRule, loc: LocationRef): Promise<void>;
   };
   targetScope: Scope;
   projectRoot?: string;

@@ -6,6 +6,8 @@ import type {
   CanonicalAgent,
   CanonicalCommand,
   CanonicalMcpServer,
+  CanonicalHook,
+  CanonicalRule,
 } from '../adapters/types';
 import type { SourceResolution } from './types';
 import { readSkill } from '../adapters/codec';
@@ -15,10 +17,12 @@ import {
   findAgentFiles,
   findCommandFiles,
   findMcpDefinitions,
+  findHookFiles,
+  findRuleFiles,
 } from './detect';
 
 /**
- * Resolves a `Source` of type `local-folder` detecting skills, agents, commands, and mcp servers.
+ * Resolves a `Source` of type `local-folder` detecting skills, agents, commands, mcp servers, hooks, and rules.
  */
 export async function resolveLocalFolder(source: Source): Promise<SourceResolution> {
   if (!source.localPath) {
@@ -29,12 +33,16 @@ export async function resolveLocalFolder(source: Source): Promise<SourceResoluti
   let agentDetection;
   let commandDetection;
   let mcpDetection;
+  let hookDetection;
+  let ruleDetection;
 
   try {
     skillDetection = await findSkillDirs(source.localPath);
     agentDetection = await findAgentFiles(source.localPath);
     commandDetection = await findCommandFiles(source.localPath);
     mcpDetection = await findMcpDefinitions(source.localPath);
+    hookDetection = await findHookFiles(source.localPath);
+    ruleDetection = await findRuleFiles(source.localPath);
   } catch (err: unknown) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
       return { packages: [], diagnostics: [] };
@@ -139,25 +147,82 @@ export async function resolveLocalFolder(source: Source): Promise<SourceResoluti
     return pkg;
   });
 
+  const hookPackages: Package[] = hookDetection.hooks.map((h) => {
+    const relPath = path.relative(source.localPath!, h.path);
+    const packageId = `${source.id}:${relPath}`;
+    const artifactId = `${packageId}:${h.name}`;
+
+    const artifact: Artifact = {
+      id: artifactId,
+      packageId,
+      kind: 'hook',
+      name: h.name,
+      description: `Hook on ${h.event}: ${h.command}`,
+      nativeFormat: 'claude-hook',
+    };
+
+    const pkg: Package = {
+      id: packageId,
+      sourceId: source.id,
+      nativeFormat: 'claude-hook',
+      artifacts: [artifact],
+    };
+
+    return pkg;
+  });
+
+  const rulePackages: Package[] = ruleDetection.rules.map((r) => {
+    const relPath = path.relative(source.localPath!, r.path);
+    const packageId = `${source.id}:${relPath}`;
+    const artifactId = `${packageId}:${r.name}`;
+
+    const artifact: Artifact = {
+      id: artifactId,
+      packageId,
+      kind: 'rule',
+      name: r.name,
+      description: 'Project rule instructions',
+      nativeFormat: 'plain-rule',
+    };
+
+    const pkg: Package = {
+      id: packageId,
+      sourceId: source.id,
+      nativeFormat: 'plain-rule',
+      artifacts: [artifact],
+    };
+
+    return pkg;
+  });
+
   return {
-    packages: [...skillPackages, ...agentPackages, ...commandPackages, ...mcpPackages],
+    packages: [
+      ...skillPackages,
+      ...agentPackages,
+      ...commandPackages,
+      ...mcpPackages,
+      ...hookPackages,
+      ...rulePackages,
+    ],
     diagnostics: [
       ...skillDetection.diagnostics,
       ...agentDetection.diagnostics,
       ...commandDetection.diagnostics,
       ...mcpDetection.diagnostics,
+      ...hookDetection.diagnostics,
+      ...ruleDetection.diagnostics,
     ],
   };
 }
 
 /**
- * Resolves content for a skill, agent, command, or mcp-server artifact from a local-folder source.
+ * Resolves content for any artifact kind from a local-folder source.
  */
 export async function resolveArtifactContent(
   source: Source,
   pkg: Package,
   artifact: Artifact
-): Promise<ResolvedArtifact<CanonicalSkill | CanonicalAgent | CanonicalCommand | CanonicalMcpServer>> {
+): Promise<ResolvedArtifact<CanonicalSkill | CanonicalAgent | CanonicalCommand | CanonicalMcpServer | CanonicalHook | CanonicalRule>> {
   if (source.type !== 'local-folder') {
     throw new Error(`Expected source.type === "local-folder", got "${source.type}"`);
   }
@@ -268,6 +333,58 @@ export async function resolveArtifactContent(
       ...(serverConfig.env ? { env: serverConfig.env as Record<string, string> } : {}),
       ...(serverConfig.headers ? { headers: serverConfig.headers as Record<string, string> } : {}),
       extraFields,
+    };
+    return { artifact, content };
+  }
+
+  if (artifact.kind === 'hook') {
+    const candidate1 = path.join(source.localPath, pathId);
+    const candidate2 = path.join(source.localPath, 'hooks', `${artifact.name}.json`);
+    const candidate3 = path.join(source.localPath, `${artifact.name}.json`);
+
+    let hookFile = '';
+    for (const cand of [candidate1, candidate2, candidate3]) {
+      if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
+        hookFile = cand;
+        break;
+      }
+    }
+    if (!hookFile) {
+      throw new Error(`Cannot locate hook file for "${artifact.name}" in "${source.localPath}"`);
+    }
+
+    const raw = await fs.promises.readFile(hookFile, 'utf-8');
+    const parsed = JSON.parse(raw);
+    const content: CanonicalHook = {
+      name: artifact.name,
+      event: parsed.event ?? 'PreToolUse',
+      command: parsed.command ?? '',
+      timeout: parsed.timeout,
+      extraFields: { ...parsed },
+    };
+    return { artifact, content };
+  }
+
+  if (artifact.kind === 'rule') {
+    const candidate1 = path.join(source.localPath, pathId);
+    const candidate2 = path.join(source.localPath, 'rules', `${artifact.name}.md`);
+    const candidate3 = path.join(source.localPath, `${artifact.name}.md`);
+
+    let ruleFile = '';
+    for (const cand of [candidate1, candidate2, candidate3]) {
+      if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
+        ruleFile = cand;
+        break;
+      }
+    }
+    if (!ruleFile) {
+      throw new Error(`Cannot locate rule file for "${artifact.name}" in "${source.localPath}"`);
+    }
+
+    const raw = await fs.promises.readFile(ruleFile, 'utf-8');
+    const content: CanonicalRule = {
+      name: artifact.name,
+      content: raw,
     };
     return { artifact, content };
   }

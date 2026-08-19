@@ -7,6 +7,8 @@ import {
   canonicalAgentHash,
   canonicalCommandHash,
   canonicalMcpServerHash,
+  canonicalHookHash,
+  canonicalRuleHash,
   readSkill,
   writeSkill,
 } from '../adapters/codec';
@@ -45,6 +47,281 @@ export async function applyInstall(
   }
 
   const plan = prepared.plan;
+
+  // --- RULE KIND APPLY (Demarcated Merge) ---
+  if (prepared.kind === 'rule') {
+    const rule = prepared.content;
+    const recomputedHash = canonicalRuleHash(rule);
+    if (recomputedHash !== prepared.contentHash) {
+      return {
+        status: 'refused',
+        reason: 'Rule content was mutated after preview (hash mismatch)',
+      };
+    }
+
+    const targetFilePath = plan.targetDir;
+    let targetExists = false;
+    let existingContent = '';
+
+    try {
+      existingContent = await fs.promises.readFile(targetFilePath, 'utf-8');
+      targetExists = true;
+    } catch {
+      // ignore
+    }
+
+    const markerStart = `<!-- ai-swissknife:managed:${plan.sourceId} -->`;
+    const markerEnd = '<!-- /ai-swissknife:managed -->';
+    const managedBlock = `${markerStart}\n${rule.content.trim()}\n${markerEnd}`;
+
+    let mergedContent: string;
+    const markerRegex = new RegExp(`${markerStart}[\\s\\S]*?${markerEnd}`);
+
+    if (targetExists) {
+      if (markerRegex.test(existingContent)) {
+        mergedContent = existingContent.replace(markerRegex, managedBlock);
+      } else {
+        mergedContent = `${existingContent.trimEnd()}\n\n${managedBlock}\n`;
+      }
+    } else {
+      mergedContent = `${managedBlock}\n`;
+    }
+
+    const randomId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const stagingPath = `${targetFilePath}.staging-${randomId}`;
+    const backupPath = `${targetFilePath}.backup-${randomId}`;
+
+    try {
+      await fs.promises.mkdir(path.dirname(stagingPath), { recursive: true });
+      await fs.promises.writeFile(stagingPath, mergedContent, 'utf-8');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { status: 'refused', reason: `Rule staging failed: ${msg}` };
+    }
+
+    let backupCreated = false;
+    try {
+      if (targetExists) {
+        await fs.promises.copyFile(targetFilePath, backupPath);
+        backupCreated = true;
+      }
+      await fs.promises.rename(stagingPath, targetFilePath);
+    } catch (swapErr: unknown) {
+      const msg = swapErr instanceof Error ? swapErr.message : String(swapErr);
+      if (backupCreated) {
+        try {
+          await fs.promises.copyFile(backupPath, targetFilePath);
+          await fs.promises.unlink(backupPath);
+          return { status: 'rolled-back', reason: `Rule swap failed and restored: ${msg}` };
+        } catch {
+          return { status: 'manual-recovery-required', reason: `Rule swap failed: ${msg}`, paths: [targetFilePath, backupPath] };
+        }
+      }
+      return { status: 'refused', reason: `Rule swap failed: ${msg}` };
+    }
+
+    // Final verification
+    try {
+      const finalContent = await fs.promises.readFile(targetFilePath, 'utf-8');
+      if (!finalContent.includes(rule.content.trim())) {
+        throw new Error('Final rule verification failed');
+      }
+    } catch (verifyErr: unknown) {
+      const msg = verifyErr instanceof Error ? verifyErr.message : String(verifyErr);
+      if (backupCreated) {
+        try {
+          await fs.promises.copyFile(backupPath, targetFilePath);
+          await fs.promises.unlink(backupPath);
+        } catch {
+          // ignore
+        }
+      }
+      return { status: 'rolled-back', reason: `Final rule verification failed: ${msg}` };
+    }
+
+    // State persistence
+    const installation: ManagedInstallation = {
+      assistant: plan.targetAssistant,
+      scope: plan.targetScope,
+      projectPath: plan.projectRoot,
+      kind: 'rule',
+      name: `rule:${plan.sourceId}`,
+      path: targetFilePath,
+      sourceId: plan.sourceId,
+      packageId: plan.packageId,
+      artifactId: plan.artifactId,
+      sourceRevision: plan.sourceRevision,
+      installedAt: new Date().toISOString(),
+      contentHash: prepared.contentHash,
+    };
+
+    try {
+      const state = await readState(plan.targetScope, plan.projectRoot, homeRoot);
+      const filtered = state.installations.filter(
+        (inst) =>
+          !(
+            inst.assistant === plan.targetAssistant &&
+            inst.scope === plan.targetScope &&
+            inst.projectPath === plan.projectRoot &&
+            inst.path === targetFilePath &&
+            inst.name === installation.name
+          )
+      );
+      filtered.push(installation);
+
+      await writeState(
+        plan.targetScope,
+        {
+          schemaVersion: state.schemaVersion,
+          installations: filtered,
+        },
+        plan.projectRoot,
+        homeRoot
+      );
+    } catch (stateErr: unknown) {
+      const msg = stateErr instanceof Error ? stateErr.message : String(stateErr);
+      if (backupCreated) {
+        try {
+          await fs.promises.copyFile(backupPath, targetFilePath);
+          await fs.promises.unlink(backupPath);
+        } catch {
+          // ignore
+        }
+      }
+      return { status: 'rolled-back', reason: `State persistence failed: ${msg}` };
+    }
+
+    if (backupCreated) {
+      try {
+        await fs.promises.unlink(backupPath);
+      } catch {
+        // ignore
+      }
+    }
+
+    return { status: 'applied', installation };
+  }
+
+  // --- HOOK KIND APPLY ---
+  if (prepared.kind === 'hook') {
+    const hook = prepared.content;
+    const recomputedHash = canonicalHookHash(hook);
+    if (recomputedHash !== prepared.contentHash) {
+      return {
+        status: 'refused',
+        reason: 'Hook content was mutated after preview (hash mismatch)',
+      };
+    }
+
+    const targetFilePath = plan.targetDir;
+    let targetExists = false;
+    try {
+      await fs.promises.lstat(targetFilePath);
+      targetExists = true;
+    } catch {
+      // ignore
+    }
+
+    const randomId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const stagingPath = `${targetFilePath}.staging-${randomId}`;
+    const backupPath = `${targetFilePath}.backup-${randomId}`;
+
+    const payload = {
+      event: hook.event,
+      command: hook.command,
+      ...(hook.timeout ? { timeout: hook.timeout } : {}),
+      ...hook.extraFields,
+    };
+
+    try {
+      await fs.promises.mkdir(path.dirname(stagingPath), { recursive: true });
+      await fs.promises.writeFile(stagingPath, JSON.stringify(payload, null, 2) + '\n', 'utf-8');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return { status: 'refused', reason: `Hook staging failed: ${msg}` };
+    }
+
+    let backupCreated = false;
+    try {
+      if (targetExists) {
+        await fs.promises.rename(targetFilePath, backupPath);
+        backupCreated = true;
+      }
+      await fs.promises.rename(stagingPath, targetFilePath);
+    } catch (swapErr: unknown) {
+      const msg = swapErr instanceof Error ? swapErr.message : String(swapErr);
+      if (backupCreated) {
+        try {
+          await fs.promises.rename(backupPath, targetFilePath);
+          return { status: 'rolled-back', reason: `Hook swap failed and restored: ${msg}` };
+        } catch {
+          return { status: 'manual-recovery-required', reason: `Hook restore failed: ${msg}`, paths: [targetFilePath, backupPath] };
+        }
+      }
+      return { status: 'refused', reason: `Hook swap failed: ${msg}` };
+    }
+
+    // State persistence
+    const installation: ManagedInstallation = {
+      assistant: plan.targetAssistant,
+      scope: plan.targetScope,
+      projectPath: plan.projectRoot,
+      kind: 'hook',
+      name: hook.name,
+      path: targetFilePath,
+      sourceId: plan.sourceId,
+      packageId: plan.packageId,
+      artifactId: plan.artifactId,
+      sourceRevision: plan.sourceRevision,
+      installedAt: new Date().toISOString(),
+      contentHash: prepared.contentHash,
+    };
+
+    try {
+      const state = await readState(plan.targetScope, plan.projectRoot, homeRoot);
+      const filtered = state.installations.filter(
+        (inst) =>
+          !(
+            inst.assistant === plan.targetAssistant &&
+            inst.scope === plan.targetScope &&
+            inst.projectPath === plan.projectRoot &&
+            inst.path === targetFilePath &&
+            inst.name === hook.name
+          )
+      );
+      filtered.push(installation);
+
+      await writeState(
+        plan.targetScope,
+        {
+          schemaVersion: state.schemaVersion,
+          installations: filtered,
+        },
+        plan.projectRoot,
+        homeRoot
+      );
+    } catch (stateErr: unknown) {
+      const msg = stateErr instanceof Error ? stateErr.message : String(stateErr);
+      if (backupCreated) {
+        try {
+          await fs.promises.rename(backupPath, targetFilePath);
+        } catch {
+          // ignore
+        }
+      }
+      return { status: 'rolled-back', reason: `State persistence failed: ${msg}` };
+    }
+
+    if (backupCreated) {
+      try {
+        await fs.promises.unlink(backupPath);
+      } catch {
+        // ignore
+      }
+    }
+
+    return { status: 'applied', installation };
+  }
 
   // --- MCP-SERVER KIND APPLY ---
   if (prepared.kind === 'mcp-server') {

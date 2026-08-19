@@ -6,6 +6,8 @@ import type {
   CanonicalAgent,
   CanonicalCommand,
   CanonicalMcpServer,
+  CanonicalHook,
+  CanonicalRule,
 } from '../adapters/types';
 import type { ResolvedArtifact } from '../domain/types';
 import {
@@ -22,6 +24,8 @@ import {
   canonicalAgentHash,
   canonicalCommandHash,
   canonicalMcpServerHash,
+  canonicalHookHash,
+  canonicalRuleHash,
 } from '../adapters/codec';
 import { resolveArtifactContent as resolveLocalFolderContent } from '../sources/localFolder';
 import { resolveArtifactContent as resolveGitCustomContent } from '../sources/gitCustom';
@@ -30,6 +34,8 @@ import { translateSkill } from '../translator/skill';
 import { translateAgent } from '../translator/agent';
 import { translateCommand } from '../translator/command';
 import { translateMcpServer } from '../translator/mcp';
+import { translateHook } from '../translator/hook';
+import { translateRule } from '../translator/rule';
 import type {
   PreparedInstall,
   PlanInstallParams,
@@ -48,7 +54,9 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
     artifact.kind !== 'skill' &&
     artifact.kind !== 'agent' &&
     artifact.kind !== 'command' &&
-    artifact.kind !== 'mcp-server'
+    artifact.kind !== 'mcp-server' &&
+    artifact.kind !== 'hook' &&
+    artifact.kind !== 'rule'
   ) {
     return {
       supported: false,
@@ -59,6 +67,214 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
         artifactId: artifact.id,
         reason: `Artifact kind "${artifact.kind}" is not supported`,
       },
+    };
+  }
+
+  // --- RULE KIND ---
+  if (artifact.kind === 'rule') {
+    let resolvedRule: ResolvedArtifact<CanonicalRule>;
+    try {
+      if (source.type === 'local-folder') {
+        resolvedRule = (await resolveLocalFolderContent(source, pkg, artifact)) as ResolvedArtifact<CanonicalRule>;
+      } else if (source.type === 'git-custom') {
+        resolvedRule = (await resolveGitCustomContent(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalRule>;
+      } else if (source.type === 'git-marketplace') {
+        resolvedRule = (await resolveGitMarketplaceContent(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalRule>;
+      } else {
+        throw new Error(`Source type "${source.type}" is not yet supported for rule resolution`);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        supported: false,
+        plan: {
+          supported: false,
+          sourceId: source.id,
+          packageId: pkg.id,
+          artifactId: artifact.id,
+          reason: `Rule content resolution failed: ${msg}`,
+        },
+      };
+    }
+
+    const translation = translateRule(resolvedRule.content, targetAdapter.assistant);
+    if (translation.overall === 'unsupported') {
+      return {
+        supported: false,
+        plan: {
+          supported: false,
+          sourceId: source.id,
+          packageId: pkg.id,
+          artifactId: artifact.id,
+          reason: `Target assistant "${targetAdapter.assistant}" is not supported for rules`,
+          diagnostics: translation.diagnostics,
+        },
+      };
+    }
+
+    const translatedRule = translation.value;
+    if (!targetAdapter.rulePath) {
+      return {
+        supported: false,
+        plan: {
+          supported: false,
+          sourceId: source.id,
+          packageId: pkg.id,
+          artifactId: artifact.id,
+          reason: `Target adapter for "${targetAdapter.assistant}" does not support rule installation`,
+          diagnostics: translation.diagnostics,
+        },
+      };
+    }
+
+    const targetFilePath = targetAdapter.rulePath({
+      scope: targetScope,
+      projectRoot,
+    });
+
+    const existingFiles: ExistingFile[] = [];
+    try {
+      const data = await fs.promises.readFile(targetFilePath);
+      existingFiles.push({
+        path: path.basename(targetFilePath),
+        contentHash: sha256(data),
+      });
+    } catch {
+      // ignore
+    }
+
+    const contentHash = canonicalRuleHash(translatedRule);
+    const proposedFiles: ProposedFile[] = [
+      {
+        path: path.basename(targetFilePath),
+        contentHash,
+      },
+    ];
+
+    return {
+      supported: true,
+      kind: 'rule',
+      plan: {
+        supported: true,
+        sourceId: source.id,
+        packageId: pkg.id,
+        artifactId: artifact.id,
+        targetAssistant: targetAdapter.assistant,
+        targetScope,
+        targetDir: targetFilePath,
+        projectRoot,
+        sourceRevision: pkg.version,
+        conflict: existingFiles.length > 0,
+        existingFiles,
+        proposedFiles,
+        diagnostics: translation.diagnostics,
+      },
+      content: translatedRule,
+      contentHash,
+    };
+  }
+
+  // --- HOOK KIND ---
+  if (artifact.kind === 'hook') {
+    let resolvedHook: ResolvedArtifact<CanonicalHook>;
+    try {
+      if (source.type === 'local-folder') {
+        resolvedHook = (await resolveLocalFolderContent(source, pkg, artifact)) as ResolvedArtifact<CanonicalHook>;
+      } else if (source.type === 'git-custom') {
+        resolvedHook = (await resolveGitCustomContent(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalHook>;
+      } else if (source.type === 'git-marketplace') {
+        resolvedHook = (await resolveGitMarketplaceContent(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalHook>;
+      } else {
+        throw new Error(`Source type "${source.type}" is not yet supported for hook resolution`);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        supported: false,
+        plan: {
+          supported: false,
+          sourceId: source.id,
+          packageId: pkg.id,
+          artifactId: artifact.id,
+          reason: `Hook content resolution failed: ${msg}`,
+        },
+      };
+    }
+
+    const translation = translateHook(resolvedHook.content, targetAdapter.assistant);
+    if (translation.overall === 'unsupported') {
+      return {
+        supported: false,
+        plan: {
+          supported: false,
+          sourceId: source.id,
+          packageId: pkg.id,
+          artifactId: artifact.id,
+          reason: `Target assistant "${targetAdapter.assistant}" is not supported for hooks`,
+          diagnostics: translation.diagnostics,
+        },
+      };
+    }
+
+    const translatedHook = translation.value;
+    if (!targetAdapter.hookPath) {
+      return {
+        supported: false,
+        plan: {
+          supported: false,
+          sourceId: source.id,
+          packageId: pkg.id,
+          artifactId: artifact.id,
+          reason: `Target adapter for "${targetAdapter.assistant}" does not support hook installation`,
+          diagnostics: translation.diagnostics,
+        },
+      };
+    }
+
+    const targetFilePath = targetAdapter.hookPath(translatedHook.name, {
+      scope: targetScope,
+      projectRoot,
+    });
+
+    const existingFiles: ExistingFile[] = [];
+    try {
+      const data = await fs.promises.readFile(targetFilePath);
+      existingFiles.push({
+        path: path.basename(targetFilePath),
+        contentHash: sha256(data),
+      });
+    } catch {
+      // ignore
+    }
+
+    const contentHash = canonicalHookHash(translatedHook);
+    const proposedFiles: ProposedFile[] = [
+      {
+        path: path.basename(targetFilePath),
+        contentHash,
+      },
+    ];
+
+    return {
+      supported: true,
+      kind: 'hook',
+      plan: {
+        supported: true,
+        sourceId: source.id,
+        packageId: pkg.id,
+        artifactId: artifact.id,
+        targetAssistant: targetAdapter.assistant,
+        targetScope,
+        targetDir: targetFilePath,
+        projectRoot,
+        sourceRevision: pkg.version,
+        conflict: existingFiles.length > 0,
+        existingFiles,
+        proposedFiles,
+        diagnostics: translation.diagnostics,
+      },
+      content: translatedHook,
+      contentHash,
     };
   }
 
@@ -278,9 +494,9 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
     }
 
     const serialized =
-      targetAdapter.assistant === 'claude-code'
-        ? serializeClaudeCommandMarkdown(translatedCmd)
-        : serializeKiloCommandMarkdown(translatedCmd);
+      targetAdapter.assistant === 'kilo-code'
+        ? serializeKiloCommandMarkdown(translatedCmd)
+        : serializeClaudeCommandMarkdown(translatedCmd);
 
     const proposedFiles: ProposedFile[] = [
       {
@@ -417,9 +633,9 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
     }
 
     const serialized =
-      targetAdapter.assistant === 'claude-code'
-        ? serializeClaudeAgentMarkdown(translatedAgent)
-        : serializeKiloAgentMarkdown(translatedAgent);
+      targetAdapter.assistant === 'kilo-code'
+        ? serializeKiloAgentMarkdown(translatedAgent)
+        : serializeClaudeAgentMarkdown(translatedAgent);
 
     const proposedFiles: ProposedFile[] = [
       {
@@ -633,7 +849,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
       artifactId: artifact.id,
       targetAssistant: targetAdapter.assistant,
       targetScope,
-      targetDir,
+      targetDir: targetDir,
       projectRoot,
       sourceRevision: pkg.version,
       conflict,

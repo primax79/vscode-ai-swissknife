@@ -34,6 +34,20 @@ export interface DetectedMcpServer {
   path: string;
 }
 
+export interface DetectedHookFile {
+  name: string;
+  event: string;
+  command: string;
+  timeout?: number;
+  path: string;
+}
+
+export interface DetectedRuleFile {
+  name: string;
+  content: string;
+  path: string;
+}
+
 export interface SkillDetectionResult {
   skills: DetectedSkillDir[];
   diagnostics: DetectionDiagnostic[];

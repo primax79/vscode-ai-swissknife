@@ -3,7 +3,7 @@ import * as assert from 'node:assert';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import type { Source, Package, Artifact } from '../domain/types';
+import type { Source, Package, Artifact, ItemKind } from '../domain/types';
 import { ClaudeAdapter } from '../adapters/claude';
 import { KiloAdapter } from '../adapters/kilo';
 import { CopilotAdapter } from '../adapters/copilot';
@@ -49,8 +49,8 @@ describe('Install Engine — planInstall and applyInstall', () => {
       const artifact: Artifact = {
         id: 'art-1',
         packageId: 'src-1:pkg',
-        kind: 'hook',
-        name: 'test-hook',
+        kind: 'unknown-kind' as unknown as ItemKind,
+        name: 'test-unknown',
         nativeFormat: 'raw',
       };
 
@@ -64,7 +64,7 @@ describe('Install Engine — planInstall and applyInstall', () => {
       });
 
       assert.strictEqual(prepared.supported, false);
-      assert.ok(prepared.plan.reason.includes('Artifact kind "hook" is not supported'));
+      assert.ok(prepared.plan.reason.includes('Artifact kind "unknown-kind" is not supported'));
     });
 
     it('refuses unsupported target assistant', async () => {
@@ -497,6 +497,103 @@ describe('Install Engine — planInstall and applyInstall', () => {
         assert.strictEqual(state.installations[0].name, 'deploy');
         assert.strictEqual(state.installations[0].kind, 'command');
       }
+    });
+
+    it('applies hook install end-to-end', async () => {
+      const hookFolder = path.join(testTempDir, 'src-hook-folder');
+      await fs.promises.mkdir(hookFolder, { recursive: true });
+      await fs.promises.writeFile(
+        path.join(hookFolder, 'on-prompt.json'),
+        JSON.stringify({
+          event: 'UserPromptSubmit',
+          command: 'echo "prompt submitted"',
+          timeout: 5000,
+        }),
+        'utf-8'
+      );
+
+      const source: Source = {
+        id: 'src-hook',
+        type: 'local-folder',
+        scope: 'project',
+        localPath: hookFolder,
+      };
+      const pkg: Package = { id: 'src-hook:on-prompt', sourceId: 'src-hook', nativeFormat: 'claude-hook', artifacts: [] };
+      const artifact: Artifact = {
+        id: 'src-hook:on-prompt:on-prompt',
+        packageId: 'src-hook:on-prompt',
+        kind: 'hook',
+        name: 'on-prompt',
+        nativeFormat: 'claude-hook',
+      };
+
+      const prepared = await planInstall({
+        source,
+        pkg,
+        artifact,
+        targetAdapter: claudeAdapter,
+        targetScope: 'project',
+        projectRoot: testTempDir,
+      });
+
+      assert.strictEqual(prepared.supported, true);
+      const outcome = await applyInstall(prepared, testHomeDir);
+      assert.strictEqual(outcome.status, 'applied');
+
+      const loaded = await claudeAdapter.readHook('on-prompt', { scope: 'project', projectRoot: testTempDir });
+      assert.ok(loaded);
+      assert.strictEqual(loaded.event, 'UserPromptSubmit');
+    });
+
+    it('applies non-destructive rule merge preserving existing guidelines', async () => {
+      // 1. Pre-existing CLAUDE.md in project
+      const claudeMdPath = path.join(testTempDir, 'CLAUDE.md');
+      await fs.promises.writeFile(claudeMdPath, '# Project Guidelines\n\n- Do not break tests\n', 'utf-8');
+
+      const ruleFolder = path.join(testTempDir, 'src-rule-folder');
+      await fs.promises.mkdir(path.join(ruleFolder, 'rules'), { recursive: true });
+      await fs.promises.writeFile(
+        path.join(ruleFolder, 'rules', 'security.md'),
+        '# Security Rules\n\n- Never commit credentials\n',
+        'utf-8'
+      );
+
+      const source: Source = {
+        id: 'security-team',
+        type: 'local-folder',
+        scope: 'project',
+        localPath: ruleFolder,
+      };
+      const pkg: Package = { id: 'security-team:security', sourceId: 'security-team', nativeFormat: 'plain-rule', artifacts: [] };
+      const artifact: Artifact = {
+        id: 'security-team:security:security',
+        packageId: 'security-team:security',
+        kind: 'rule',
+        name: 'security',
+        nativeFormat: 'plain-rule',
+      };
+
+      const prepared = await planInstall({
+        source,
+        pkg,
+        artifact,
+        targetAdapter: claudeAdapter,
+        targetScope: 'project',
+        projectRoot: testTempDir,
+      });
+
+      assert.strictEqual(prepared.supported, true);
+      const outcome = await applyInstall(prepared, testHomeDir);
+      assert.strictEqual(outcome.status, 'applied');
+
+      const finalContent = await fs.promises.readFile(claudeMdPath, 'utf-8');
+      // Preserved original content
+      assert.ok(finalContent.includes('# Project Guidelines'));
+      assert.ok(finalContent.includes('- Do not break tests'));
+      // Injected demarcated managed block
+      assert.ok(finalContent.includes('<!-- ai-swissknife:managed:security-team -->'));
+      assert.ok(finalContent.includes('# Security Rules'));
+      assert.ok(finalContent.includes('<!-- /ai-swissknife:managed -->'));
     });
 
     it('applies mcp-server install into config file and updates state', async () => {

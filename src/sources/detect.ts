@@ -6,6 +6,8 @@ import type {
   DetectedAgentFile,
   DetectedCommandFile,
   DetectedMcpServer,
+  DetectedHookFile,
+  DetectedRuleFile,
   SkillDetectionResult,
   DetectionDiagnostic,
 } from './types';
@@ -351,4 +353,99 @@ export async function findMcpDefinitions(
   }
 
   return { mcpServers, diagnostics };
+}
+
+/**
+ * Scans `rootDir` for hook configuration files (hooks/*.json or *.hook.json).
+ */
+export async function findHookFiles(
+  rootDir: string
+): Promise<{ hooks: DetectedHookFile[]; diagnostics: DetectionDiagnostic[] }> {
+  const resolvedRoot = path.resolve(rootDir);
+  const hooks: DetectedHookFile[] = [];
+  const diagnostics: DetectionDiagnostic[] = [];
+
+  async function walk(dir: string): Promise<void> {
+    let entries: fs.Dirent[];
+    try {
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        if (entry.name === '.git' || entry.name === 'node_modules') continue;
+        await walk(path.join(dir, entry.name));
+      } else if (entry.isFile() && entry.name.endsWith('.json')) {
+        const fullPath = path.join(dir, entry.name);
+        const relDir = path.relative(resolvedRoot, dir).split(path.sep).join('/');
+
+        const isHook =
+          entry.name.endsWith('.hook.json') ||
+          relDir === 'hooks' ||
+          relDir.endsWith('/hooks') ||
+          relDir.includes('/hooks/');
+
+        if (isHook) {
+          try {
+            const raw = await fs.promises.readFile(fullPath, 'utf-8');
+            const parsed = JSON.parse(raw);
+            const name = entry.name.replace(/(\.hook)?\.json$/, '');
+            hooks.push({
+              name,
+              event: parsed.event ?? 'PreToolUse',
+              command: parsed.command ?? '',
+              timeout: parsed.timeout,
+              path: fullPath,
+            });
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err);
+            diagnostics.push({
+              severity: 'error',
+              path: fullPath,
+              message: `Failed to parse hook JSON: ${msg}`,
+              code: 'invalid-frontmatter',
+            });
+          }
+        }
+      }
+    }
+  }
+
+  await walk(resolvedRoot);
+  return { hooks, diagnostics };
+}
+
+/**
+ * Scans `rootDir` for rule / instructions files (rules/*.md).
+ */
+export async function findRuleFiles(
+  rootDir: string
+): Promise<{ rules: DetectedRuleFile[]; diagnostics: DetectionDiagnostic[] }> {
+  const resolvedRoot = path.resolve(rootDir);
+  const rules: DetectedRuleFile[] = [];
+  const diagnostics: DetectionDiagnostic[] = [];
+
+  const rulesDir = path.join(resolvedRoot, 'rules');
+  if (fs.existsSync(rulesDir) && fs.statSync(rulesDir).isDirectory()) {
+    try {
+      const entries = await fs.promises.readdir(rulesDir, { withFileTypes: true });
+      for (const e of entries) {
+        if (e.isFile() && e.name.endsWith('.md')) {
+          const fullPath = path.join(rulesDir, e.name);
+          const content = await fs.promises.readFile(fullPath, 'utf-8');
+          rules.push({
+            name: e.name.replace(/\.md$/, ''),
+            content,
+            path: fullPath,
+          });
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return { rules, diagnostics };
 }

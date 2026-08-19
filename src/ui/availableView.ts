@@ -284,6 +284,10 @@ export class AvailableTreeDataProvider
         ? 'terminal'
         : artifact.kind === 'mcp-server'
         ? 'plug'
+        : artifact.kind === 'hook'
+        ? 'zap'
+        : artifact.kind === 'rule'
+        ? 'book'
         : 'tools';
     item.iconPath = new vscode.ThemeIcon(icon);
     item.command = {
