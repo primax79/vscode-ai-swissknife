@@ -25,6 +25,15 @@ export interface DetectedCommandFile {
   description?: string;
 }
 
+export interface DetectedMcpServer {
+  id: string;
+  type: string;
+  command?: string;
+  url?: string;
+  description?: string;
+  path: string;
+}
+
 export interface SkillDetectionResult {
   skills: DetectedSkillDir[];
   diagnostics: DetectionDiagnostic[];

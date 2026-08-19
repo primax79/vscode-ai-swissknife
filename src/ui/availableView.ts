@@ -272,7 +272,14 @@ export class AvailableTreeDataProvider
     item.description = artifact.description;
     item.tooltip = `Kind: ${artifact.kind}\nSource: ${element.source.id}\nPackage: ${element.pkg.id}`;
     item.contextValue = 'availableArtifact';
-    const icon = artifact.kind === 'agent' ? 'robot' : artifact.kind === 'command' ? 'terminal' : 'tools';
+    const icon =
+      artifact.kind === 'agent'
+        ? 'robot'
+        : artifact.kind === 'command'
+        ? 'terminal'
+        : artifact.kind === 'mcp-server'
+        ? 'plug'
+        : 'tools';
     item.iconPath = new vscode.ThemeIcon(icon);
     item.command = {
       command: 'aiSwissknife.installArtifact',

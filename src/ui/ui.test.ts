@@ -200,7 +200,7 @@ describe('UI TreeDataProviders', () => {
       assert.strictEqual(rootArtifact.artifact.name, 'root-skill');
     });
 
-    it('AvailableTreeDataProvider sets distinct icons and command for skill, agent, and command', () => {
+    it('AvailableTreeDataProvider sets distinct icons and command for skill, agent, command, and mcp-server', () => {
       const provider = new AvailableTreeDataProvider();
       const source: Source = { id: 'src-1', type: 'local-folder', scope: 'project' };
       const pkg: Package = { id: 'src-1:pkg', sourceId: 'src-1', nativeFormat: 'claude-skill', artifacts: [] };
@@ -235,6 +235,16 @@ describe('UI TreeDataProviders', () => {
       });
       const cmdTreeItem = provider.getTreeItem(cmdItem);
       assert.strictEqual((cmdTreeItem.iconPath as { id: string }).id, 'terminal');
+
+      const mcpItem = new AvailableArtifactItem(source, pkg, {
+        id: 'art-4',
+        packageId: 'src-1:pkg',
+        kind: 'mcp-server',
+        name: 'sqlite',
+        nativeFormat: 'mcp-config',
+      });
+      const mcpTreeItem = provider.getTreeItem(mcpItem);
+      assert.strictEqual((mcpTreeItem.iconPath as { id: string }).id, 'plug');
     });
   });
 
@@ -264,28 +274,39 @@ describe('UI TreeDataProviders', () => {
         path: '/tmp/cmd-three',
         installedAt: '2026-08-19T12:10:00.000Z',
       };
+      const inst4: ManagedInstallation = {
+        assistant: 'kilo-code',
+        scope: 'global',
+        kind: 'mcp-server',
+        name: 'sqlite',
+        path: '/tmp/mcp.json',
+        installedAt: '2026-08-19T12:15:00.000Z',
+      };
 
       await writeState(
         'global',
         {
           schemaVersion: SCHEMA_VERSION,
-          installations: [inst1, inst2, inst3],
+          installations: [inst1, inst2, inst3, inst4],
         },
         undefined,
         testHomeDir
       );
 
       const provider = new InstalledTreeDataProvider();
-      const groupItem = new InstalledGroupItem('kilo-code (global)', 'Kilo Code (global)', [inst2, inst3]);
+      const groupItem = new InstalledGroupItem('kilo-code (global)', 'Kilo Code (global)', [inst2, inst3, inst4]);
       const treeGroup = provider.getTreeItem(groupItem);
       assert.strictEqual(treeGroup.label, 'Kilo Code (global)');
-      assert.strictEqual(treeGroup.description, '2 installed');
+      assert.strictEqual(treeGroup.description, '3 installed');
 
       const treeInstAgent = provider.getTreeItem(new InstalledInstallationItem(inst2));
       assert.strictEqual((treeInstAgent.iconPath as { id: string }).id, 'robot');
 
       const treeInstCmd = provider.getTreeItem(new InstalledInstallationItem(inst3));
       assert.strictEqual((treeInstCmd.iconPath as { id: string }).id, 'terminal');
+
+      const treeInstMcp = provider.getTreeItem(new InstalledInstallationItem(inst4));
+      assert.strictEqual((treeInstMcp.iconPath as { id: string }).id, 'plug');
     });
   });
 });
