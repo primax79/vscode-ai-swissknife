@@ -60,7 +60,12 @@ export function manifestPath(scope: Scope, projectRoot?: string, homeRoot?: stri
     if (!projectRoot) {
       throw new Error('projectRoot is required when scope is "project"');
     }
-    return path.join(projectRoot, '.ai-swissknife', 'manifest.json');
+    const standardPath = path.join(projectRoot, '.vscode', 'ai-swissknife', 'manifest.json');
+    const legacyPath = path.join(projectRoot, '.ai-swissknife', 'manifest.json');
+    if (!fs.existsSync(standardPath) && fs.existsSync(legacyPath)) {
+      return legacyPath;
+    }
+    return standardPath;
   }
 
   throw new Error(`Unsupported scope: ${scope}`);
@@ -75,7 +80,12 @@ export function statePath(scope: Scope, projectRoot?: string, homeRoot?: string)
     if (!projectRoot) {
       throw new Error('projectRoot is required when scope is "project"');
     }
-    return path.join(projectRoot, '.ai-swissknife', 'state.json');
+    const standardPath = path.join(projectRoot, '.vscode', 'ai-swissknife', 'state.json');
+    const legacyPath = path.join(projectRoot, '.ai-swissknife', 'state.json');
+    if (!fs.existsSync(standardPath) && fs.existsSync(legacyPath)) {
+      return legacyPath;
+    }
+    return standardPath;
   }
 
   throw new Error(`Unsupported scope: ${scope}`);

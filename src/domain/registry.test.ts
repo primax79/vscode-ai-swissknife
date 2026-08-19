@@ -45,18 +45,25 @@ describe('registry store (manifest & state)', () => {
       assert.throws(() => statePath('project'), /projectRoot is required when scope is "project"/);
     });
 
-    it('manifestPath and statePath return correct paths for global and project scopes', () => {
+    it('manifestPath and statePath return correct paths for global and project scopes', async () => {
       const globalManifest = manifestPath('global', undefined, testHomeDir);
       assert.strictEqual(globalManifest, path.join(testHomeDir, '.ai-swissknife', 'manifest.json'));
 
       const projectManifest = manifestPath('project', testTempDir);
-      assert.strictEqual(projectManifest, path.join(testTempDir, '.ai-swissknife', 'manifest.json'));
+      assert.strictEqual(projectManifest, path.join(testTempDir, '.vscode', 'ai-swissknife', 'manifest.json'));
 
       const globalState = statePath('global', undefined, testHomeDir);
       assert.strictEqual(globalState, path.join(testHomeDir, '.ai-swissknife', 'state.json'));
 
       const projectState = statePath('project', testTempDir);
-      assert.strictEqual(projectState, path.join(testTempDir, '.ai-swissknife', 'state.json'));
+      assert.strictEqual(projectState, path.join(testTempDir, '.vscode', 'ai-swissknife', 'state.json'));
+
+      // Test backward-compat fallback when .ai-swissknife/ exists
+      const legacyDir = path.join(testTempDir, 'legacy-ws');
+      const legacyManifestFile = path.join(legacyDir, '.ai-swissknife', 'manifest.json');
+      await fs.promises.mkdir(path.dirname(legacyManifestFile), { recursive: true });
+      await fs.promises.writeFile(legacyManifestFile, '{}', 'utf-8');
+      assert.strictEqual(manifestPath('project', legacyDir), legacyManifestFile);
     });
   });
 
