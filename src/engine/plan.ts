@@ -9,7 +9,7 @@ import type {
   CanonicalHook,
   CanonicalRule,
 } from '../adapters/types';
-import type { ResolvedArtifact } from '../domain/types';
+import type { ResolvedArtifact, Source, Package, Artifact } from '../domain/types';
 import {
   serializeSkillMarkdown,
   serializeClaudeAgentMarkdown,
@@ -30,6 +30,8 @@ import {
 import { resolveArtifactContent as resolveLocalFolderContent } from '../sources/localFolder';
 import { resolveArtifactContent as resolveGitCustomContent } from '../sources/gitCustom';
 import { resolveArtifactContent as resolveGitMarketplaceContent } from '../sources/gitMarketplace';
+import { resolveArtifactContent as resolveGitSingleItemContent } from '../sources/gitSingleItem';
+import { resolveArtifactContent as resolveRemoteUrlContent } from '../sources/remoteUrl';
 import { translateSkill } from '../translator/skill';
 import { translateAgent } from '../translator/agent';
 import { translateCommand } from '../translator/command';
@@ -45,6 +47,30 @@ import type {
 
 function sha256(data: Uint8Array | string): string {
   return crypto.createHash('sha256').update(data).digest('hex');
+}
+
+async function resolveContentFromSource(
+  source: Source,
+  pkg: Package,
+  artifact: Artifact,
+  resolverOpts?: { cacheDir?: string }
+): Promise<ResolvedArtifact<CanonicalSkill | CanonicalAgent | CanonicalCommand | CanonicalMcpServer | CanonicalHook | CanonicalRule>> {
+  if (source.type === 'local-folder') {
+    return await resolveLocalFolderContent(source, pkg, artifact);
+  }
+  if (source.type === 'git-custom') {
+    return await resolveGitCustomContent(source, pkg, artifact, resolverOpts);
+  }
+  if (source.type === 'git-marketplace') {
+    return await resolveGitMarketplaceContent(source, pkg, artifact, resolverOpts);
+  }
+  if (source.type === 'git-single-item') {
+    return await resolveGitSingleItemContent(source, pkg, artifact, resolverOpts);
+  }
+  if (source.type === 'remote-url') {
+    return await resolveRemoteUrlContent(source, pkg, artifact, resolverOpts);
+  }
+  throw new Error(`Unsupported source type: ${source.type}`);
 }
 
 export async function planInstall(params: PlanInstallParams): Promise<PreparedInstall> {
@@ -74,15 +100,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
   if (artifact.kind === 'rule') {
     let resolvedRule: ResolvedArtifact<CanonicalRule>;
     try {
-      if (source.type === 'local-folder') {
-        resolvedRule = (await resolveLocalFolderContent(source, pkg, artifact)) as ResolvedArtifact<CanonicalRule>;
-      } else if (source.type === 'git-custom') {
-        resolvedRule = (await resolveGitCustomContent(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalRule>;
-      } else if (source.type === 'git-marketplace') {
-        resolvedRule = (await resolveGitMarketplaceContent(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalRule>;
-      } else {
-        throw new Error(`Source type "${source.type}" is not yet supported for rule resolution`);
-      }
+      resolvedRule = (await resolveContentFromSource(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalRule>;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       return {
@@ -178,15 +196,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
   if (artifact.kind === 'hook') {
     let resolvedHook: ResolvedArtifact<CanonicalHook>;
     try {
-      if (source.type === 'local-folder') {
-        resolvedHook = (await resolveLocalFolderContent(source, pkg, artifact)) as ResolvedArtifact<CanonicalHook>;
-      } else if (source.type === 'git-custom') {
-        resolvedHook = (await resolveGitCustomContent(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalHook>;
-      } else if (source.type === 'git-marketplace') {
-        resolvedHook = (await resolveGitMarketplaceContent(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalHook>;
-      } else {
-        throw new Error(`Source type "${source.type}" is not yet supported for hook resolution`);
-      }
+      resolvedHook = (await resolveContentFromSource(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalHook>;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       return {
@@ -282,15 +292,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
   if (artifact.kind === 'mcp-server') {
     let resolvedMcp: ResolvedArtifact<CanonicalMcpServer>;
     try {
-      if (source.type === 'local-folder') {
-        resolvedMcp = (await resolveLocalFolderContent(source, pkg, artifact)) as ResolvedArtifact<CanonicalMcpServer>;
-      } else if (source.type === 'git-custom') {
-        resolvedMcp = (await resolveGitCustomContent(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalMcpServer>;
-      } else if (source.type === 'git-marketplace') {
-        resolvedMcp = (await resolveGitMarketplaceContent(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalMcpServer>;
-      } else {
-        throw new Error(`Source type "${source.type}" is not yet supported for MCP resolution`);
-      }
+      resolvedMcp = (await resolveContentFromSource(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalMcpServer>;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       return {
@@ -396,15 +398,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
   if (artifact.kind === 'command') {
     let resolvedCmd: ResolvedArtifact<CanonicalCommand>;
     try {
-      if (source.type === 'local-folder') {
-        resolvedCmd = (await resolveLocalFolderContent(source, pkg, artifact)) as ResolvedArtifact<CanonicalCommand>;
-      } else if (source.type === 'git-custom') {
-        resolvedCmd = (await resolveGitCustomContent(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalCommand>;
-      } else if (source.type === 'git-marketplace') {
-        resolvedCmd = (await resolveGitMarketplaceContent(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalCommand>;
-      } else {
-        throw new Error(`Source type "${source.type}" is not yet supported for command resolution`);
-      }
+      resolvedCmd = (await resolveContentFromSource(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalCommand>;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       return {
@@ -535,15 +529,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
   if (artifact.kind === 'agent') {
     let resolvedAgent: ResolvedArtifact<CanonicalAgent>;
     try {
-      if (source.type === 'local-folder') {
-        resolvedAgent = (await resolveLocalFolderContent(source, pkg, artifact)) as ResolvedArtifact<CanonicalAgent>;
-      } else if (source.type === 'git-custom') {
-        resolvedAgent = (await resolveGitCustomContent(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalAgent>;
-      } else if (source.type === 'git-marketplace') {
-        resolvedAgent = (await resolveGitMarketplaceContent(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalAgent>;
-      } else {
-        throw new Error(`Source type "${source.type}" is not yet supported for agent resolution`);
-      }
+      resolvedAgent = (await resolveContentFromSource(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalAgent>;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       return {
@@ -673,24 +659,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
   // --- SKILL KIND ---
   let resolvedContent: ResolvedArtifact<CanonicalSkill>;
   try {
-    if (source.type === 'local-folder') {
-      resolvedContent = (await resolveLocalFolderContent(source, pkg, artifact)) as ResolvedArtifact<CanonicalSkill>;
-    } else if (source.type === 'git-custom') {
-      resolvedContent = (await resolveGitCustomContent(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalSkill>;
-    } else if (source.type === 'git-marketplace') {
-      resolvedContent = (await resolveGitMarketplaceContent(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalSkill>;
-    } else {
-      return {
-        supported: false,
-        plan: {
-          supported: false,
-          sourceId: source.id,
-          packageId: pkg.id,
-          artifactId: artifact.id,
-          reason: `Source type "${source.type}" is not supported in Phase 1`,
-        },
-      };
-    }
+    resolvedContent = (await resolveContentFromSource(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalSkill>;
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     return {
