@@ -113,6 +113,12 @@
         "category": "AI Swissknife"
       },
       {
+        "command": "aiSwissknife.syncItem",
+        "title": "Copy to Another Assistant / Scope...",
+        "icon": "$(sync)",
+        "category": "AI Swissknife"
+      },
+      {
         "command": "aiSwissknife.createArtifact",
         "title": "Create New Artifact",
         "icon": "$(new-file)",
@@ -201,14 +207,24 @@
           "group": "inline@1"
         },
         {
-          "command": "aiSwissknife.editArtifact",
+          "command": "aiSwissknife.syncItem",
           "when": "view == aiSwissknife.installed && viewItem == installedInstallation",
           "group": "inline@2"
         },
         {
-          "command": "aiSwissknife.editArtifact",
+          "command": "aiSwissknife.syncItem",
           "when": "view == aiSwissknife.installed && viewItem == observedArtifactItem",
           "group": "inline@2"
+        },
+        {
+          "command": "aiSwissknife.editArtifact",
+          "when": "view == aiSwissknife.installed && viewItem == installedInstallation",
+          "group": "inline@3"
+        },
+        {
+          "command": "aiSwissknife.editArtifact",
+          "when": "view == aiSwissknife.installed && viewItem == observedArtifactItem",
+          "group": "inline@3"
         },
         {
           "command": "aiSwissknife.promoteItem",
