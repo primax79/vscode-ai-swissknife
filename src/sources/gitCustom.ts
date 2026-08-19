@@ -9,6 +9,8 @@ import type {
   CanonicalAgent,
   CanonicalCommand,
   CanonicalMcpServer,
+  CanonicalHook,
+  CanonicalRule,
 } from '../adapters/types';
 import type { SourceResolution } from './types';
 import { readSkill } from '../adapters/codec';
@@ -18,6 +20,8 @@ import {
   findAgentFiles,
   findCommandFiles,
   findMcpDefinitions,
+  findHookFiles,
+  findRuleFiles,
 } from './detect';
 
 const execFileAsync = promisify(child_process.execFile);
@@ -89,7 +93,7 @@ async function getDefaultBranch(cwd: string): Promise<string> {
 }
 
 /**
- * Resolves a `Source` of type `git-custom` detecting skills, agents, commands, and mcp servers.
+ * Resolves a `Source` of type `git-custom` detecting all artifact kinds.
  */
 export async function resolveGitCustom(
   source: Source,
@@ -153,6 +157,8 @@ export async function resolveGitCustom(
     const agentDetection = await findAgentFiles(targetDir);
     const commandDetection = await findCommandFiles(targetDir);
     const mcpDetection = await findMcpDefinitions(targetDir);
+    const hookDetection = await findHookFiles(targetDir);
+    const ruleDetection = await findRuleFiles(targetDir);
 
     const skillPackages: Package[] = skillDetection.skills.map((skillDir) => {
       const relPath = path.relative(targetDir, skillDir.path);
@@ -255,27 +261,86 @@ export async function resolveGitCustom(
       return pkg;
     });
 
+    const hookPackages: Package[] = hookDetection.hooks.map((h) => {
+      const relPath = path.relative(targetDir, h.path);
+      const packageId = `${source.id}:${relPath}`;
+      const artifactId = `${packageId}:${h.name}`;
+
+      const artifact: Artifact = {
+        id: artifactId,
+        packageId,
+        kind: 'hook',
+        name: h.name,
+        description: `Hook on ${h.event}: ${h.command}`,
+        nativeFormat: 'claude-hook',
+      };
+
+      const pkg: Package = {
+        id: packageId,
+        sourceId: source.id,
+        version,
+        nativeFormat: 'claude-hook',
+        artifacts: [artifact],
+      };
+
+      return pkg;
+    });
+
+    const rulePackages: Package[] = ruleDetection.rules.map((r) => {
+      const relPath = path.relative(targetDir, r.path);
+      const packageId = `${source.id}:${relPath}`;
+      const artifactId = `${packageId}:${r.name}`;
+
+      const artifact: Artifact = {
+        id: artifactId,
+        packageId,
+        kind: 'rule',
+        name: r.name,
+        description: 'Project rule instructions',
+        nativeFormat: 'plain-rule',
+      };
+
+      const pkg: Package = {
+        id: packageId,
+        sourceId: source.id,
+        version,
+        nativeFormat: 'plain-rule',
+        artifacts: [artifact],
+      };
+
+      return pkg;
+    });
+
     return {
-      packages: [...skillPackages, ...agentPackages, ...commandPackages, ...mcpPackages],
+      packages: [
+        ...skillPackages,
+        ...agentPackages,
+        ...commandPackages,
+        ...mcpPackages,
+        ...hookPackages,
+        ...rulePackages,
+      ],
       diagnostics: [
         ...skillDetection.diagnostics,
         ...agentDetection.diagnostics,
         ...commandDetection.diagnostics,
         ...mcpDetection.diagnostics,
+        ...hookDetection.diagnostics,
+        ...ruleDetection.diagnostics,
       ],
     };
   });
 }
 
 /**
- * Resolves content for a skill, agent, command, or mcp-server artifact from a git-custom source.
+ * Resolves content for any artifact kind from a git-custom source.
  */
 export async function resolveArtifactContent(
   source: Source,
   pkg: Package,
   artifact: Artifact,
   opts?: GitCustomResolveOptions
-): Promise<ResolvedArtifact<CanonicalSkill | CanonicalAgent | CanonicalCommand | CanonicalMcpServer>> {
+): Promise<ResolvedArtifact<CanonicalSkill | CanonicalAgent | CanonicalCommand | CanonicalMcpServer | CanonicalHook | CanonicalRule>> {
   if (source.type !== 'git-custom') {
     throw new Error(`Expected source.type === "git-custom", got "${source.type}"`);
   }
@@ -397,6 +462,58 @@ export async function resolveArtifactContent(
         ...(serverConfig.env ? { env: serverConfig.env as Record<string, string> } : {}),
         ...(serverConfig.headers ? { headers: serverConfig.headers as Record<string, string> } : {}),
         extraFields,
+      };
+      return { artifact, content };
+    }
+
+    if (artifact.kind === 'hook') {
+      const candidate1 = path.join(targetDir, pathId);
+      const candidate2 = path.join(targetDir, 'hooks', `${artifact.name}.json`);
+      const candidate3 = path.join(targetDir, `${artifact.name}.json`);
+
+      let hookFile = '';
+      for (const cand of [candidate1, candidate2, candidate3]) {
+        if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
+          hookFile = cand;
+          break;
+        }
+      }
+      if (!hookFile) {
+        throw new Error(`Cannot locate hook file for "${artifact.name}" in "${targetDir}"`);
+      }
+
+      const raw = await fs.promises.readFile(hookFile, 'utf-8');
+      const parsed = JSON.parse(raw);
+      const content: CanonicalHook = {
+        name: artifact.name,
+        event: parsed.event ?? 'PreToolUse',
+        command: parsed.command ?? '',
+        timeout: parsed.timeout,
+        extraFields: { ...parsed },
+      };
+      return { artifact, content };
+    }
+
+    if (artifact.kind === 'rule') {
+      const candidate1 = path.join(targetDir, pathId);
+      const candidate2 = path.join(targetDir, 'rules', `${artifact.name}.md`);
+      const candidate3 = path.join(targetDir, `${artifact.name}.md`);
+
+      let ruleFile = '';
+      for (const cand of [candidate1, candidate2, candidate3]) {
+        if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
+          ruleFile = cand;
+          break;
+        }
+      }
+      if (!ruleFile) {
+        throw new Error(`Cannot locate rule file for "${artifact.name}" in "${targetDir}"`);
+      }
+
+      const raw = await fs.promises.readFile(ruleFile, 'utf-8');
+      const content: CanonicalRule = {
+        name: artifact.name,
+        content: raw,
       };
       return { artifact, content };
     }

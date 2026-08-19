@@ -453,6 +453,8 @@ export class DashboardPanel {
       <button class="tab-btn" onclick="setKindFilter('agent', this)">Agents</button>
       <button class="tab-btn" onclick="setKindFilter('command', this)">Commands</button>
       <button class="tab-btn" onclick="setKindFilter('mcp-server', this)">MCPs</button>
+      <button class="tab-btn" onclick="setKindFilter('hook', this)">Hooks</button>
+      <button class="tab-btn" onclick="setKindFilter('rule', this)">Rules</button>
     </div>
   </div>
 

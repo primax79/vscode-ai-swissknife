@@ -9,6 +9,8 @@ import type {
   CanonicalAgent,
   CanonicalCommand,
   CanonicalMcpServer,
+  CanonicalHook,
+  CanonicalRule,
 } from '../adapters/types';
 import type { SourceResolution, DetectionDiagnostic } from './types';
 import { readSkill } from '../adapters/codec';
@@ -358,7 +360,7 @@ export async function resolveArtifactContent(
   pkg: Package,
   artifact: Artifact,
   opts?: GitMarketplaceResolveOptions
-): Promise<ResolvedArtifact<CanonicalSkill | CanonicalAgent | CanonicalCommand | CanonicalMcpServer>> {
+): Promise<ResolvedArtifact<CanonicalSkill | CanonicalAgent | CanonicalCommand | CanonicalMcpServer | CanonicalHook | CanonicalRule>> {
   if (source.type !== 'git-marketplace') {
     throw new Error(`Expected source.type === "git-marketplace", got "${source.type}"`);
   }

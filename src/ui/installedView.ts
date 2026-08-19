@@ -126,6 +126,10 @@ export class InstalledTreeDataProvider
         ? 'terminal'
         : inst.kind === 'mcp-server'
         ? 'plug'
+        : inst.kind === 'hook'
+        ? 'zap'
+        : inst.kind === 'rule'
+        ? 'book'
         : 'check';
 
     if (report) {

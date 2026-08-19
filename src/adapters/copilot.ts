@@ -9,6 +9,7 @@ import type {
   CanonicalAgent,
   CanonicalCommand,
   CanonicalMcpServer,
+  CanonicalHook,
   LocationRef,
 } from './types';
 import { readSkill as codecReadSkill, writeSkill as codecWriteSkill } from './codec';
@@ -291,6 +292,72 @@ export class CopilotAdapter implements Adapter {
       const parsed = JSON.parse(content);
       const mcpBlock = parsed.mcpServers ?? parsed.servers ?? {};
       return Object.keys(mcpBlock);
+    } catch {
+      return [];
+    }
+  }
+
+  hookPath(name: string, loc: LocationRef): string {
+    const fileName = name.endsWith('.json') ? name : `${name}.json`;
+    if (loc.scope === 'global') {
+      return path.join(this.getHomedir(), '.copilot', 'hooks', fileName);
+    }
+    if (loc.scope === 'project') {
+      if (!loc.projectRoot) {
+        throw new Error('projectRoot is required when scope is "project"');
+      }
+      return path.join(loc.projectRoot, '.github', 'hooks', fileName);
+    }
+    throw new Error(`Unsupported scope: ${(loc as { scope: string }).scope}`);
+  }
+
+  async readHook(name: string, loc: LocationRef): Promise<CanonicalHook | null> {
+    const filePath = this.hookPath(name, loc);
+    try {
+      const content = await fs.promises.readFile(filePath, 'utf-8');
+      const parsed = JSON.parse(content);
+      return {
+        name,
+        event: parsed.event ?? 'PreToolUse',
+        command: parsed.command ?? '',
+        timeout: parsed.timeout,
+        extraFields: { ...parsed },
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  async writeHook(hook: CanonicalHook, loc: LocationRef): Promise<void> {
+    const filePath = this.hookPath(hook.name, loc);
+    await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+    const payload = {
+      event: hook.event,
+      command: hook.command,
+      ...(hook.timeout ? { timeout: hook.timeout } : {}),
+      ...hook.extraFields,
+    };
+    await fs.promises.writeFile(filePath, JSON.stringify(payload, null, 2) + '\n', 'utf-8');
+  }
+
+  async listHooks(loc: LocationRef): Promise<string[]> {
+    let dir: string;
+    if (loc.scope === 'global') {
+      dir = path.join(this.getHomedir(), '.copilot', 'hooks');
+    } else if (loc.scope === 'project') {
+      if (!loc.projectRoot) {
+        throw new Error('projectRoot is required when scope is "project"');
+      }
+      dir = path.join(loc.projectRoot, '.github', 'hooks');
+    } else {
+      throw new Error(`Unsupported scope: ${(loc as { scope: string }).scope}`);
+    }
+
+    try {
+      const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+      return entries
+        .filter((e) => e.isFile() && e.name.endsWith('.json'))
+        .map((e) => e.name.replace(/\.json$/, ''));
     } catch {
       return [];
     }

@@ -9,8 +9,8 @@ export interface CanonicalSkillFile {
 export interface CanonicalSkill {
   name: string;
   description: string;
-  body: string; // the markdown content after the frontmatter
-  extraFields: Record<string, unknown>; // unrecognized frontmatter fields, preserved verbatim (SPEC.md §4 "canonical model")
+  body: string;
+  extraFields: Record<string, unknown>;
   files: CanonicalSkillFile[];
 }
 
@@ -24,7 +24,7 @@ export interface CanonicalAgent {
   permissions: Record<string, 'allow' | 'deny' | 'ask'>;
   model?: string;
   variant?: string;
-  body: string; // markdown instructions/prompt
+  body: string;
   extraFields: Record<string, unknown>;
 }
 
@@ -34,7 +34,7 @@ export interface CanonicalCommand {
   agent?: string;
   model?: string;
   subtask?: boolean;
-  body: string; // prompt template content
+  body: string;
   extraFields: Record<string, unknown>;
 }
 
@@ -49,13 +49,22 @@ export interface CanonicalMcpServer {
   extraFields?: Record<string, unknown>;
 }
 
+export interface CanonicalHook {
+  name: string;
+  event: 'PreToolUse' | 'PostToolUse' | 'UserPromptSubmit' | 'SessionStart' | 'SessionStop' | 'SubagentStart' | 'SubagentStop' | 'PreCompact';
+  command: string;
+  timeout?: number;
+  extraFields: Record<string, unknown>;
+}
+
 export interface CanonicalRule {
-  content: string; // raw file content, no frontmatter parsing — CLAUDE.md/AGENTS.md are plain markdown (SPEC.md §1)
+  name?: string;
+  content: string;
 }
 
 export interface LocationRef {
   scope: Scope;
-  projectRoot?: string; // required when scope === 'project'
+  projectRoot?: string;
 }
 
 export interface Adapter {
@@ -81,6 +90,11 @@ export interface Adapter {
   readMcpServer(id: string, loc: LocationRef): Promise<CanonicalMcpServer | null>;
   writeMcpServer(server: CanonicalMcpServer, loc: LocationRef): Promise<void>;
   listMcpServers(loc: LocationRef): Promise<string[]>;
+
+  hookPath(name: string, loc: LocationRef): string;
+  readHook(name: string, loc: LocationRef): Promise<CanonicalHook | null>;
+  writeHook(hook: CanonicalHook, loc: LocationRef): Promise<void>;
+  listHooks(loc: LocationRef): Promise<string[]>;
 
   rulePath(loc: LocationRef): string;
   readRule(loc: LocationRef): Promise<CanonicalRule | null>;

@@ -8,6 +8,8 @@ import type {
   CanonicalAgent,
   CanonicalCommand,
   CanonicalMcpServer,
+  CanonicalHook,
+  CanonicalRule,
 } from './types';
 
 function toPosixPath(p: string): string {
@@ -303,5 +305,41 @@ export function canonicalMcpServerHash(mcp: CanonicalMcpServer): string {
     }
   }
 
+  return hash.digest('hex');
+}
+
+export function canonicalHookHash(hook: CanonicalHook): string {
+  const hash = crypto.createHash('sha256');
+
+  hash.update('name:');
+  hash.update(hook.name);
+  hash.update('\n');
+
+  hash.update('event:');
+  hash.update(hook.event);
+  hash.update('\n');
+
+  hash.update('command:');
+  hash.update(hook.command);
+  hash.update('\n');
+
+  if (hook.timeout !== undefined) {
+    hash.update(`timeout:${hook.timeout}\n`);
+  }
+
+  hash.update('extraFields:\n');
+  const extraKeys = Object.keys(hook.extraFields).sort();
+  for (const key of extraKeys) {
+    hash.update(`${key}:${JSON.stringify(hook.extraFields[key])}\n`);
+  }
+
+  return hash.digest('hex');
+}
+
+export function canonicalRuleHash(rule: CanonicalRule): string {
+  const hash = crypto.createHash('sha256');
+  hash.update('rule:\n');
+  hash.update(rule.content.trim());
+  hash.update('\n');
   return hash.digest('hex');
 }
