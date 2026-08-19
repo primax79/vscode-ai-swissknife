@@ -38,6 +38,17 @@ export interface CanonicalCommand {
   extraFields: Record<string, unknown>;
 }
 
+export interface CanonicalMcpServer {
+  id: string;
+  type: 'stdio' | 'http' | 'sse';
+  command?: string;
+  args?: string[];
+  url?: string;
+  env?: Record<string, string>;
+  headers?: Record<string, string>;
+  extraFields?: Record<string, unknown>;
+}
+
 export interface CanonicalRule {
   content: string; // raw file content, no frontmatter parsing — CLAUDE.md/AGENTS.md are plain markdown (SPEC.md §1)
 }
@@ -52,9 +63,9 @@ export interface Adapter {
 
   skillDir(name: string, loc: LocationRef): string;
   skillPath(name: string, loc: LocationRef): string;
-  readSkill(name: string, loc: LocationRef): Promise<CanonicalSkill | null>; // null if not found, not an error
+  readSkill(name: string, loc: LocationRef): Promise<CanonicalSkill | null>;
   writeSkill(skill: CanonicalSkill, loc: LocationRef): Promise<void>;
-  listSkills(loc: LocationRef): Promise<string[]>; // names only
+  listSkills(loc: LocationRef): Promise<string[]>;
 
   agentPath(name: string, loc: LocationRef): string;
   readAgent(name: string, loc: LocationRef): Promise<CanonicalAgent | null>;
@@ -65,6 +76,11 @@ export interface Adapter {
   readCommand(name: string, loc: LocationRef): Promise<CanonicalCommand | null>;
   writeCommand(command: CanonicalCommand, loc: LocationRef): Promise<void>;
   listCommands(loc: LocationRef): Promise<string[]>;
+
+  mcpConfigPath(loc: LocationRef): string;
+  readMcpServer(id: string, loc: LocationRef): Promise<CanonicalMcpServer | null>;
+  writeMcpServer(server: CanonicalMcpServer, loc: LocationRef): Promise<void>;
+  listMcpServers(loc: LocationRef): Promise<string[]>;
 
   rulePath(loc: LocationRef): string;
   readRule(loc: LocationRef): Promise<CanonicalRule | null>;

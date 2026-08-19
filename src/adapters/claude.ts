@@ -9,6 +9,7 @@ import type {
   CanonicalSkillDocument,
   CanonicalAgent,
   CanonicalCommand,
+  CanonicalMcpServer,
   LocationRef,
 } from './types';
 import { readSkill as codecReadSkill, writeSkill as codecWriteSkill } from './codec';
@@ -544,6 +545,90 @@ export class ClaudeAdapter implements Adapter {
         return [];
       }
       throw err;
+    }
+  }
+
+  mcpConfigPath(loc: LocationRef): string {
+    if (loc.scope === 'global') {
+      return path.join(this.getHomedir(), '.claude', 'settings.json');
+    }
+    if (loc.scope === 'project') {
+      if (!loc.projectRoot) {
+        throw new Error('projectRoot is required when scope is "project"');
+      }
+      return path.join(loc.projectRoot, '.mcp.json');
+    }
+    throw new Error(`Unsupported scope: ${(loc as { scope: string }).scope}`);
+  }
+
+  async readMcpServer(id: string, loc: LocationRef): Promise<CanonicalMcpServer | null> {
+    const filePath = this.mcpConfigPath(loc);
+    try {
+      const content = await fs.promises.readFile(filePath, 'utf-8');
+      const parsed = JSON.parse(content);
+      const conf = parsed.mcpServers?.[id];
+      if (!conf) return null;
+
+      const type: 'stdio' | 'http' | 'sse' = conf.type ?? (conf.command ? 'stdio' : 'sse');
+      return {
+        id,
+        type,
+        ...(conf.command ? { command: conf.command } : {}),
+        ...(conf.args ? { args: conf.args } : {}),
+        ...(conf.url ? { url: conf.url } : {}),
+        ...(conf.env ? { env: conf.env } : {}),
+        ...(conf.headers ? { headers: conf.headers } : {}),
+        extraFields: { ...conf },
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  async writeMcpServer(server: CanonicalMcpServer, loc: LocationRef): Promise<void> {
+    const filePath = this.mcpConfigPath(loc);
+    let parsed: Record<string, unknown> = {};
+
+    try {
+      const content = await fs.promises.readFile(filePath, 'utf-8');
+      parsed = JSON.parse(content);
+    } catch {
+      parsed = {};
+    }
+
+    if (!parsed.mcpServers || typeof parsed.mcpServers !== 'object' || Array.isArray(parsed.mcpServers)) {
+      parsed.mcpServers = {};
+    }
+
+    const mcpServers = parsed.mcpServers as Record<string, unknown>;
+    const entry: Record<string, unknown> = {};
+    if (server.command) entry.command = server.command;
+    if (server.args) entry.args = server.args;
+    if (server.url) entry.url = server.url;
+    if (server.env) entry.env = server.env;
+    if (server.headers) entry.headers = server.headers;
+    if (server.extraFields) {
+      for (const [k, v] of Object.entries(server.extraFields)) {
+        if (!entry[k] && k !== 'id' && k !== 'type') {
+          entry[k] = v;
+        }
+      }
+    }
+
+    mcpServers[server.id] = entry;
+
+    await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.promises.writeFile(filePath, JSON.stringify(parsed, null, 2) + '\n', 'utf-8');
+  }
+
+  async listMcpServers(loc: LocationRef): Promise<string[]> {
+    const filePath = this.mcpConfigPath(loc);
+    try {
+      const content = await fs.promises.readFile(filePath, 'utf-8');
+      const parsed = JSON.parse(content);
+      return Object.keys(parsed.mcpServers ?? {});
+    } catch {
+      return [];
     }
   }
 

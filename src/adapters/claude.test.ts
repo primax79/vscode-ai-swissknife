@@ -4,7 +4,13 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { ClaudeAdapter, claudeAdapter } from './claude';
-import type { CanonicalRule, CanonicalSkill, CanonicalAgent, CanonicalCommand } from './types';
+import type {
+  CanonicalRule,
+  CanonicalSkill,
+  CanonicalAgent,
+  CanonicalCommand,
+  CanonicalMcpServer,
+} from './types';
 
 describe('ClaudeAdapter', () => {
   let testTempDir: string;
@@ -118,6 +124,17 @@ describe('ClaudeAdapter', () => {
         projectPath,
         path.join(testProjectDir, '.claude', 'commands', 'deploy.md')
       );
+    });
+
+    it('mcpConfigPath returns correct global and project paths', () => {
+      const globalPath = adapter.mcpConfigPath({ scope: 'global' });
+      assert.strictEqual(globalPath, path.join(testHomeDir, '.claude', 'settings.json'));
+
+      const projectPath = adapter.mcpConfigPath({
+        scope: 'project',
+        projectRoot: testProjectDir,
+      });
+      assert.strictEqual(projectPath, path.join(testProjectDir, '.mcp.json'));
     });
 
     it('rulePath returns correct global (~/.claude/CLAUDE.md) and project (<root>/CLAUDE.md) paths', () => {
@@ -283,6 +300,49 @@ describe('ClaudeAdapter', () => {
 
       const list = await adapter.listCommands({ scope: 'project', projectRoot: testProjectDir });
       assert.deepStrictEqual(list, ['review-pr']);
+    });
+  });
+
+  describe('mcpServers', () => {
+    it('Round-trip: writeMcpServer merges server and preserves existing servers in .mcp.json', async () => {
+      const server1: CanonicalMcpServer = {
+        id: 'github',
+        type: 'stdio',
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-github'],
+        env: {
+          GITHUB_TOKEN: 'secret-token',
+        },
+      };
+
+      const server2: CanonicalMcpServer = {
+        id: 'remote-docs',
+        type: 'sse',
+        url: 'https://docs.example.com/sse',
+      };
+
+      await adapter.writeMcpServer(server1, { scope: 'project', projectRoot: testProjectDir });
+      await adapter.writeMcpServer(server2, { scope: 'project', projectRoot: testProjectDir });
+
+      const loaded1 = await adapter.readMcpServer('github', {
+        scope: 'project',
+        projectRoot: testProjectDir,
+      });
+      assert.ok(loaded1);
+      assert.strictEqual(loaded1.id, 'github');
+      assert.strictEqual(loaded1.command, 'npx');
+      assert.deepStrictEqual(loaded1.env, { GITHUB_TOKEN: 'secret-token' });
+
+      const loaded2 = await adapter.readMcpServer('remote-docs', {
+        scope: 'project',
+        projectRoot: testProjectDir,
+      });
+      assert.ok(loaded2);
+      assert.strictEqual(loaded2.id, 'remote-docs');
+      assert.strictEqual(loaded2.url, 'https://docs.example.com/sse');
+
+      const list = await adapter.listMcpServers({ scope: 'project', projectRoot: testProjectDir });
+      assert.deepStrictEqual(list.sort(), ['github', 'remote-docs'].sort());
     });
   });
 
