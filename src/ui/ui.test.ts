@@ -39,6 +39,12 @@ Module.prototype.require = function (id: string, ...rest: unknown[]) {
       },
       workspace: {
         workspaceFolders: [],
+        createFileSystemWatcher: () => ({
+          onDidChange: () => ({ dispose: () => {} }),
+          onDidCreate: () => ({ dispose: () => {} }),
+          onDidDelete: () => ({ dispose: () => {} }),
+          dispose: () => {},
+        }),
       },
       window: {
         showInformationMessage: async () => undefined,
@@ -66,6 +72,7 @@ import {
   buildHierarchy,
 } from './availableView';
 import { InstalledTreeDataProvider, InstalledGroupItem, InstalledInstallationItem } from './installedView';
+import { setupFileWatchers } from './watchers';
 
 describe('UI TreeDataProviders', () => {
   let testTempDir: string;
@@ -307,6 +314,21 @@ describe('UI TreeDataProviders', () => {
 
       const treeInstMcp = provider.getTreeItem(new InstalledInstallationItem(inst4));
       assert.strictEqual((treeInstMcp.iconPath as { id: string }).id, 'plug');
+    });
+  });
+
+  describe('setupFileWatchers', () => {
+    it('creates disposables for assistant directories', () => {
+      let fired = false;
+      const disposables = setupFileWatchers(() => {
+        fired = true;
+      });
+      assert.ok(disposables.length > 0);
+      assert.strictEqual(fired, false);
+
+      for (const d of disposables) {
+        d.dispose();
+      }
     });
   });
 });
