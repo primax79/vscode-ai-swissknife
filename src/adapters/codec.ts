@@ -2,7 +2,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { parseSkillMarkdown, serializeSkillMarkdown } from './claude';
-import type { CanonicalSkill, CanonicalSkillFile, CanonicalAgent } from './types';
+import type {
+  CanonicalSkill,
+  CanonicalSkillFile,
+  CanonicalAgent,
+  CanonicalCommand,
+} from './types';
 
 function toPosixPath(p: string): string {
   return p.split(path.sep).join('/');
@@ -213,6 +218,40 @@ export function canonicalAgentHash(agent: CanonicalAgent): string {
   const extraKeys = Object.keys(agent.extraFields).sort();
   for (const key of extraKeys) {
     hash.update(`${key}:${JSON.stringify(agent.extraFields[key])}\n`);
+  }
+
+  return hash.digest('hex');
+}
+
+export function canonicalCommandHash(cmd: CanonicalCommand): string {
+  const hash = crypto.createHash('sha256');
+
+  hash.update('name:');
+  hash.update(cmd.name);
+  hash.update('\n');
+
+  hash.update('description:');
+  hash.update(cmd.description);
+  hash.update('\n');
+
+  if (cmd.agent) {
+    hash.update(`agent:${cmd.agent}\n`);
+  }
+  if (cmd.model) {
+    hash.update(`model:${cmd.model}\n`);
+  }
+  if (cmd.subtask !== undefined) {
+    hash.update(`subtask:${cmd.subtask}\n`);
+  }
+
+  hash.update('body:\n');
+  hash.update(cmd.body);
+  hash.update('\n');
+
+  hash.update('extraFields:\n');
+  const extraKeys = Object.keys(cmd.extraFields).sort();
+  for (const key of extraKeys) {
+    hash.update(`${key}:${JSON.stringify(cmd.extraFields[key])}\n`);
   }
 
   return hash.digest('hex');

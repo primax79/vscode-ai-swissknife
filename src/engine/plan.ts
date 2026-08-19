@@ -1,15 +1,27 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
-import type { CanonicalSkill, CanonicalAgent } from '../adapters/types';
+import type { CanonicalSkill, CanonicalAgent, CanonicalCommand } from '../adapters/types';
 import type { ResolvedArtifact } from '../domain/types';
-import { serializeSkillMarkdown, serializeClaudeAgentMarkdown } from '../adapters/claude';
-import { serializeKiloAgentMarkdown } from '../adapters/kilo';
-import { canonicalSkillHash, canonicalAgentHash } from '../adapters/codec';
+import {
+  serializeSkillMarkdown,
+  serializeClaudeAgentMarkdown,
+  serializeClaudeCommandMarkdown,
+} from '../adapters/claude';
+import {
+  serializeKiloAgentMarkdown,
+  serializeKiloCommandMarkdown,
+} from '../adapters/kilo';
+import {
+  canonicalSkillHash,
+  canonicalAgentHash,
+  canonicalCommandHash,
+} from '../adapters/codec';
 import { resolveArtifactContent as resolveLocalFolderContent } from '../sources/localFolder';
 import { resolveArtifactContent as resolveGitCustomContent } from '../sources/gitCustom';
 import { translateSkill } from '../translator/skill';
 import { translateAgent } from '../translator/agent';
+import { translateCommand } from '../translator/command';
 import type {
   PreparedInstall,
   PlanInstallParams,
@@ -24,7 +36,7 @@ function sha256(data: Uint8Array | string): string {
 export async function planInstall(params: PlanInstallParams): Promise<PreparedInstall> {
   const { source, pkg, artifact, targetAdapter, targetScope, projectRoot, resolverOpts } = params;
 
-  if (artifact.kind !== 'skill' && artifact.kind !== 'agent') {
+  if (artifact.kind !== 'skill' && artifact.kind !== 'agent' && artifact.kind !== 'command') {
     return {
       supported: false,
       plan: {
@@ -32,8 +44,145 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
         sourceId: source.id,
         packageId: pkg.id,
         artifactId: artifact.id,
-        reason: `Artifact kind "${artifact.kind}" is not supported (supported kinds: skill, agent)`,
+        reason: `Artifact kind "${artifact.kind}" is not supported (supported kinds: skill, agent, command)`,
       },
+    };
+  }
+
+  // --- COMMAND KIND ---
+  if (artifact.kind === 'command') {
+    let resolvedCmd: ResolvedArtifact<CanonicalCommand>;
+    try {
+      if (source.type === 'local-folder') {
+        resolvedCmd = (await resolveLocalFolderContent(source, pkg, artifact)) as ResolvedArtifact<CanonicalCommand>;
+      } else if (source.type === 'git-custom') {
+        resolvedCmd = (await resolveGitCustomContent(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalCommand>;
+      } else {
+        throw new Error(`Source type "${source.type}" is not yet supported for command resolution`);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        supported: false,
+        plan: {
+          supported: false,
+          sourceId: source.id,
+          packageId: pkg.id,
+          artifactId: artifact.id,
+          reason: `Command content resolution failed: ${msg}`,
+        },
+      };
+    }
+
+    const translation = translateCommand(resolvedCmd.content, targetAdapter.assistant);
+
+    if (translation.overall === 'unsupported') {
+      return {
+        supported: false,
+        plan: {
+          supported: false,
+          sourceId: source.id,
+          packageId: pkg.id,
+          artifactId: artifact.id,
+          reason: `Target assistant "${targetAdapter.assistant}" is not supported for commands`,
+          diagnostics: translation.diagnostics,
+        },
+      };
+    }
+
+    const translatedCmd = translation.value;
+    if (!targetAdapter.commandPath) {
+      return {
+        supported: false,
+        plan: {
+          supported: false,
+          sourceId: source.id,
+          packageId: pkg.id,
+          artifactId: artifact.id,
+          reason: `Target adapter for "${targetAdapter.assistant}" does not support command installation`,
+          diagnostics: translation.diagnostics,
+        },
+      };
+    }
+
+    const targetFilePath = targetAdapter.commandPath(translatedCmd.name, {
+      scope: targetScope,
+      projectRoot,
+    });
+
+    const existingFiles: ExistingFile[] = [];
+    try {
+      const stat = await fs.promises.lstat(targetFilePath);
+      if (stat.isSymbolicLink() || stat.isDirectory()) {
+        return {
+          supported: false,
+          plan: {
+            supported: false,
+            sourceId: source.id,
+            packageId: pkg.id,
+            artifactId: artifact.id,
+            reason: `Target command path "${targetFilePath}" is a directory or symlink and will not be overwritten`,
+            diagnostics: translation.diagnostics,
+          },
+        };
+      }
+      const data = await fs.promises.readFile(targetFilePath);
+      existingFiles.push({
+        path: path.basename(targetFilePath),
+        contentHash: sha256(data),
+      });
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+        const msg = err instanceof Error ? err.message : String(err);
+        return {
+          supported: false,
+          plan: {
+            supported: false,
+            sourceId: source.id,
+            packageId: pkg.id,
+            artifactId: artifact.id,
+            reason: `Error inspecting target command file: ${msg}`,
+            diagnostics: translation.diagnostics,
+          },
+        };
+      }
+    }
+
+    const serialized =
+      targetAdapter.assistant === 'claude-code'
+        ? serializeClaudeCommandMarkdown(translatedCmd)
+        : serializeKiloCommandMarkdown(translatedCmd);
+
+    const proposedFiles: ProposedFile[] = [
+      {
+        path: path.basename(targetFilePath),
+        contentHash: sha256(Buffer.from(serialized, 'utf-8')),
+      },
+    ];
+
+    const conflict = existingFiles.length > 0;
+    const contentHash = canonicalCommandHash(translatedCmd);
+
+    return {
+      supported: true,
+      kind: 'command',
+      plan: {
+        supported: true,
+        sourceId: source.id,
+        packageId: pkg.id,
+        artifactId: artifact.id,
+        targetAssistant: targetAdapter.assistant,
+        targetScope,
+        targetDir: targetFilePath,
+        projectRoot,
+        sourceRevision: pkg.version,
+        conflict,
+        existingFiles,
+        proposedFiles,
+        diagnostics: translation.diagnostics,
+      },
+      content: translatedCmd,
+      contentHash,
     };
   }
 
