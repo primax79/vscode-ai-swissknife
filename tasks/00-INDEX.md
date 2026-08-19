@@ -49,8 +49,8 @@ initiatives — do not skip straight to implementation there.
 | 17       | 17  | [Form editor webview](17-form-editor/plan.md)                                             | ✅ done                         | 08, 09, 10, 16         | M    |
 | 18       | 18  | [Cross-assistant sync](18-cross-assistant-sync/plan.md)                                   | ✅ done                         | 06, 13, 14, 16         | M    |
 | 19       | 19  | [`hook` kind + active `rule` merge](19-hook-and-rule-merge/plan.md)                       | ✅ done                         | 03, 06, 12             | L    |
-| 20       | 20  | [`remote-url` & `git-single-item` sources](20-remote-url-and-single-item-sources/plan.md) | 🟡 ready                        | 04, 11                 | M    |
-| 21       | 21  | [Codex CLI & Gemini CLI adapters](21-codex-gemini-adapters/plan.md)                       | 📋 planned                      | 03, 05, 08, 09, 10, 12 | L    |
+| 20       | 20  | [`remote-url` & `git-single-item` sources](20-remote-url-and-single-item-sources/plan.md) | ✅ done                         | 04, 11                 | M    |
+| 21       | 21  | [Codex CLI & Gemini CLI adapters](21-codex-gemini-adapters/plan.md)                       | 🟡 ready                        | 03, 05, 08, 09, 10, 12 | L    |
 
 ## Specs
 
