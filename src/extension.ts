@@ -370,7 +370,7 @@ export function activate(context: vscode.ExtensionContext) {
         installedProvider.refresh();
       })
     ),
-    vscode.commands.registerCommand('aiSwissknife.openDashboard', () => DashboardPanel.render()),
+    vscode.commands.registerCommand('aiSwissknife.openDashboard', () => DashboardPanel.render(context.extensionUri)),
     vscode.commands.registerCommand('aiSwissknife.refreshInstalled', () => installedProvider.refresh())
   );
 

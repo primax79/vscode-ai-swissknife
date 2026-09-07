@@ -72,6 +72,7 @@ Module.prototype.require = function (id: string, ...rest: unknown[]) {
           onDidDispose: () => ({ dispose: () => {} }),
           webview: {
             html: '',
+            asWebviewUri: (uri: any) => 'vscode-webview-resource://' + uri.fsPath,
             onDidReceiveMessage: () => ({ dispose: () => {} }),
             postMessage: async () => {},
           },
@@ -461,7 +462,7 @@ describe('UI TreeDataProviders', () => {
 
   describe('DashboardPanel', () => {
     it('renders dashboard HTML with metrics and item rows in normal (non-scanning) mode', () => {
-      const panel = DashboardPanel.render();
+      const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any);
       assert.ok(panel);
 
       const html = panel.getHtml(
@@ -484,7 +485,7 @@ describe('UI TreeDataProviders', () => {
       assert.ok(html.includes('demo-skill'));
       assert.ok(html.includes('claude-code'));
       // Normal mode without a report defaults to up-to-date
-      assert.ok(html.includes('>up-to-date<'));
+      assert.ok(html.includes('● Managed · up to date'));
       assert.ok(!html.includes('id="scan-indicator"')); // No scanning indicator
       assert.ok(html.includes('data-drift-key="claude-code:project:demo-skill"'));
       
@@ -492,7 +493,7 @@ describe('UI TreeDataProviders', () => {
     });
 
     it('renders dashboard HTML in scanning mode with pending status and indicator', () => {
-      const panel = DashboardPanel.render();
+      const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any);
       assert.ok(panel);
 
       const html = panel.getHtml(
@@ -515,7 +516,7 @@ describe('UI TreeDataProviders', () => {
       assert.ok(html.includes('AI Swissknife Dashboard'));
       assert.ok(html.includes('demo-skill'));
       // In scanning mode without a report, it should show 'checking…' and 'badge-pending'
-      assert.ok(html.includes('>checking…<'));
+      assert.ok(html.includes('● Managed · checking…'));
       assert.ok(html.includes('badge-pending'));
       assert.ok(!html.includes('>up-to-date<')); // Should not default to up-to-date
       
