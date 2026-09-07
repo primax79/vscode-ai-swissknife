@@ -6,3 +6,8 @@ export { resolveRecommendations } from './recommendations';
 export type { SourceResolutionAttempt, BrokenReason } from './recommendations';
 export { scanInstalledInventory, promoteObservedArtifact } from './discovery';
 export { planSync, type PlanSyncParams } from './sync';
+export {
+  findRelatedInstallations,
+  type MatchStrategy,
+  type RelatedInstallation,
+} from './crossFrameworkLookup';
