@@ -77,7 +77,7 @@ Module.prototype.require = function (id: string, ...rest: unknown[]) {
   return originalRequire.apply(this, [id, ...rest]);
 };
 
-import type { ManagedInstallation, Source, Package } from '../domain/types';
+import type { ManagedInstallation, Source, Package, Artifact } from '../domain/types';
 import {
   readManifest,
   writeManifest,
@@ -96,6 +96,8 @@ import { setupFileWatchers } from './watchers';
 import { DashboardPanel } from './dashboard';
 import { FormEditorPanel } from './formEditor';
 import { handleRecommendForWorkspace, handleUnrecommendForWorkspace } from '../extension';
+import { RecommendedGroupItem, RecommendedBrokenItem } from './availableView';
+import type { DesiredInstallation } from '../domain/registry';
 
 describe('UI TreeDataProviders', () => {
   let testTempDir: string;
@@ -278,6 +280,31 @@ describe('UI TreeDataProviders', () => {
       });
       const mcpTreeItem = provider.getTreeItem(mcpItem);
       assert.strictEqual((mcpTreeItem.iconPath as { id: string }).id, 'plug');
+    });
+
+    it('renders RecommendedGroupItem and RecommendedBrokenItem correctly', () => {
+      const provider = new AvailableTreeDataProvider();
+      
+      const source: Source = { id: 's1', type: 'git-custom', scope: 'project' };
+      const pkg: Package = { id: 'p1', sourceId: 's1', nativeFormat: 'raw', artifacts: [] };
+      const artifact: Artifact = { id: 'a1', packageId: 'p1', kind: 'skill', name: 's', nativeFormat: 'md' };
+      const desiredSat: DesiredInstallation = { sourceId: 's1', artifactId: 'a1', assistant: 'claude-code', scope: 'project' };
+      const desiredBrok: DesiredInstallation = { sourceId: 's2', artifactId: 'a2', assistant: 'claude-code', scope: 'project' };
+      
+      const pending = [{ desired: desiredSat, artifact, pkg, source }];
+      const broken = [{ desired: desiredBrok, reason: { kind: 'source-not-registered' as const } }];
+      
+      const groupItem = new RecommendedGroupItem(pending, broken);
+      const treeGroup = provider.getTreeItem(groupItem);
+      assert.strictEqual(treeGroup.label, 'Recommended');
+      assert.strictEqual(treeGroup.description, '1 pending, 1 broken');
+      assert.strictEqual((treeGroup.iconPath as { id: string }).id, 'star');
+
+      const brokenItem = new RecommendedBrokenItem(desiredBrok, { kind: 'source-not-registered' });
+      const treeBroken = provider.getTreeItem(brokenItem);
+      assert.strictEqual(treeBroken.label, 'a2');
+      assert.ok((treeBroken.description as string).includes('Source not registered'));
+      assert.strictEqual(treeBroken.command, undefined, 'broken items must be non-actionable (no command)');
     });
   });
 
