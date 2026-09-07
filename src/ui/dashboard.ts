@@ -28,21 +28,71 @@ export class DashboardPanel {
             break;
           case 'promote':
             if (message.observed) {
-              await promoteObservedArtifact(message.observed);
-              vscode.window.showInformationMessage(`Promoted "${message.observed.name}" to managed.`);
-              await this.update();
+              const obs = message.observed as ObservedArtifact;
+              const candidates = obs.candidates ?? [];
+              if (candidates.length === 0) {
+                vscode.window.showErrorMessage(`Cannot promote "${obs.name}": no known source candidates.`);
+                break;
+              }
+
+              let chosenCandidate = candidates.length === 1 ? candidates[0] : undefined;
+
+              if (candidates.length > 1) {
+                const picks = candidates.map(c => ({
+                  label: c.sourceId ?? 'Unknown',
+                  description: c.status,
+                  candidate: c
+                }));
+                const picked = await vscode.window.showQuickPick(picks, {
+                  placeHolder: `Select source provenance for ${obs.kind} "${obs.name}"`
+                });
+                if (!picked) break;
+                chosenCandidate = picked.candidate;
+              } else {
+                let confirmPrompt = `Promote unmanaged ${obs.kind} "${obs.name}" (${obs.assistant}, ${obs.scope}) to managed installation?`;
+                if (chosenCandidate?.status === 'identical') {
+                  confirmPrompt = `Observed ${obs.kind} "${obs.name}" is identical to registered source "${chosenCandidate.sourceId}". Promote to managed installation and attach source provenance?`;
+                } else if (chosenCandidate?.status === 'different') {
+                  confirmPrompt = `Observed ${obs.kind} "${obs.name}" differs from registered source "${chosenCandidate.sourceId}". Promote local copy to managed installation?`;
+                }
+
+                const confirm = await vscode.window.showInformationMessage(
+                  confirmPrompt,
+                  { modal: true },
+                  'Promote'
+                );
+                if (confirm !== 'Promote') break;
+              }
+
+              try {
+                await promoteObservedArtifact(obs, chosenCandidate!);
+                vscode.window.showInformationMessage(`Promoted "${obs.name}" to managed.`);
+                await this.update();
+              } catch (err: unknown) {
+                const msg = err instanceof Error ? err.message : String(err);
+                vscode.window.showErrorMessage(`Failed to promote "${obs.name}": ${msg}`);
+              }
             }
             break;
           case 'promoteAllIdentical':
             if (Array.isArray(message.items)) {
               let count = 0;
+              let skipped = 0;
               for (const item of message.items) {
-                if (item.match?.status === 'identical') {
-                  await promoteObservedArtifact(item);
+                const obs = item as ObservedArtifact;
+                const candidates = obs.candidates ?? [];
+                if (candidates.length === 1 && candidates[0].status === 'identical') {
+                  await promoteObservedArtifact(obs, candidates[0]);
                   count++;
+                } else if (obs.match?.status === 'identical' && candidates.length > 1) {
+                  skipped++;
                 }
               }
-              vscode.window.showInformationMessage(`Promoted ${count} identical item(s) to managed installations.`);
+              if (skipped > 0) {
+                vscode.window.showInformationMessage(`Promoted ${count} identical item(s). Skipped ${skipped} item(s) with multiple candidates.`);
+              } else {
+                vscode.window.showInformationMessage(`Promoted ${count} identical item(s) to managed installations.`);
+              }
               await this.update();
             }
             break;
@@ -256,6 +306,11 @@ export class DashboardPanel {
         tooltip = ` title="${escapeHtml(obs.match.details || '')}"`;
       }
 
+      let actionBtn = '';
+      if ((obs.candidates?.length ?? 0) > 0) {
+        actionBtn = `<button class="btn btn-sm btn-primary" onclick="promoteItem(${idx})">Promote</button>`;
+      }
+
       rowsHtml += `
         <tr class="item-row" data-kind="${escapeHtml(obs.kind)}" data-name="${escapeHtml(obs.name.toLowerCase())}" data-assistant="${escapeHtml(obs.assistant)}" data-scope="${escapeHtml(obs.scope)}" data-membership="unmanaged" data-status="unmanaged">
           <td><span class="kind-pill kind-${escapeHtml(obs.kind)}">${escapeHtml(obs.kind)}</span></td>
@@ -264,7 +319,7 @@ export class DashboardPanel {
           <td><span class="scope-pill scope-${escapeHtml(obs.scope)}">${escapeHtml(obs.scope)}</span></td>
           <td><span class="badge ${badgeClass}"${tooltip}>${escapeHtml(badgeText)}</span></td>
           <td>
-            <button class="btn btn-sm btn-primary" onclick="promoteItem(${idx})">Promote</button>
+            ${actionBtn}
           </td>
         </tr>
       `;

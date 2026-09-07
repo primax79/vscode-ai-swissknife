@@ -121,7 +121,15 @@ export class InstalledTreeDataProvider
         obs.match?.details ? `\nFeedback: ${obs.match.details}` : ''
       }`;
       item.iconPath = new vscode.ThemeIcon(iconName);
-      item.contextValue = 'observedArtifactItem';
+      
+      let candidateContext = 'observedArtifactItem:none';
+      if (obs.candidates && obs.candidates.length === 1) {
+        candidateContext = 'observedArtifactItem:one';
+      } else if (obs.candidates && obs.candidates.length > 1) {
+        candidateContext = 'observedArtifactItem:many';
+      }
+      item.contextValue = candidateContext;
+      
       return item;
     }
 
@@ -484,24 +492,44 @@ export class InstalledTreeDataProvider
     }
 
     const obs = item.observed;
-    let confirmPrompt = `Promote unmanaged ${obs.kind} "${obs.name}" (${obs.assistant}, ${obs.scope}) to managed installation?`;
-
-    if (obs.match?.status === 'identical') {
-      confirmPrompt = `Observed ${obs.kind} "${obs.name}" is identical to registered source "${obs.match.sourceId}". Promote to managed installation and attach source provenance?`;
-    } else if (obs.match?.status === 'different') {
-      confirmPrompt = `Observed ${obs.kind} "${obs.name}" differs from registered source "${obs.match.sourceId}". Promote local copy to managed installation?`;
+    const candidates = obs.candidates ?? [];
+    
+    if (candidates.length === 0) {
+      vscode.window.showErrorMessage(`Cannot promote "${obs.name}": no known source candidates.`);
+      return;
     }
 
-    const confirm = await vscode.window.showInformationMessage(
-      confirmPrompt,
-      { modal: true },
-      'Promote'
-    );
+    let chosenCandidate = candidates.length === 1 ? candidates[0] : undefined;
 
-    if (confirm !== 'Promote') return;
+    if (candidates.length > 1) {
+      const picks = candidates.map(c => ({
+        label: c.sourceId ?? 'Unknown',
+        description: c.status,
+        candidate: c
+      }));
+      const picked = await vscode.window.showQuickPick(picks, {
+        placeHolder: `Select source provenance for ${obs.kind} "${obs.name}"`
+      });
+      if (!picked) return;
+      chosenCandidate = picked.candidate;
+    } else {
+      let confirmPrompt = `Promote unmanaged ${obs.kind} "${obs.name}" (${obs.assistant}, ${obs.scope}) to managed installation?`;
+      if (chosenCandidate?.status === 'identical') {
+        confirmPrompt = `Observed ${obs.kind} "${obs.name}" is identical to registered source "${chosenCandidate.sourceId}". Promote to managed installation and attach source provenance?`;
+      } else if (chosenCandidate?.status === 'different') {
+        confirmPrompt = `Observed ${obs.kind} "${obs.name}" differs from registered source "${chosenCandidate.sourceId}". Promote local copy to managed installation?`;
+      }
+
+      const confirm = await vscode.window.showInformationMessage(
+        confirmPrompt,
+        { modal: true },
+        'Promote'
+      );
+      if (confirm !== 'Promote') return;
+    }
 
     try {
-      await promoteObservedArtifact(obs);
+      await promoteObservedArtifact(obs, chosenCandidate!);
       vscode.window.showInformationMessage(`Successfully promoted "${obs.name}" to managed installation.`);
       this.refresh();
     } catch (err: unknown) {
