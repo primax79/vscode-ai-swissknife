@@ -17,6 +17,7 @@ import { setupFileWatchers } from './ui/watchers';
 import { DashboardPanel } from './ui/dashboard';
 import { FormEditorPanel } from './ui/formEditor';
 import { getWorkspaceRoot } from './ui/workspacePicker';
+import { previewProvider, PreviewProvider } from './ui/previewProvider';
 
 import { handleInstallRecommended } from './ui/recommendations';
 
@@ -246,6 +247,7 @@ export function activate(context: vscode.ExtensionContext) {
   });
 
   context.subscriptions.push(
+    vscode.workspace.registerTextDocumentContentProvider(PreviewProvider.scheme, previewProvider),
     ...watchers,
     sourcesTreeView,
     vscode.window.registerTreeDataProvider('aiSwissknife.available', availableProvider),
