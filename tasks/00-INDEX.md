@@ -59,7 +59,7 @@ Task 22.2 (resolution engine) gates 22.3 and 22.4 — do not start either until 
 | 19       | 19  | [`hook` kind + active `rule` merge](19-hook-and-rule-merge/plan.md)                       | ✅ done                         | 03, 06, 12             | L    |
 | 20       | 20  | [`remote-url` & `git-single-item` sources](20-remote-url-and-single-item-sources/plan.md) | ✅ done                         | 04, 11                 | M    |
 | 21       | 21  | [Codex CLI & Gemini CLI adapters](21-codex-gemini-adapters/plan.md)                       | ✅ done                         | 03, 05, 08, 09, 10, 12 | L    |
-| 22       | 22  | [Project-scoped recommended installations](22-project-recommendations/plan.md)           | 📝 specced, not started         | 02, 06, 07             | M    |
+| 22       | 22  | [Project-scoped recommended installations](22-project-recommendations/plan.md)           | ✅ done                         | 02, 06, 07             | M    |
 
 ## Specs
 
