@@ -31,6 +31,20 @@ recommendation travels with `git clone` inside the existing shared manifest, and
 workspace offers to install what's missing. See [`specs/project-recommendations.md`](specs/project-recommendations.md).
 Task 22.2 (resolution engine) gates 22.3 and 22.4 — do not start either until it lands.
 
+**2026-09-07 — Phase 6 opened**:
+Initiatives 23-27 overhaul the usability/information-architecture of the two UI
+surfaces built across Phases 1-5: the sidebar (Sources/Available/Installed)
+stays action-oriented (browse/install/promote), while the `DashboardPanel`
+webview becomes the state/detail/cross-reference hub — real per-item detail
+(origin, diff-vs-original, cross-framework "installed also in"), a `Move`
+action alongside the existing `Copy`, a `Promote` disambiguation fix, a
+rebuilt unified-table Dashboard with filters instead of structural
+managed/unmanaged sections, and two new Dashboard entry points (status bar
+item, per-source filtered jump). See
+[`specs/phase-6-spec.md`](specs/phase-6-spec.md). Multi-engine review
+(Codex + Kilo/Gemini, both rounds) complete and incorporated — accepted for
+task breakdown.
+
 ## Initiatives
 
 `#` is the stable id (folder/task prefix); it is NOT reading order —
@@ -60,6 +74,11 @@ Task 22.2 (resolution engine) gates 22.3 and 22.4 — do not start either until 
 | 20       | 20  | [`remote-url` & `git-single-item` sources](20-remote-url-and-single-item-sources/plan.md) | ✅ done                         | 04, 11                 | M    |
 | 21       | 21  | [Codex CLI & Gemini CLI adapters](21-codex-gemini-adapters/plan.md)                       | ✅ done                         | 03, 05, 08, 09, 10, 12 | L    |
 | 22       | 22  | [Project-scoped recommended installations](22-project-recommendations/plan.md)           | ✅ done                         | 02, 06, 07             | M    |
+| 23       | 23  | [Cross-framework identity lookup + shared content accessor](23-cross-framework-lookup/plan.md) | 📝 specced, not started        | 13, 14                 | M    |
+| 24       | 24  | [Diff-vs-original + preview-before-install](24-diff-and-preview/plan.md)                 | 📝 specced, not started        | 23                     | M    |
+| 25       | 25  | [Move action + Promote disambiguation fix](25-move-and-promote-fix/plan.md)               | 📝 specced, not started        | 14, 18                 | M    |
+| 26       | 26  | [Dashboard rebuild: unified table, filters, detail](26-dashboard-rebuild/plan.md)          | 📝 specced, not started        | 16, 23, 24, 25         | L    |
+| 27       | 27  | [New Dashboard entry points](27-dashboard-entry-points/plan.md)                            | 📝 specced, not started        | 22, 26                 | S    |
 
 ## Specs
 
@@ -70,6 +89,7 @@ Task 22.2 (resolution engine) gates 22.3 and 22.4 — do not start either until 
 | [phase-3-spec](specs/phase-3-spec.md)                        | 13, 14, 15, 16             |
 | [phase-4-spec](specs/phase-4-spec.md)                        | 17, 18, 19, 20, 21         |
 | [project-recommendations](specs/project-recommendations.md)  | 22                         |
+| [phase-6-spec](specs/phase-6-spec.md)                        | 23, 24, 25, 26, 27         |
 
 ## Dependency graph
 
@@ -87,6 +107,13 @@ Phase 4 (independent of each other beyond shared Phase 1-3 prerequisites):
 03, 06, 12 ─────────────► 19 (hook + rule merge)
 04, 11 ─────────────────► 20 (remote-url + git-single-item)
 03, 05, 08, 09, 10, 12 ─► 21 (Codex + Gemini adapters)
+
+Phase 6 (sidebar/Dashboard usability overhaul):
+13, 14 ──────────────────► 23 (Cross-framework lookup + content accessor)
+23 ───────────────────────► 24 (Diff-vs-original + preview-before-install)
+14, 18 ────────────────────► 25 (Move action + Promote disambiguation fix)
+16, 23, 24, 25 ─────────────► 26 (Dashboard rebuild)
+22, 26 ─────────────────────► 27 (New Dashboard entry points)
 ```
 
 ---

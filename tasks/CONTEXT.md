@@ -164,6 +164,15 @@ review, `_inbox/analyzed/codex-analysis-2.md` — don't let it drift again).
   (`.vscode/extensions.json`), surfaced on workspace open. *Why:* re-using
   the existing schema instead of inventing a parallel one avoids a second,
   driftable "intent" list — see `specs/project-recommendations.md`.
+- **Sidebar = action, Dashboard = state/detail/cross-reference** (locked
+  2026-09-07). The three `TreeView`s (Sources/Available/Installed) stay
+  focused on browsing/adding/installing/promoting; anything requiring rich
+  per-item detail, diff-vs-original, or cross-assistant "installed also in"
+  lookup renders in the `DashboardPanel` webview instead of being crammed
+  into `TreeItem` tooltips. *Why:* an earlier idea to nest a richer
+  Assistant→Scope hierarchy directly in the sidebar was found to conflate
+  two different jobs — "navigate to act" vs. "fully understand one item's
+  state" — see `specs/phase-6-spec.md` §3.
 
 ## Conventions
 
