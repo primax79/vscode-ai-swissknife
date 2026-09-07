@@ -17,6 +17,7 @@ import { planInstall } from '../engine/plan';
 import { applyInstall } from '../engine/apply';
 import type { PreparedInstall } from '../engine/types';
 import { getWorkspaceRoot } from './workspacePicker';
+import { getAssistantIconPath } from './assistantIcons';
 
 import { resolveRecommendations, SourceResolutionAttempt, BrokenReason } from '../engine/recommendations';
 import type { DesiredInstallation } from '../domain/registry';
@@ -171,6 +172,8 @@ export function buildHierarchy(
 export class AvailableTreeDataProvider
   implements vscode.TreeDataProvider<AvailableTreeItem>
 {
+  constructor(private readonly extensionUri: vscode.Uri) {}
+
   private _onDidChangeTreeData = new vscode.EventEmitter<
     AvailableTreeItem | undefined | null | void
   >();
@@ -455,13 +458,18 @@ export class AvailableTreeDataProvider
     const { source, pkg, artifact } = item;
 
     const assistantPick = await vscode.window.showQuickPick(
-      ['claude-code', 'kilo-code', 'github-copilot', 'codex-cli', 'gemini-cli'],
+      (['claude-code', 'kilo-code', 'github-copilot', 'codex-cli', 'gemini-cli'] as const).map(
+        (id) => ({
+          label: id,
+          iconPath: getAssistantIconPath(id, this.extensionUri),
+        })
+      ),
       {
         placeHolder: 'Select target AI assistant',
       }
     );
     if (!assistantPick) return;
-    const targetAssistant = assistantPick as AssistantId;
+    const targetAssistant = assistantPick.label as AssistantId;
     const targetAdapter =
       targetAssistant === 'claude-code'
         ? this.claudeAdapter
@@ -587,13 +595,18 @@ export class AvailableTreeDataProvider
     }
 
     const assistantPick = await vscode.window.showQuickPick(
-      ['claude-code', 'kilo-code', 'github-copilot', 'codex-cli', 'gemini-cli'],
+      (['claude-code', 'kilo-code', 'github-copilot', 'codex-cli', 'gemini-cli'] as const).map(
+        (id) => ({
+          label: id,
+          iconPath: getAssistantIconPath(id, this.extensionUri),
+        })
+      ),
       {
         placeHolder: `Select target AI assistant for ${items.length} item(s)`,
       }
     );
     if (!assistantPick) return;
-    const targetAssistant = assistantPick as AssistantId;
+    const targetAssistant = assistantPick.label as AssistantId;
     const targetAdapter =
       targetAssistant === 'claude-code'
         ? this.claudeAdapter

@@ -72,6 +72,10 @@ Module.prototype.require = function (id: string, ...rest: unknown[]) {
           },
         }),
       },
+      Uri: {
+        joinPath: (base: any, ...segments: string[]) => ({ fsPath: [base.fsPath, ...segments].join('/') }),
+        file: (path: string) => ({ fsPath: path })
+      },
     };
   }
   return originalRequire.apply(this, [id, ...rest]);
@@ -85,13 +89,9 @@ import {
   SCHEMA_VERSION,
 } from '../domain/registry';
 import { SourcesTreeDataProvider, ScopeGroupItem } from './sourcesView';
-import {
-  AvailableTreeDataProvider,
-  AvailableFolderItem,
-  AvailableArtifactItem,
-  buildHierarchy,
-} from './availableView';
+import { AvailableTreeDataProvider, AvailableFolderItem, AvailableArtifactItem, buildHierarchy } from './availableView';
 import { InstalledTreeDataProvider, InstalledGroupItem, InstalledInstallationItem } from './installedView';
+import { getAssistantIconPath } from './assistantIcons';
 import { setupFileWatchers } from './watchers';
 import { DashboardPanel } from './dashboard';
 import { FormEditorPanel } from './formEditor';
@@ -236,7 +236,7 @@ describe('UI TreeDataProviders', () => {
     });
 
     it('AvailableTreeDataProvider sets distinct icons and command for skill, agent, command, and mcp-server', () => {
-      const provider = new AvailableTreeDataProvider();
+      const provider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any);
       const source: Source = { id: 'src-1', type: 'local-folder', scope: 'project' };
       const pkg: Package = { id: 'src-1:pkg', sourceId: 'src-1', nativeFormat: 'claude-skill', artifacts: [] };
 
@@ -353,8 +353,8 @@ describe('UI TreeDataProviders', () => {
         testHomeDir
       );
 
-      const provider = new InstalledTreeDataProvider();
-      const groupItem = new InstalledGroupItem('kilo-code (global)', 'Kilo Code (global)', [inst2, inst3, inst4]);
+      const provider = new InstalledTreeDataProvider({ fsPath: '/test/ext' } as any);
+      const groupItem = new InstalledGroupItem('kilo-code (global)', 'Kilo Code (global)', [inst2, inst3, inst4], 'kilo-code');
       const treeGroup = provider.getTreeItem(groupItem);
       assert.strictEqual(treeGroup.label, 'Kilo Code (global)');
       assert.strictEqual(treeGroup.description, '3 managed');
@@ -367,6 +367,16 @@ describe('UI TreeDataProviders', () => {
 
       const treeInstMcp = provider.getTreeItem(new InstalledInstallationItem(inst4));
       assert.strictEqual((treeInstMcp.iconPath as { id: string }).id, 'plug');
+    });
+
+    it('sets correct iconPath for InstalledGroupItem based on assistant', () => {
+      const provider = new InstalledTreeDataProvider({ fsPath: '/test/ext' } as any);
+      const groupItem = new InstalledGroupItem('claude-code (global)', 'Claude Code (global)', [], 'claude-code');
+      const treeGroup = provider.getTreeItem(groupItem);
+      const iconPath = treeGroup.iconPath as { light: { fsPath: string }, dark: { fsPath: string } };
+      assert.ok(iconPath);
+      assert.strictEqual(iconPath.light.fsPath, '/test/ext/resources/claude.svg');
+      assert.strictEqual(iconPath.dark.fsPath, '/test/ext/resources/claude.svg');
     });
   });
 
@@ -441,8 +451,8 @@ describe('UI TreeDataProviders', () => {
 
   describe('Recommend and Unrecommend Commands', () => {
     it('manages desiredInstallations in manifest accurately', async () => {
-      const availableProvider = new AvailableTreeDataProvider();
-      const installedProvider = new InstalledTreeDataProvider();
+      const availableProvider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any);
+      const installedProvider = new InstalledTreeDataProvider({ fsPath: '/test/ext' } as any);
 
       const source: Source = { id: 'src-1', type: 'local-folder', scope: 'project' };
       const pkg: Package = { id: 'src-1:pkg', sourceId: 'src-1', nativeFormat: 'raw', artifacts: [] };
@@ -505,6 +515,31 @@ describe('UI TreeDataProviders', () => {
       manifest = await readManifest('project', testTempDir);
       assert.strictEqual(manifest.desiredInstallations.length, 0); // no manifest change
       assert.ok((mockLastWarningMessage as any)?.includes("This item isn't tracked to a source"));
+    });
+  });
+
+  describe('assistantIcons', () => {
+    it('getAssistantIconPath returns the right file(s) for each of the 5 assistant ids', () => {
+      const extUri = { fsPath: '/ext' } as any;
+      const claude = getAssistantIconPath('claude-code', extUri);
+      assert.strictEqual(claude.light.fsPath, '/ext/resources/claude.svg');
+      assert.strictEqual(claude.dark.fsPath, '/ext/resources/claude.svg');
+
+      const kilo = getAssistantIconPath('kilo-code', extUri);
+      assert.strictEqual(kilo.light.fsPath, '/ext/resources/kilocode-light.svg');
+      assert.strictEqual(kilo.dark.fsPath, '/ext/resources/kilocode-dark.svg');
+
+      const copilot = getAssistantIconPath('github-copilot', extUri);
+      assert.strictEqual(copilot.light.fsPath, '/ext/resources/githubcopilot-light.svg');
+      assert.strictEqual(copilot.dark.fsPath, '/ext/resources/githubcopilot-dark.svg');
+
+      const codex = getAssistantIconPath('codex-cli', extUri);
+      assert.strictEqual(codex.light.fsPath, '/ext/resources/openai.svg');
+      assert.strictEqual(codex.dark.fsPath, '/ext/resources/openai.svg');
+
+      const gemini = getAssistantIconPath('gemini-cli', extUri);
+      assert.strictEqual(gemini.light.fsPath, '/ext/resources/gemini.svg');
+      assert.strictEqual(gemini.dark.fsPath, '/ext/resources/gemini.svg');
     });
   });
 });
