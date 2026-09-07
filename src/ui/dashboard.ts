@@ -1,18 +1,21 @@
 import * as vscode from 'vscode';
-import type { ManagedInstallation, ObservedArtifact, Source } from '../domain/types';
+import type { ManagedInstallation, ObservedArtifact, Source, AssistantId } from '../domain/types';
 import { readManifest, fromDesiredSource } from '../domain/registry';
 import { scanInstalledInventory, promoteObservedArtifact } from '../engine/discovery';
 import { analyzeLocalDrift, checkForUpstreamUpdate } from '../engine/drift';
 import type { DriftReport } from '../engine/types';
 import { FormEditorPanel } from './formEditor';
+import { getAssistantIconPath } from './assistantIcons';
 
 export class DashboardPanel {
   public static currentPanel: DashboardPanel | undefined;
   private readonly _panel: vscode.WebviewPanel;
+  private readonly _extensionUri: vscode.Uri;
   private _disposables: vscode.Disposable[] = [];
 
-  private constructor(panel: vscode.WebviewPanel) {
+  private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
     this._panel = panel;
+    this._extensionUri = extensionUri;
     this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
     this._panel.webview.onDidReceiveMessage(
       async (message) => {
@@ -71,7 +74,7 @@ export class DashboardPanel {
     this.update();
   }
 
-  public static render(): DashboardPanel {
+  public static render(extensionUri: vscode.Uri): DashboardPanel {
     if (DashboardPanel.currentPanel) {
       DashboardPanel.currentPanel._panel.reveal(vscode.ViewColumn.One);
       DashboardPanel.currentPanel.update();
@@ -85,10 +88,11 @@ export class DashboardPanel {
       {
         enableScripts: true,
         retainContextWhenHidden: true,
+        localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'resources')]
       }
     );
 
-    DashboardPanel.currentPanel = new DashboardPanel(panel);
+    DashboardPanel.currentPanel = new DashboardPanel(panel, extensionUri);
     return DashboardPanel.currentPanel;
   }
 
@@ -174,6 +178,16 @@ export class DashboardPanel {
     reports: DriftReport[],
     scanning: boolean = false
   ): string {
+    const escapeHtml = (unsafe: string) => {
+      return (unsafe || '')
+        .toString()
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    };
+
     const totalInstalled = managed.length;
     const totalUnmanaged = observed.length;
     const updatesAvailable = reports.filter(
@@ -186,63 +200,79 @@ export class DashboardPanel {
 
     const reportMap = new Map(reports.map((r) => [`${r.installation.assistant}:${r.installation.scope}:${r.installation.name}`, r]));
 
-    const managedRows = managed
-      .map((inst, idx) => {
-        const key = `${inst.assistant}:${inst.scope}:${inst.name}`;
-        const report = reportMap.get(key);
-        const isPending = scanning && !report;
-        const status = report?.status ?? (scanning ? 'checking…' : 'up-to-date');
-        const badgeClass =
-          isPending
-            ? 'badge-pending'
-            : status === 'up-to-date'
-            ? 'badge-success'
-            : status === 'update-available'
-            ? 'badge-info'
-            : status === 'modified-locally'
-            ? 'badge-warning'
-            : status === 'modified-and-update-available'
-            ? 'badge-warning'
-            : 'badge-error';
+    const presentAssistants = Array.from(new Set([...managed.map(m => m.assistant), ...observed.map(o => o.assistant)])).sort();
+    const environmentPills = presentAssistants.map(a => {
+      const iconUris = getAssistantIconPath(a as AssistantId, this._extensionUri);
+      const iconSrc = this._panel.webview.asWebviewUri(iconUris.light);
+      return `<button class="filter-pill env-pill" data-env="${escapeHtml(a)}" onclick="setEnvFilter('${escapeHtml(a)}')">
+        <img src="${iconSrc}" class="assistant-icon" width="14" height="14" />
+        ${escapeHtml(a)}
+      </button>`;
+    }).join('\n');
 
-        return `
-        <tr class="item-row" data-kind="${inst.kind}" data-name="${inst.name.toLowerCase()}">
-          <td><span class="kind-pill kind-${inst.kind}">${inst.kind}</span></td>
-          <td><strong>${inst.name}</strong></td>
-          <td>${inst.assistant}</td>
-          <td><span class="scope-pill scope-${inst.scope}">${inst.scope}</span></td>
-          <td data-drift-key="${key}"><span class="badge ${badgeClass}">${status}</span></td>
+    let rowsHtml = '';
+    
+    managed.forEach((inst, idx) => {
+      const key = `${inst.assistant}:${inst.scope}:${inst.name}`;
+      const report = reportMap.get(key);
+      const isPending = scanning && !report;
+      const status = report?.status ?? (scanning ? 'checking…' : 'up-to-date');
+      let badgeClass = 'badge-pending';
+      let badgeText = '● Managed · checking…';
+      
+      if (!isPending) {
+        if (status === 'up-to-date') { badgeClass = 'badge-success'; badgeText = '● Managed · up to date'; }
+        else if (status === 'update-available') { badgeClass = 'badge-info'; badgeText = '● Managed · update available'; }
+        else if (status === 'modified-locally' || status === 'modified-and-update-available') { badgeClass = 'badge-warning'; badgeText = '● Managed · modified locally'; }
+        else { badgeClass = 'badge-error'; badgeText = `● Managed · ${status}`; }
+      }
+
+      rowsHtml += `
+        <tr class="item-row" data-kind="${escapeHtml(inst.kind)}" data-name="${escapeHtml(inst.name.toLowerCase())}" data-assistant="${escapeHtml(inst.assistant)}" data-scope="${escapeHtml(inst.scope)}" data-membership="managed" data-status="${escapeHtml(status)}">
+          <td><span class="kind-pill kind-${escapeHtml(inst.kind)}">${escapeHtml(inst.kind)}</span></td>
+          <td><strong>${escapeHtml(inst.name)}</strong></td>
+          <td>${escapeHtml(inst.assistant)}</td>
+          <td><span class="scope-pill scope-${escapeHtml(inst.scope)}">${escapeHtml(inst.scope)}</span></td>
+          <td data-drift-key="${escapeHtml(key)}"><span class="badge ${badgeClass}">${escapeHtml(badgeText)}</span></td>
           <td>
             <button class="btn btn-sm btn-secondary" onclick="editItem(${idx})">Edit</button>
           </td>
         </tr>
       `;
-      })
-      .join('');
+    });
 
-    const observedRows = observed
-      .map((obs, idx) => {
-        let matchBadge = '<span class="badge badge-unmanaged">local only</span>';
-        if (obs.match?.status === 'identical') {
-          matchBadge = `<span class="badge badge-success" title="${obs.match.details}">identical: ${obs.match.sourceId}</span>`;
-        } else if (obs.match?.status === 'different') {
-          matchBadge = `<span class="badge badge-warning" title="${obs.match.details}">differs: ${obs.match.sourceId}</span>`;
-        }
+    observed.forEach((obs, idx) => {
+      let badgeClass = 'badge-unmanaged';
+      let badgeText = '◌ Unmanaged · local only';
+      let tooltip = '';
+      
+      if (obs.match?.status === 'identical') {
+        badgeClass = 'badge-success';
+        badgeText = `◌ Unmanaged · identical to ${obs.match.sourceId}`;
+        tooltip = ` title="${escapeHtml(obs.match.details || '')}"`;
+      } else if (obs.match?.status === 'different') {
+        badgeClass = 'badge-warning';
+        badgeText = `◌ Unmanaged · differs from ${obs.match.sourceId}`;
+        tooltip = ` title="${escapeHtml(obs.match.details || '')}"`;
+      }
 
-        return `
-        <tr class="unmanaged-row" data-kind="${obs.kind}" data-name="${obs.name.toLowerCase()}">
-          <td><span class="kind-pill kind-${obs.kind}">${obs.kind}</span></td>
-          <td><strong>${obs.name}</strong></td>
-          <td>${obs.assistant}</td>
-          <td><span class="scope-pill scope-${obs.scope}">${obs.scope}</span></td>
-          <td>${matchBadge}</td>
+      rowsHtml += `
+        <tr class="item-row" data-kind="${escapeHtml(obs.kind)}" data-name="${escapeHtml(obs.name.toLowerCase())}" data-assistant="${escapeHtml(obs.assistant)}" data-scope="${escapeHtml(obs.scope)}" data-membership="unmanaged" data-status="unmanaged">
+          <td><span class="kind-pill kind-${escapeHtml(obs.kind)}">${escapeHtml(obs.kind)}</span></td>
+          <td><strong>${escapeHtml(obs.name)}</strong></td>
+          <td>${escapeHtml(obs.assistant)}</td>
+          <td><span class="scope-pill scope-${escapeHtml(obs.scope)}">${escapeHtml(obs.scope)}</span></td>
+          <td><span class="badge ${badgeClass}"${tooltip}>${escapeHtml(badgeText)}</span></td>
           <td>
             <button class="btn btn-sm btn-primary" onclick="promoteItem(${idx})">Promote</button>
           </td>
         </tr>
       `;
-      })
-      .join('');
+    });
+
+    if (!rowsHtml) {
+      rowsHtml = '<tr><td colspan="6" style="text-align:center; opacity:0.6;">No items found.</td></tr>';
+    }
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -325,6 +355,19 @@ export class DashboardPanel {
       margin-bottom: 16px;
       align-items: center;
     }
+    .filters-bar { flex-wrap: wrap; }
+    .filter-group { display: flex; align-items: center; gap: 6px; }
+    .filter-select { background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground); border: 1px solid var(--vscode-dropdown-border); padding: 4px; font-size: 11px; border-radius: 4px; outline: none; }
+    .filter-pill { background: transparent; border: 1px solid var(--border); color: var(--fg); padding: 4px 8px; border-radius: 12px; cursor: pointer; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; }
+    .filter-pill.active { background: var(--btn-bg); color: var(--btn-fg); border-color: var(--btn-bg); }
+    .assistant-icon { filter: grayscale(1) brightness(0.8); }
+    .filter-pill.active .assistant-icon { filter: grayscale(0) brightness(1.2); }
+    
+    .breadcrumb { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 12px; min-height: 24px;}
+    .breadcrumb-text { opacity: 0.7; font-size: 11px; }
+    .chip { display: inline-flex; align-items: center; gap: 4px; background: rgba(255, 255, 255, 0.1); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; font-size: 11px; }
+    .chip-close { cursor: pointer; opacity: 0.6; }
+    .chip-close:hover { opacity: 1; color: var(--badge-error); }
     .search-input {
       flex: 1;
       background: var(--vscode-input-background, #3c3c3c);
@@ -370,6 +413,10 @@ export class DashboardPanel {
       background: rgba(255, 255, 255, 0.1);
       color: var(--fg);
       border: 1px solid var(--border);
+    }
+    .btn-primary {
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
     }
     table {
       width: 100%;
@@ -425,22 +472,6 @@ export class DashboardPanel {
     .scan-indicator { font-size: 11px; opacity: 0.8; display: flex; align-items: center; gap: 6px; }
     .spinner { border: 2px solid rgba(136, 136, 136, 0.2); border-top-color: #888; border-radius: 50%; width: 10px; height: 10px; animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .path-cell {
-      font-size: 11px;
-      opacity: 0.7;
-      word-break: break-all;
-    }
-    .section-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin: 20px 0 8px 0;
-    }
-    .section-title {
-      font-size: 14px;
-      font-weight: 600;
-      margin: 0;
-    }
   </style>
 </head>
 <body>
@@ -452,12 +483,13 @@ export class DashboardPanel {
     <div class="header-actions">
       ${scanning ? '<div class="scan-indicator" id="scan-indicator"><div class="spinner"></div>Scanning for updates…</div>' : ''}
       <button class="btn btn-secondary" onclick="refreshState()">Refresh</button>
+      ${identicalCount > 0 ? '<button class="btn btn-primary" onclick="promoteAllIdentical()">Promote ' + identicalCount + ' Identical Source Items</button>' : ''}
     </div>
   </div>
 
   <div class="stats-ribbon">
     <div class="stat-chip">
-      <span class="stat-num">${totalInstalled}</span>
+      <span class="stat-num" id="stat-managed">${totalInstalled}</span>
       <span class="stat-label">Managed Installations</span>
     </div>
     <div class="stat-chip stat-info">
@@ -469,15 +501,43 @@ export class DashboardPanel {
       <span class="stat-label">Modified Locally</span>
     </div>
     <div class="stat-chip stat-unmanaged">
-      <span class="stat-num">${totalUnmanaged}</span>
-      <span class="stat-label">Unmanaged Discovered (${identicalCount} identical, ${totalUnmanaged - identicalCount} custom)</span>
+      <span class="stat-num" id="stat-unmanaged">${totalUnmanaged}</span>
+      <span class="stat-label" id="stat-unmanaged-lbl">Unmanaged Discovered (${identicalCount} identical, ${totalUnmanaged - identicalCount} custom)</span>
     </div>
   </div>
+  
+  <div class="breadcrumb" id="breadcrumb" style="display: none;">
+    <span class="breadcrumb-text">Active filters:</span>
+    <span id="breadcrumb-chips"></span>
+  </div>
 
+  <div class="toolbar filters-bar">
+    <div class="filter-group">
+      <button class="filter-pill env-pill active" data-env="all" onclick="setEnvFilter('all')">All Env</button>
+      ${environmentPills}
+    </div>
+    <div class="filter-group">
+      <select class="filter-select" id="scopeFilter" onchange="setScopeFilter(this.value)">
+        <option value="all">Scope: All</option>
+        <option value="global">Scope: Global</option>
+        <option value="project">Scope: Project</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <select class="filter-select" id="membershipFilter" onchange="setMembershipFilter(this.value)">
+        <option value="all">Membership: All</option>
+        <option value="managed">Membership: Managed</option>
+        <option value="unmanaged">Membership: Unmanaged</option>
+      </select>
+    </div>
+    <div class="filter-group" style="flex: 1;">
+      <input type="text" class="search-input" id="searchBox" placeholder="Filter by name..." oninput="filterTable()">
+    </div>
+  </div>
+  
   <div class="toolbar">
-    <input type="text" class="search-input" id="searchBox" placeholder="Filter artifacts by name, assistant, scope..." oninput="filterTable()">
     <div class="tabs">
-      <button class="tab-btn active" onclick="setKindFilter('all', this)">All</button>
+      <button class="tab-btn active" onclick="setKindFilter('all', this)">All Kinds</button>
       <button class="tab-btn" onclick="setKindFilter('skill', this)">Skills</button>
       <button class="tab-btn" onclick="setKindFilter('agent', this)">Agents</button>
       <button class="tab-btn" onclick="setKindFilter('command', this)">Commands</button>
@@ -487,9 +547,6 @@ export class DashboardPanel {
     </div>
   </div>
 
-  <div class="section-header">
-    <h2 class="section-title">Managed Artifacts (${totalInstalled})</h2>
-  </div>
   <table>
     <thead>
       <tr>
@@ -501,47 +558,23 @@ export class DashboardPanel {
         <th>Action</th>
       </tr>
     </thead>
-    <tbody id="managedTable">
-      ${managedRows || '<tr><td colspan="6" style="text-align:center; opacity:0.6;">No managed installations yet.</td></tr>'}
+    <tbody id="unifiedTable">
+      ${rowsHtml}
     </tbody>
   </table>
 
-  ${
-    observed.length > 0
-      ? `
-  <div class="section-header">
-    <h2 class="section-title">Unmanaged Discovered Items (${totalUnmanaged})</h2>
-    ${
-      identicalCount > 0
-        ? `<button class="btn btn-sm btn-primary" onclick="promoteAllIdentical()">Promote ${identicalCount} Identical Source Items</button>`
-        : ''
-    }
-  </div>
-  <table>
-    <thead>
-      <tr>
-        <th>Kind</th>
-        <th>Name</th>
-        <th>Assistant</th>
-        <th>Scope</th>
-        <th>Source Match</th>
-        <th>Action</th>
-      </tr>
-    </thead>
-    <tbody id="observedTable">
-      ${observedRows}
-    </tbody>
-  </table>
-  `
-      : ''
-  }
+  <script type="application/json" id="managedDataJson">${JSON.stringify(managed).replace(/</g, '\\u003c')}</script>
+  <script type="application/json" id="observedDataJson">${JSON.stringify(observed).replace(/</g, '\\u003c')}</script>
 
   <script>
     const vscode = acquireVsCodeApi();
-    const managedData = ${JSON.stringify(managed)};
-    const observedData = ${JSON.stringify(observed)};
+    const managedData = JSON.parse(document.getElementById('managedDataJson').textContent);
+    const observedData = JSON.parse(document.getElementById('observedDataJson').textContent);
 
     let currentKind = 'all';
+    let currentEnv = 'all';
+    let currentScope = 'all';
+    let currentMembership = 'all';
 
     function refreshState() {
       vscode.postMessage({ command: 'refresh' });
@@ -561,29 +594,115 @@ export class DashboardPanel {
       vscode.postMessage({ command: 'promoteAllIdentical', items: observedData });
     }
 
-    function setKindFilter(kind, btn) {
-      currentKind = kind;
-      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
+    function setEnvFilter(env) {
+      currentEnv = env;
+      document.querySelectorAll('.env-pill').forEach(b => {
+        if (b.getAttribute('data-env') === env) b.classList.add('active');
+        else b.classList.remove('active');
+      });
       filterTable();
     }
 
+    function setScopeFilter(scope) {
+      currentScope = scope;
+      document.getElementById('scopeFilter').value = scope;
+      filterTable();
+    }
+
+    function setMembershipFilter(mem) {
+      currentMembership = mem;
+      document.getElementById('membershipFilter').value = mem;
+      filterTable();
+    }
+
+    function setKindFilter(kind, btn) {
+      currentKind = kind;
+      if (btn) {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      } else {
+        document.querySelectorAll('.tab-btn').forEach(b => {
+          if (b.innerText.toLowerCase().includes(kind) || (kind === 'all' && b.innerText === 'All Kinds')) b.classList.add('active');
+          else b.classList.remove('active');
+        });
+      }
+      filterTable();
+    }
+
+    function removeChip(type) {
+      if (type === 'env') { setEnvFilter('all'); }
+      if (type === 'scope') { setScopeFilter('all'); }
+      if (type === 'membership') { setMembershipFilter('all'); }
+      if (type === 'kind') { setKindFilter('all', null); }
+    }
+
+    function updateBreadcrumb() {
+      const chipsContainer = document.getElementById('breadcrumb-chips');
+      const chips = [];
+      if (currentEnv !== 'all') chips.push(\`<span class="chip">\${currentEnv} <span class="chip-close" onclick="removeChip('env')">✕</span></span>\`);
+      if (currentScope !== 'all') chips.push(\`<span class="chip">\${currentScope} <span class="chip-close" onclick="removeChip('scope')">✕</span></span>\`);
+      if (currentMembership !== 'all') chips.push(\`<span class="chip">\${currentMembership} <span class="chip-close" onclick="removeChip('membership')">✕</span></span>\`);
+      if (currentKind !== 'all') chips.push(\`<span class="chip">\${currentKind} <span class="chip-close" onclick="removeChip('kind')">✕</span></span>\`);
+      
+      if (chips.length > 0) {
+        chipsContainer.innerHTML = chips.join(' · ');
+        document.getElementById('breadcrumb').style.display = 'flex';
+      } else {
+        chipsContainer.innerHTML = '';
+        document.getElementById('breadcrumb').style.display = 'none';
+      }
+    }
+
     function filterTable() {
+      updateBreadcrumb();
       const q = document.getElementById('searchBox').value.toLowerCase();
-      document.querySelectorAll('.item-row, .unmanaged-row').forEach(row => {
+      
+      let visManaged = 0;
+      let visUpdates = 0;
+      let visModified = 0;
+      let visUnmanaged = 0;
+      let visUnmanagedIdentical = 0;
+
+      document.querySelectorAll('.item-row').forEach(row => {
         const kind = row.getAttribute('data-kind');
         const name = row.getAttribute('data-name');
+        const env = row.getAttribute('data-assistant');
+        const scope = row.getAttribute('data-scope');
+        const mem = row.getAttribute('data-membership');
         const text = row.innerText.toLowerCase();
 
         const matchesKind = currentKind === 'all' || kind === currentKind;
+        const matchesEnv = currentEnv === 'all' || env === currentEnv;
+        const matchesScope = currentScope === 'all' || scope === currentScope;
+        const matchesMem = currentMembership === 'all' || mem === currentMembership;
         const matchesQuery = !q || text.includes(q) || name.includes(q);
 
-        if (matchesKind && matchesQuery) {
+        if (matchesKind && matchesEnv && matchesScope && matchesMem && matchesQuery) {
           row.style.display = '';
+          if (mem === 'managed') {
+            visManaged++;
+            const status = row.getAttribute('data-status');
+            if (status === 'update-available' || status === 'modified-and-update-available') visUpdates++;
+            if (status === 'modified-locally' || status === 'modified-and-update-available') visModified++;
+          } else {
+            visUnmanaged++;
+            if (text.includes('identical to')) visUnmanagedIdentical++;
+          }
         } else {
           row.style.display = 'none';
         }
       });
+      
+      const manStat = document.getElementById('stat-managed');
+      if (manStat) manStat.textContent = visManaged;
+      const upStat = document.getElementById('stat-updates-available');
+      if (upStat) upStat.textContent = visUpdates;
+      const modStat = document.getElementById('stat-modified-locally');
+      if (modStat) modStat.textContent = visModified;
+      const unmanStat = document.getElementById('stat-unmanaged');
+      if (unmanStat) unmanStat.textContent = visUnmanaged;
+      const unmanLbl = document.getElementById('stat-unmanaged-lbl');
+      if (unmanLbl) unmanLbl.textContent = \`Unmanaged Discovered (\${visUnmanagedIdentical} identical, \${visUnmanaged - visUnmanagedIdentical} custom)\`;
     }
 
     window.addEventListener('message', (event) => {
@@ -591,22 +710,23 @@ export class DashboardPanel {
       if (msg.command === 'driftResult') {
         const cell = document.querySelector('[data-drift-key="' + msg.key + '"]');
         if (cell) {
+          const row = cell.closest('tr');
+          if (row) row.setAttribute('data-status', msg.status);
+
           let badgeClass = 'badge-error';
-          if (msg.status === 'up-to-date') badgeClass = 'badge-success';
-          else if (msg.status === 'update-available') badgeClass = 'badge-info';
-          else if (msg.status === 'modified-locally' || msg.status === 'modified-and-update-available') badgeClass = 'badge-warning';
+          let badgeText = '● Managed · error';
+          if (msg.status === 'up-to-date') { badgeClass = 'badge-success'; badgeText = '● Managed · up to date'; }
+          else if (msg.status === 'update-available') { badgeClass = 'badge-info'; badgeText = '● Managed · update available'; }
+          else if (msg.status === 'modified-locally' || msg.status === 'modified-and-update-available') { badgeClass = 'badge-warning'; badgeText = '● Managed · modified locally'; }
           
-          cell.innerHTML = '<span class="badge ' + badgeClass + '">' + msg.status + '</span>';
+          cell.innerHTML = '<span class="badge ' + badgeClass + '">' + badgeText + '</span>';
+          filterTable();
         }
       } else if (msg.command === 'scanComplete') {
         const indicator = document.getElementById('scan-indicator');
         if (indicator) indicator.style.display = 'none';
         
-        const updatesStat = document.getElementById('stat-updates-available');
-        if (updatesStat) updatesStat.textContent = msg.updatesAvailable;
-        
-        const modifiedStat = document.getElementById('stat-modified-locally');
-        if (modifiedStat) modifiedStat.textContent = msg.modifiedLocally;
+        filterTable();
       }
     });
   </script>
