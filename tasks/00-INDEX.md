@@ -23,6 +23,14 @@ see [`specs/phase-4-spec.md`](specs/phase-4-spec.md). Note: 19.1 (hook path veri
 (Gemini agent verification) are mandatory research spikes that gate the adapter code in their own
 initiatives — do not skip straight to implementation there.
 
+**2026-09-07 — Phase 5 opened**:
+Initiative 22 gives the already-existing but dead `desiredInstallations` field a real purpose:
+project-scoped recommended installations modeled on VS Code's own workspace extension
+recommendations (`.vscode/extensions.json`) — a curator marks artifacts as recommended, the
+recommendation travels with `git clone` inside the existing shared manifest, and opening the
+workspace offers to install what's missing. See [`specs/project-recommendations.md`](specs/project-recommendations.md).
+Task 22.2 (resolution engine) gates 22.3 and 22.4 — do not start either until it lands.
+
 ## Initiatives
 
 `#` is the stable id (folder/task prefix); it is NOT reading order —
@@ -51,15 +59,17 @@ initiatives — do not skip straight to implementation there.
 | 19       | 19  | [`hook` kind + active `rule` merge](19-hook-and-rule-merge/plan.md)                       | ✅ done                         | 03, 06, 12             | L    |
 | 20       | 20  | [`remote-url` & `git-single-item` sources](20-remote-url-and-single-item-sources/plan.md) | ✅ done                         | 04, 11                 | M    |
 | 21       | 21  | [Codex CLI & Gemini CLI adapters](21-codex-gemini-adapters/plan.md)                       | ✅ done                         | 03, 05, 08, 09, 10, 12 | L    |
+| 22       | 22  | [Project-scoped recommended installations](22-project-recommendations/plan.md)           | 📝 specced, not started         | 02, 06, 07             | M    |
 
 ## Specs
 
-| Spec                                  | Drives                     |
-| ------------------------------------- | -------------------------- |
-| [foundations](specs/foundations.md)   | 01, 02, 03, 04, 05, 06, 07 |
-| [phase-2-spec](specs/phase-2-spec.md) | 08, 09, 10, 11, 12         |
-| [phase-3-spec](specs/phase-3-spec.md) | 13, 14, 15, 16             |
-| [phase-4-spec](specs/phase-4-spec.md) | 17, 18, 19, 20, 21         |
+| Spec                                                         | Drives                     |
+| ------------------------------------------------------------ | -------------------------- |
+| [foundations](specs/foundations.md)                          | 01, 02, 03, 04, 05, 06, 07 |
+| [phase-2-spec](specs/phase-2-spec.md)                        | 08, 09, 10, 11, 12         |
+| [phase-3-spec](specs/phase-3-spec.md)                        | 13, 14, 15, 16             |
+| [phase-4-spec](specs/phase-4-spec.md)                        | 17, 18, 19, 20, 21         |
+| [project-recommendations](specs/project-recommendations.md)  | 22                         |
 
 ## Dependency graph
 

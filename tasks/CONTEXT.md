@@ -155,6 +155,15 @@ review, `_inbox/analyzed/codex-analysis-2.md` — don't let it drift again).
   it's now scheduled as initiative 19 (`specs/phase-4-spec.md` §5), which
   defines the merge policy (demarcated managed block, append-or-replace,
   never touching surrounding content) that unblocks it.
+- **`desiredInstallations` was dead data through Phases 1-4** (found
+  2026-09-07) — the field has existed in `ManifestFile` since initiative 02
+  but nothing ever wrote or resolved it; the only non-declaration reference
+  was `sourcesView.ts` pruning entries on source removal. Initiative 22
+  gives it a real purpose: project-scoped "recommended installation" entries
+  modeled on VS Code's own workspace extension recommendations
+  (`.vscode/extensions.json`), surfaced on workspace open. *Why:* re-using
+  the existing schema instead of inventing a parallel one avoids a second,
+  driftable "intent" list — see `specs/project-recommendations.md`.
 
 ## Conventions
 
