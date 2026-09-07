@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { AssistantId, Scope, ItemKind } from './domain/types';
+import { readManifest, writeManifest } from './domain/registry';
 import { SourcesTreeDataProvider, SourceItem } from './ui/sourcesView';
 import {
   AvailableTreeDataProvider,
@@ -16,6 +17,154 @@ import { setupFileWatchers } from './ui/watchers';
 import { DashboardPanel } from './ui/dashboard';
 import { FormEditorPanel } from './ui/formEditor';
 import { getWorkspaceRoot } from './ui/workspacePicker';
+
+export async function handleRecommendForWorkspace(
+  item: AvailableArtifactItem | InstalledInstallationItem | undefined,
+  availableProvider: AvailableTreeDataProvider,
+  installedProvider: InstalledTreeDataProvider
+) {
+  if (!item) {
+    vscode.window.showWarningMessage('Please select an item to recommend.');
+    return;
+  }
+
+  let sourceId: string;
+  let artifactId: string;
+  let assistant: AssistantId;
+
+  if (item instanceof AvailableArtifactItem) {
+    if (item.source.scope !== 'project') {
+      vscode.window.showWarningMessage(`Cannot recommend global-scope items.`);
+      return;
+    }
+    const assistantPick = await vscode.window.showQuickPick(
+      ['claude-code', 'kilo-code', 'github-copilot', 'codex-cli', 'gemini-cli'],
+      {
+        placeHolder: 'Select target AI assistant for recommendation',
+      }
+    );
+    if (!assistantPick) return;
+
+    sourceId = item.source.id;
+    artifactId = item.artifact.id;
+    assistant = assistantPick as AssistantId;
+  } else if (item instanceof InstalledInstallationItem) {
+    const inst = item.installation;
+    if (inst.scope !== 'project') {
+      vscode.window.showWarningMessage(`Cannot recommend global-scope items.`);
+      return;
+    }
+    if (!inst.sourceId || !inst.artifactId) {
+      vscode.window.showWarningMessage("This item isn't tracked to a source and can't be recommended.");
+      return;
+    }
+
+    sourceId = inst.sourceId;
+    artifactId = inst.artifactId;
+    assistant = inst.assistant;
+  } else {
+    return;
+  }
+
+  const projectRoot = await getWorkspaceRoot();
+  if (!projectRoot) return;
+
+  try {
+    const manifest = await readManifest('project', projectRoot);
+    const existingIndex = manifest.desiredInstallations.findIndex(
+      (d) => d.sourceId === sourceId && d.artifactId === artifactId && d.assistant === assistant
+    );
+    if (existingIndex === -1) {
+      manifest.desiredInstallations.push({
+        sourceId,
+        artifactId,
+        assistant,
+        scope: 'project',
+      });
+      await writeManifest('project', manifest, projectRoot);
+      availableProvider.refresh();
+      installedProvider.refresh();
+      vscode.window.showInformationMessage(`Item recommended for workspace.`);
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    vscode.window.showErrorMessage(`Failed to recommend item: ${msg}`);
+  }
+}
+
+export async function handleUnrecommendForWorkspace(
+  item: AvailableArtifactItem | InstalledInstallationItem | undefined,
+  availableProvider: AvailableTreeDataProvider,
+  installedProvider: InstalledTreeDataProvider
+) {
+  if (!item) {
+    vscode.window.showWarningMessage('Please select an item to unrecommend.');
+    return;
+  }
+
+  let sourceId: string;
+  let artifactId: string;
+  let assistant: AssistantId;
+
+  if (item instanceof AvailableArtifactItem) {
+    if (item.source.scope !== 'project') {
+      vscode.window.showWarningMessage(`Cannot unrecommend global-scope items.`);
+      return;
+    }
+    // We need the assistant. If invoked from Available view, we don't know which assistant they want to unrecommend for if multiple exist.
+    // Wait, the specification says:
+    // "unrecommendForWorkspace: same read, filter out the matching entry, write back."
+    // Does Available view unrecommend prompt for assistant? The spec doesn't explicitly mention it for unrecommend.
+    // But how can we filter without the assistant? If we prompt, we should do it. Let's see:
+    const assistantPick = await vscode.window.showQuickPick(
+      ['claude-code', 'kilo-code', 'github-copilot', 'codex-cli', 'gemini-cli'],
+      {
+        placeHolder: 'Select target AI assistant to remove recommendation',
+      }
+    );
+    if (!assistantPick) return;
+
+    sourceId = item.source.id;
+    artifactId = item.artifact.id;
+    assistant = assistantPick as AssistantId;
+  } else if (item instanceof InstalledInstallationItem) {
+    const inst = item.installation;
+    if (inst.scope !== 'project') {
+      vscode.window.showWarningMessage(`Cannot unrecommend global-scope items.`);
+      return;
+    }
+    if (!inst.sourceId || !inst.artifactId) {
+      vscode.window.showWarningMessage("This item isn't tracked to a source and can't be unrecommended.");
+      return;
+    }
+
+    sourceId = inst.sourceId;
+    artifactId = inst.artifactId;
+    assistant = inst.assistant;
+  } else {
+    return;
+  }
+
+  const projectRoot = await getWorkspaceRoot();
+  if (!projectRoot) return;
+
+  try {
+    const manifest = await readManifest('project', projectRoot);
+    const existingIndex = manifest.desiredInstallations.findIndex(
+      (d) => d.sourceId === sourceId && d.artifactId === artifactId && d.assistant === assistant
+    );
+    if (existingIndex !== -1) {
+      manifest.desiredInstallations.splice(existingIndex, 1);
+      await writeManifest('project', manifest, projectRoot);
+      availableProvider.refresh();
+      installedProvider.refresh();
+      vscode.window.showInformationMessage(`Recommendation removed.`);
+    }
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    vscode.window.showErrorMessage(`Failed to unrecommend item: ${msg}`);
+  }
+}
 
 export function activate(context: vscode.ExtensionContext) {
   const sourcesProvider = new SourcesTreeDataProvider();
@@ -144,6 +293,12 @@ export function activate(context: vscode.ExtensionContext) {
           );
         }
       }
+    ),
+    vscode.commands.registerCommand('aiSwissknife.recommendForWorkspace', (item?: AvailableArtifactItem | InstalledInstallationItem) => 
+      handleRecommendForWorkspace(item, availableProvider, installedProvider)
+    ),
+    vscode.commands.registerCommand('aiSwissknife.unrecommendForWorkspace', (item?: AvailableArtifactItem | InstalledInstallationItem) => 
+      handleUnrecommendForWorkspace(item, availableProvider, installedProvider)
     ),
     vscode.commands.registerCommand('aiSwissknife.openDashboard', () => DashboardPanel.render()),
     vscode.commands.registerCommand('aiSwissknife.refreshInstalled', () => installedProvider.refresh())

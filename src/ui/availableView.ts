@@ -56,7 +56,8 @@ export class AvailableArtifactItem {
   constructor(
     public readonly source: Source,
     public readonly pkg: Package,
-    public readonly artifact: Artifact
+    public readonly artifact: Artifact,
+    public readonly isRecommended?: boolean
   ) {}
 }
 
@@ -72,7 +73,8 @@ interface RawTreeNode {
 
 export function buildHierarchy(
   source: Source,
-  packages: Package[]
+  packages: Package[],
+  recommendedSet?: Set<string>
 ): Array<AvailableFolderItem | AvailableArtifactItem> {
   const rootNode: RawTreeNode = {
     segment: '',
@@ -101,7 +103,8 @@ export function buildHierarchy(
     }
 
     for (const art of pkg.artifacts) {
-      current.artifacts.push(new AvailableArtifactItem(source, pkg, art));
+      const isRecommended = recommendedSet?.has(`${source.id}:${art.id}`);
+      current.artifacts.push(new AvailableArtifactItem(source, pkg, art, isRecommended));
     }
   }
 
@@ -284,9 +287,9 @@ export class AvailableTreeDataProvider
       artifact.name,
       vscode.TreeItemCollapsibleState.None
     );
-    item.description = artifact.description;
+    item.description = element.isRecommended ? `${artifact.description || ''} ★`.trim() : artifact.description;
     item.tooltip = `Kind: ${artifact.kind}\nSource: ${element.source.id}\nPackage: ${element.pkg.id}`;
-    item.contextValue = 'availableArtifact';
+    item.contextValue = element.isRecommended ? 'availableArtifact:recommended' : 'availableArtifact';
     const icon =
       artifact.kind === 'agent'
         ? 'robot'
@@ -323,7 +326,24 @@ export class AvailableTreeDataProvider
         children.push(new DiagnosticTreeItem(diag));
       }
 
-      const hierarchy = buildHierarchy(element.source, element.resolution.packages);
+      const recommendedSet = new Set<string>();
+      if (element.source.scope === 'project') {
+        const folders = vscode.workspace.workspaceFolders;
+        if (folders && folders.length > 0) {
+          try {
+            const manifest = await readManifest('project', folders[0].uri.fsPath);
+            for (const d of manifest.desiredInstallations) {
+              if (d.sourceId === element.source.id) {
+                recommendedSet.add(`${d.sourceId}:${d.artifactId}`);
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+
+      const hierarchy = buildHierarchy(element.source, element.resolution.packages, recommendedSet);
       children.push(...hierarchy);
 
       return children;

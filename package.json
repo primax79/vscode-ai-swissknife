@@ -131,6 +131,18 @@
         "category": "AI Swissknife"
       },
       {
+        "command": "aiSwissknife.recommendForWorkspace",
+        "title": "Recommend for Workspace",
+        "icon": "$(star)",
+        "category": "AI Swissknife"
+      },
+      {
+        "command": "aiSwissknife.unrecommendForWorkspace",
+        "title": "Unrecommend from Workspace",
+        "icon": "$(star-empty)",
+        "category": "AI Swissknife"
+      },
+      {
         "command": "aiSwissknife.openDashboard",
         "title": "Open Dashboard",
         "icon": "$(dashboard)",
@@ -188,7 +200,7 @@
       "view/item/context": [
         {
           "command": "aiSwissknife.installArtifact",
-          "when": "view == aiSwissknife.available && viewItem == availableArtifact",
+          "when": "view == aiSwissknife.available && viewItem =~ /^availableArtifact/",
           "group": "inline@1"
         },
         {
@@ -203,12 +215,12 @@
         },
         {
           "command": "aiSwissknife.updateItem",
-          "when": "view == aiSwissknife.installed && viewItem == installedInstallation",
+          "when": "view == aiSwissknife.installed && viewItem =~ /^installedInstallation/",
           "group": "inline@1"
         },
         {
           "command": "aiSwissknife.syncItem",
-          "when": "view == aiSwissknife.installed && viewItem == installedInstallation",
+          "when": "view == aiSwissknife.installed && viewItem =~ /^installedInstallation/",
           "group": "inline@2"
         },
         {
@@ -218,13 +230,33 @@
         },
         {
           "command": "aiSwissknife.editArtifact",
-          "when": "view == aiSwissknife.installed && viewItem == installedInstallation",
+          "when": "view == aiSwissknife.installed && viewItem =~ /^installedInstallation/",
           "group": "inline@3"
         },
         {
           "command": "aiSwissknife.editArtifact",
           "when": "view == aiSwissknife.installed && viewItem == observedArtifactItem",
           "group": "inline@3"
+        },
+        {
+          "command": "aiSwissknife.recommendForWorkspace",
+          "when": "view == aiSwissknife.available && viewItem =~ /^availableArtifact/ && viewItem != availableArtifact:recommended",
+          "group": "inline@4"
+        },
+        {
+          "command": "aiSwissknife.unrecommendForWorkspace",
+          "when": "view == aiSwissknife.available && viewItem == availableArtifact:recommended",
+          "group": "inline@4"
+        },
+        {
+          "command": "aiSwissknife.recommendForWorkspace",
+          "when": "view == aiSwissknife.installed && viewItem =~ /^installedInstallation/ && viewItem != installedInstallation:recommended",
+          "group": "inline@4"
+        },
+        {
+          "command": "aiSwissknife.unrecommendForWorkspace",
+          "when": "view == aiSwissknife.installed && viewItem == installedInstallation:recommended",
+          "group": "inline@4"
         },
         {
           "command": "aiSwissknife.promoteItem",

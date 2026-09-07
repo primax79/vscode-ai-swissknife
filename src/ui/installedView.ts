@@ -39,7 +39,8 @@ export class UnmanagedGroupItem {
 export class InstalledInstallationItem {
   constructor(
     public readonly installation: ManagedInstallation,
-    public report?: DriftReport
+    public report?: DriftReport,
+    public readonly isRecommended?: boolean
   ) {}
 }
 
@@ -123,6 +124,9 @@ export class InstalledTreeDataProvider
     const report = element.report ?? this.driftReports.get(this.getInstallKey(inst));
 
     let desc = `${inst.kind} (${inst.scope})`;
+    if (element.isRecommended) {
+      desc += ' ★';
+    }
     let iconName =
       inst.kind === 'agent'
         ? 'robot'
@@ -161,7 +165,7 @@ export class InstalledTreeDataProvider
       report?.details ? `\nStatus: ${report.details}` : ''
     }${inst.sourceRevision?.commit ? `\nCommit: ${inst.sourceRevision.commit}` : ''}`;
     item.iconPath = new vscode.ThemeIcon(iconName);
-    item.contextValue = 'installedInstallation';
+    item.contextValue = element.isRecommended ? 'installedInstallation:recommended' : 'installedInstallation';
     return item;
   }
 
@@ -220,9 +224,28 @@ export class InstalledTreeDataProvider
     }
 
     if (element instanceof InstalledGroupItem) {
+      const recommendedSet = new Set<string>();
+      try {
+        const folders = vscode.workspace.workspaceFolders;
+        if (folders && folders.length > 0) {
+          const projectRoot = folders[0].uri.fsPath;
+          const manifest = await readManifest('project', projectRoot);
+          for (const d of manifest.desiredInstallations) {
+            recommendedSet.add(`${d.sourceId}:${d.artifactId}:${d.assistant}`);
+          }
+        }
+      } catch {
+        // ignore
+      }
+
       return element.installations.map((inst) => {
         const report = this.driftReports.get(this.getInstallKey(inst));
-        return new InstalledInstallationItem(inst, report);
+        const isRecommended =
+          inst.scope === 'project' &&
+          inst.sourceId &&
+          inst.artifactId &&
+          recommendedSet.has(`${inst.sourceId}:${inst.artifactId}:${inst.assistant}`);
+        return new InstalledInstallationItem(inst, report, !!isRecommended);
       });
     }
 
