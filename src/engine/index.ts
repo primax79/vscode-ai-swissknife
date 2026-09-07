@@ -6,3 +6,10 @@ export { resolveRecommendations } from './recommendations';
 export type { SourceResolutionAttempt, BrokenReason } from './recommendations';
 export { scanInstalledInventory, promoteObservedArtifact } from './discovery';
 export { planSync, type PlanSyncParams } from './sync';
+export {
+  computePendingCounts,
+  countUnsatisfiedRecommendations,
+  formatStatusBarLabel,
+  formatStatusBarTooltip,
+  type PendingCounts,
+} from './pendingCounts';
