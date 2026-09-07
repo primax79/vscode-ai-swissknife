@@ -13,6 +13,7 @@ import { CodexAdapter } from '../adapters/codex';
 import { GeminiAdapter } from '../adapters/gemini';
 import type { DriftReport } from '../engine/types';
 import { getWorkspaceRoot } from './workspacePicker';
+import { getAssistantIconPath } from './assistantIcons';
 
 export type InstalledTreeItem =
   | InstalledGroupItem
@@ -24,7 +25,8 @@ export class InstalledGroupItem {
   constructor(
     public readonly groupKey: string,
     public readonly label: string,
-    public readonly installations: ManagedInstallation[]
+    public readonly installations: ManagedInstallation[],
+    public readonly assistant: AssistantId
   ) {}
 }
 
@@ -51,6 +53,8 @@ export class ObservedArtifactItem {
 export class InstalledTreeDataProvider
   implements vscode.TreeDataProvider<InstalledTreeItem>
 {
+  constructor(private readonly extensionUri: vscode.Uri) {}
+
   private _onDidChangeTreeData = new vscode.EventEmitter<
     InstalledTreeItem | undefined | null | void
   >();
@@ -77,6 +81,7 @@ export class InstalledTreeDataProvider
       );
       item.description = `${element.installations.length} managed`;
       item.contextValue = 'installedGroup';
+      item.iconPath = getAssistantIconPath(element.assistant, this.extensionUri);
       return item;
     }
 
@@ -205,7 +210,7 @@ export class InstalledTreeDataProvider
       }
 
       for (const [key, list] of managedGroups.entries()) {
-        result.push(new InstalledGroupItem(key, key, list));
+        result.push(new InstalledGroupItem(key, key, list, list[0].assistant));
       }
 
       const unmanagedGroups = new Map<string, ObservedArtifact[]>();
@@ -408,13 +413,18 @@ export class InstalledTreeDataProvider
       item instanceof InstalledInstallationItem ? item.installation : item.observed;
 
     const assistantPick = await vscode.window.showQuickPick(
-      ['claude-code', 'kilo-code', 'github-copilot', 'codex-cli', 'gemini-cli'],
+      (['claude-code', 'kilo-code', 'github-copilot', 'codex-cli', 'gemini-cli'] as const).map(
+        (id) => ({
+          label: id,
+          iconPath: getAssistantIconPath(id, this.extensionUri),
+        })
+      ),
       {
         placeHolder: `Select target assistant to copy "${sourceItem.name}" to`,
       }
     );
     if (!assistantPick) return;
-    const targetAssistant = assistantPick as AssistantId;
+    const targetAssistant = assistantPick.label as AssistantId;
 
     const scopePick = await vscode.window.showQuickPick(['project', 'global'], {
       placeHolder: `Select target scope for copied ${sourceItem.kind}`,

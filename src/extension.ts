@@ -168,8 +168,8 @@ export async function handleUnrecommendForWorkspace(
 
 export function activate(context: vscode.ExtensionContext) {
   const sourcesProvider = new SourcesTreeDataProvider();
-  const availableProvider = new AvailableTreeDataProvider();
-  const installedProvider = new InstalledTreeDataProvider();
+  const availableProvider = new AvailableTreeDataProvider(context.extensionUri);
+  const installedProvider = new InstalledTreeDataProvider(context.extensionUri);
 
   availableProvider.setInstalledRefreshCallback(() => {
     installedProvider.refresh();
