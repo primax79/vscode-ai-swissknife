@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { AssistantId, Scope, ItemKind } from './domain/types';
-import { readManifest, writeManifest } from './domain/registry';
+import { readManifest, writeManifest, readState } from './domain/registry';
 import { SourcesTreeDataProvider, SourceItem } from './ui/sourcesView';
 import {
   AvailableTreeDataProvider,
@@ -182,6 +182,59 @@ export function activate(context: vscode.ExtensionContext) {
     installedProvider.refresh();
   });
 
+  let hasCheckedRecommendations = false;
+  const checkRecommendations = async () => {
+    if (hasCheckedRecommendations) return;
+    hasCheckedRecommendations = true;
+
+    if (context.workspaceState.get<boolean>('aiSwissknife.ignoreRecommendations')) {
+      return;
+    }
+
+    const projectRoot = await getWorkspaceRoot();
+    if (!projectRoot) return;
+
+    let manifest, state;
+    try {
+      manifest = await readManifest('project', projectRoot);
+      state = await readState('project', projectRoot);
+    } catch {
+      return;
+    }
+
+    const desired = manifest.desiredInstallations;
+    if (desired.length === 0) return;
+
+    let unsatisfiedCount = 0;
+    for (const d of desired) {
+      const isInstalled = state.installations.some(
+        (inst) => inst.sourceId === d.sourceId && inst.artifactId === d.artifactId && inst.assistant === d.assistant
+      );
+      if (!isInstalled) {
+        unsatisfiedCount++;
+      }
+    }
+
+    if (unsatisfiedCount > 0) {
+      const msg = `This workspace recommends ${unsatisfiedCount} AI Swissknife item(s) not yet installed.`;
+      const actionInstall = 'Install All';
+      const actionReview = 'Review';
+      const actionIgnore = "Don't ask again for this workspace";
+
+      const choice = await vscode.window.showInformationMessage(msg, actionInstall, actionReview, actionIgnore);
+
+      if (choice === actionInstall) {
+        await handleInstallRecommended(() => {
+          installedProvider.refresh();
+        });
+      } else if (choice === actionReview) {
+        await vscode.commands.executeCommand('aiSwissknife.available.focus');
+      } else if (choice === actionIgnore) {
+        await context.workspaceState.update('aiSwissknife.ignoreRecommendations', true);
+      }
+    }
+  };
+
   context.subscriptions.push(
     ...watchers,
     vscode.window.registerTreeDataProvider('aiSwissknife.sources', sourcesProvider),
@@ -310,6 +363,10 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('aiSwissknife.openDashboard', () => DashboardPanel.render()),
     vscode.commands.registerCommand('aiSwissknife.refreshInstalled', () => installedProvider.refresh())
   );
+
+  checkRecommendations().catch((err) => {
+    console.error('[ai-swissknife] recommendation check failed', err);
+  });
 }
 
 export function deactivate() {}
