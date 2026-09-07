@@ -460,7 +460,7 @@ describe('UI TreeDataProviders', () => {
   });
 
   describe('DashboardPanel', () => {
-    it('renders dashboard HTML with metrics and item rows', () => {
+    it('renders dashboard HTML with metrics and item rows in normal (non-scanning) mode', () => {
       const panel = DashboardPanel.render();
       assert.ok(panel);
 
@@ -483,6 +483,49 @@ describe('UI TreeDataProviders', () => {
       assert.ok(html.includes('AI Swissknife Dashboard'));
       assert.ok(html.includes('demo-skill'));
       assert.ok(html.includes('claude-code'));
+      // Normal mode without a report defaults to up-to-date
+      assert.ok(html.includes('>up-to-date<'));
+      assert.ok(!html.includes('id="scan-indicator"')); // No scanning indicator
+      assert.ok(html.includes('data-drift-key="claude-code:project:demo-skill"'));
+      
+      panel.dispose();
+    });
+
+    it('renders dashboard HTML in scanning mode with pending status and indicator', () => {
+      const panel = DashboardPanel.render();
+      assert.ok(panel);
+
+      const html = panel.getHtml(
+        [],
+        [
+          {
+            assistant: 'claude-code',
+            scope: 'project',
+            kind: 'skill',
+            name: 'demo-skill',
+            path: '/tmp/demo-skill',
+            installedAt: '2026-08-19T12:00:00.000Z',
+          },
+        ],
+        [],
+        [],
+        true // scanning = true
+      );
+
+      assert.ok(html.includes('AI Swissknife Dashboard'));
+      assert.ok(html.includes('demo-skill'));
+      // In scanning mode without a report, it should show 'checking…' and 'badge-pending'
+      assert.ok(html.includes('>checking…<'));
+      assert.ok(html.includes('badge-pending'));
+      assert.ok(!html.includes('>up-to-date<')); // Should not default to up-to-date
+      
+      // Should include the scanning indicator
+      assert.ok(html.includes('id="scan-indicator"'));
+      assert.ok(html.includes('Scanning for updates…'));
+      
+      // Should include the data-drift-key
+      assert.ok(html.includes('data-drift-key="claude-code:project:demo-skill"'));
+      
       panel.dispose();
     });
   });
