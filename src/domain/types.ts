@@ -80,6 +80,7 @@ export interface ObservedArtifact {
   path: string;
   discoveredAt: string;
   contentHash?: string;
+  candidates?: ObservedSourceMatch[];
   match?: ObservedSourceMatch;
 }
 
