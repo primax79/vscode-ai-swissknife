@@ -11,6 +11,8 @@ const originalRequire = Module.prototype.require;
 
 let mockQuickPickResult: any = undefined;
 let mockLastWarningMessage: string | undefined = undefined;
+let mockShowInformationMessageResult: string | undefined = undefined;
+let mockShowInformationMessageCalls: { msg: string, actions: string[] }[] = [];
 
 Module.prototype.require = function (id: string, ...rest: unknown[]) {
   if (id === 'vscode') {
@@ -56,7 +58,10 @@ Module.prototype.require = function (id: string, ...rest: unknown[]) {
         One: 1,
       },
       window: {
-        showInformationMessage: async () => undefined,
+        showInformationMessage: async (msg: string, ...actions: string[]) => {
+          mockShowInformationMessageCalls.push({ msg, actions });
+          return mockShowInformationMessageResult;
+        },
         showWarningMessage: async (msg: string) => { mockLastWarningMessage = msg; return undefined; },
         showErrorMessage: async () => undefined,
         showQuickPick: async () => mockQuickPickResult,
@@ -71,6 +76,11 @@ Module.prototype.require = function (id: string, ...rest: unknown[]) {
             postMessage: async () => {},
           },
         }),
+        registerTreeDataProvider: () => ({ dispose: () => {} }),
+      },
+      commands: {
+        registerCommand: () => ({ dispose: () => {} }),
+        executeCommand: async () => {},
       },
     };
   }
@@ -109,6 +119,8 @@ describe('UI TreeDataProviders', () => {
     (globalThis as any).mockWorkspaceFolders = [{ uri: { fsPath: testTempDir } }];
     mockQuickPickResult = undefined;
     mockLastWarningMessage = undefined;
+    mockShowInformationMessageResult = undefined;
+    mockShowInformationMessageCalls = [];
   });
 
   afterEach(async () => {
@@ -505,6 +517,132 @@ describe('UI TreeDataProviders', () => {
       manifest = await readManifest('project', testTempDir);
       assert.strictEqual(manifest.desiredInstallations.length, 0); // no manifest change
       assert.ok((mockLastWarningMessage as any)?.includes("This item isn't tracked to a source"));
+    });
+  });
+
+  describe('Workspace Open Detection', () => {
+    let fakeContext: any;
+    let extension: any;
+
+    beforeEach(async () => {
+      fakeContext = {
+        subscriptions: [],
+        workspaceState: {
+          _state: new Map<string, any>(),
+          get(key: string) { return this._state.get(key); },
+          async update(key: string, value: any) { this._state.set(key, value); }
+        }
+      };
+      delete require.cache[require.resolve('../extension')];
+      extension = require('../extension');
+    });
+
+    it('shows notification with correct count when unsatisfied recommendations exist', async () => {
+      await writeManifest(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          sources: [],
+          desiredInstallations: [
+            { sourceId: 'src-1', artifactId: 'art-1', assistant: 'claude-code', scope: 'project' },
+            { sourceId: 'src-1', artifactId: 'art-2', assistant: 'claude-code', scope: 'project' }
+          ],
+        },
+        testTempDir
+      );
+      await writeState(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          installations: [
+            { sourceId: 'src-1', artifactId: 'art-1', assistant: 'claude-code', scope: 'project', kind: 'skill', name: 'art-1', path: '/tmp/art-1', installedAt: 'now' }
+          ],
+        },
+        testTempDir
+      );
+
+      mockShowInformationMessageResult = 'Review'; // Resolve with something to prevent hang or to check behavior
+
+      extension.activate(fakeContext);
+      await new Promise(r => setTimeout(r, 50)); // let async detection run
+
+      assert.strictEqual(mockShowInformationMessageCalls.length, 1);
+      assert.ok(mockShowInformationMessageCalls[0].msg.includes('1 AI Swissknife item(s)'));
+      assert.deepStrictEqual(mockShowInformationMessageCalls[0].actions, [
+        'Install All',
+        'Review',
+        "Don't ask again for this workspace"
+      ]);
+    });
+
+    it('does not show notification when ignore flag is set', async () => {
+      await writeManifest(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          sources: [],
+          desiredInstallations: [
+            { sourceId: 'src-1', artifactId: 'art-1', assistant: 'claude-code', scope: 'project' }
+          ],
+        },
+        testTempDir
+      );
+      await fakeContext.workspaceState.update('aiSwissknife.ignoreRecommendations', true);
+
+      extension.activate(fakeContext);
+      await new Promise(r => setTimeout(r, 50));
+
+      assert.strictEqual(mockShowInformationMessageCalls.length, 0);
+    });
+
+    it('does not show notification when all recommendations are satisfied', async () => {
+      await writeManifest(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          sources: [],
+          desiredInstallations: [
+            { sourceId: 'src-1', artifactId: 'art-1', assistant: 'claude-code', scope: 'project' }
+          ],
+        },
+        testTempDir
+      );
+      await writeState(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          installations: [
+            { sourceId: 'src-1', artifactId: 'art-1', assistant: 'claude-code', scope: 'project', kind: 'skill', name: 'art-1', path: '/tmp/art-1', installedAt: 'now' }
+          ],
+        },
+        testTempDir
+      );
+
+      extension.activate(fakeContext);
+      await new Promise(r => setTimeout(r, 50));
+
+      assert.strictEqual(mockShowInformationMessageCalls.length, 0);
+    });
+
+    it('persists ignore flag when "Don\'t ask again" is chosen', async () => {
+      await writeManifest(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          sources: [],
+          desiredInstallations: [
+            { sourceId: 'src-1', artifactId: 'art-1', assistant: 'claude-code', scope: 'project' }
+          ],
+        },
+        testTempDir
+      );
+
+      mockShowInformationMessageResult = "Don't ask again for this workspace";
+
+      extension.activate(fakeContext);
+      await new Promise(r => setTimeout(r, 50));
+
+      assert.strictEqual(fakeContext.workspaceState.get('aiSwissknife.ignoreRecommendations'), true);
     });
   });
 });
