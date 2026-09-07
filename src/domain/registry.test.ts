@@ -155,6 +155,37 @@ describe('registry store (manifest & state)', () => {
       assert.deepStrictEqual(loaded, manifestData);
     });
 
+    it('writeManifest appends state.json to .gitignore for project scope', async () => {
+      const gitignorePath = path.join(testTempDir, '.gitignore');
+      const initialContent = 'node_modules/\n';
+      await fs.promises.writeFile(gitignorePath, initialContent, 'utf-8');
+
+      const manifestData: ManifestFile = emptyManifest();
+      await writeManifest('project', manifestData, testTempDir);
+
+      const gitignoreContent = await fs.promises.readFile(gitignorePath, 'utf-8');
+      assert.strictEqual(
+        gitignoreContent,
+        initialContent + '.vscode/ai-swissknife/state.json\n'
+      );
+    });
+
+    it('writeManifest for global scope never touches .gitignore', async () => {
+      const gitignorePath = path.join(testTempDir, '.gitignore');
+      const initialContent = 'node_modules/\n';
+      await fs.promises.writeFile(gitignorePath, initialContent, 'utf-8');
+
+      const manifestData: ManifestFile = emptyManifest();
+      await writeManifest('global', manifestData, undefined, testHomeDir);
+
+      // Project gitignore remains untouched
+      const gitignoreContent = await fs.promises.readFile(gitignorePath, 'utf-8');
+      assert.strictEqual(gitignoreContent, initialContent);
+
+      // No gitignore created in homeDir
+      assert.strictEqual(fs.existsSync(path.join(testHomeDir, '.gitignore')), false);
+    });
+
     it('readManifest fails closed on corrupt JSON or schemaVersion mismatch', async () => {
       const filePath = manifestPath('project', testTempDir);
       await fs.promises.mkdir(path.dirname(filePath), { recursive: true });

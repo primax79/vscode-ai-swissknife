@@ -2,6 +2,9 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import type { Scope, AssistantId, Source, ManagedInstallation } from './types';
+import { ensureStateIgnored } from './gitignore';
+
+export { ensureStateIgnored } from './gitignore';
 
 export const SCHEMA_VERSION = 1;
 
@@ -251,6 +254,9 @@ export async function writeManifest(
 ): Promise<void> {
   const filePath = manifestPath(scope, projectRoot, homeRoot);
   await atomicWriteJson(filePath, data);
+  if (scope === 'project' && projectRoot) {
+    await ensureStateIgnored(projectRoot);
+  }
 }
 
 export async function readState(
