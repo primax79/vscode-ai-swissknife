@@ -18,6 +18,8 @@ import { DashboardPanel } from './ui/dashboard';
 import { FormEditorPanel } from './ui/formEditor';
 import { getWorkspaceRoot } from './ui/workspacePicker';
 
+import { handleInstallRecommended } from './ui/recommendations';
+
 export async function handleRecommendForWorkspace(
   item: AvailableArtifactItem | InstalledInstallationItem | undefined,
   availableProvider: AvailableTreeDataProvider,
@@ -299,6 +301,11 @@ export function activate(context: vscode.ExtensionContext) {
     ),
     vscode.commands.registerCommand('aiSwissknife.unrecommendForWorkspace', (item?: AvailableArtifactItem | InstalledInstallationItem) => 
       handleUnrecommendForWorkspace(item, availableProvider, installedProvider)
+    ),
+    vscode.commands.registerCommand('aiSwissknife.installRecommended', () =>
+      handleInstallRecommended(() => {
+        installedProvider.refresh();
+      })
     ),
     vscode.commands.registerCommand('aiSwissknife.openDashboard', () => DashboardPanel.render()),
     vscode.commands.registerCommand('aiSwissknife.refreshInstalled', () => installedProvider.refresh())

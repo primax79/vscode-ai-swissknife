@@ -18,11 +18,31 @@ import { applyInstall } from '../engine/apply';
 import type { PreparedInstall } from '../engine/types';
 import { getWorkspaceRoot } from './workspacePicker';
 
+import { resolveRecommendations, SourceResolutionAttempt, BrokenReason } from '../engine/recommendations';
+import type { DesiredInstallation } from '../domain/registry';
+import { readState } from '../domain/registry';
+
 export type AvailableTreeItem =
   | AvailableSourceGroupItem
   | AvailableFolderItem
   | AvailableArtifactItem
-  | DiagnosticTreeItem;
+  | DiagnosticTreeItem
+  | RecommendedGroupItem
+  | RecommendedBrokenItem;
+
+export class RecommendedGroupItem {
+  constructor(
+    public readonly pending: { desired: DesiredInstallation; artifact: Artifact; pkg: Package; source: Source }[],
+    public readonly broken: { desired: DesiredInstallation; reason: BrokenReason }[]
+  ) {}
+}
+
+export class RecommendedBrokenItem {
+  constructor(
+    public readonly desired: DesiredInstallation,
+    public readonly reason: BrokenReason
+  ) {}
+}
 
 export class AvailableSourceGroupItem {
   constructor(
@@ -159,6 +179,7 @@ export class AvailableTreeDataProvider
   > = this._onDidChangeTreeData.event;
 
   private cachedSourceGroups: AvailableSourceGroupItem[] = [];
+  private cachedRecommendedGroup?: RecommendedGroupItem;
   private claudeAdapter = new ClaudeAdapter();
   private kiloAdapter = new KiloAdapter();
   private copilotAdapter = new CopilotAdapter();
@@ -176,8 +197,10 @@ export class AvailableTreeDataProvider
 
   async refreshCatalog(): Promise<void> {
     this.cachedSourceGroups = [];
+    this.cachedRecommendedGroup = undefined;
 
     const sources: Source[] = [];
+    const resolutionAttempts = new Map<string, SourceResolutionAttempt>();
 
     // Load global sources
     try {
@@ -220,6 +243,7 @@ export class AvailableTreeDataProvider
           resolution = { packages: [], diagnostics: [] };
         }
         this.cachedSourceGroups.push(new AvailableSourceGroupItem(src, resolution));
+        resolutionAttempts.set(src.id, { status: 'resolved', source: src, packages: resolution.packages });
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         this.cachedSourceGroups.push(
@@ -235,6 +259,29 @@ export class AvailableTreeDataProvider
             ],
           })
         );
+        resolutionAttempts.set(src.id, { status: 'failed', source: src, error: msg });
+      }
+    }
+
+    if (folders && folders.length > 0) {
+      const projectRoot = folders[0].uri.fsPath;
+      try {
+        const projectManifest = await readManifest('project', projectRoot);
+        const projectState = await readState('project', projectRoot);
+        const desired = projectManifest.desiredInstallations;
+        if (desired.length > 0) {
+          const resolved = resolveRecommendations(
+            desired,
+            projectState.installations,
+            sources,
+            resolutionAttempts
+          );
+          if (resolved.pending.length > 0 || resolved.broken.length > 0) {
+            this.cachedRecommendedGroup = new RecommendedGroupItem(resolved.pending, resolved.broken);
+          }
+        }
+      } catch {
+        // ignore
       }
     }
 
@@ -242,6 +289,33 @@ export class AvailableTreeDataProvider
   }
 
   getTreeItem(element: AvailableTreeItem): vscode.TreeItem {
+    if (element instanceof RecommendedGroupItem) {
+      const item = new vscode.TreeItem('Recommended', vscode.TreeItemCollapsibleState.Expanded);
+      item.iconPath = new vscode.ThemeIcon('star');
+      item.description = `${element.pending.length} pending, ${element.broken.length} broken`;
+      item.contextValue = 'recommendedGroup';
+      return item;
+    }
+
+    if (element instanceof RecommendedBrokenItem) {
+      const item = new vscode.TreeItem(element.desired.artifactId, vscode.TreeItemCollapsibleState.None);
+      item.iconPath = new vscode.ThemeIcon('error');
+      
+      let reasonText = '';
+      if (element.reason.kind === 'source-not-registered') {
+        reasonText = 'Source not registered';
+      } else if (element.reason.kind === 'source-resolution-failed') {
+        reasonText = `Resolution failed (${element.reason.error})`;
+      } else {
+        reasonText = 'Artifact not found in source';
+      }
+      
+      item.description = `${reasonText} [${element.desired.assistant}]`;
+      item.tooltip = `Source: ${element.desired.sourceId}\nReason: ${reasonText}`;
+      item.contextValue = 'recommendedBroken';
+      return item;
+    }
+
     if (element instanceof AvailableSourceGroupItem) {
       const source = element.source;
       const count = element.resolution.packages.length;
@@ -313,10 +387,26 @@ export class AvailableTreeDataProvider
 
   async getChildren(element?: AvailableTreeItem): Promise<AvailableTreeItem[]> {
     if (!element) {
-      if (this.cachedSourceGroups.length === 0) {
+      if (this.cachedSourceGroups.length === 0 && !this.cachedRecommendedGroup) {
         await this.refreshCatalog();
       }
-      return this.cachedSourceGroups;
+      const children: AvailableTreeItem[] = [];
+      if (this.cachedRecommendedGroup) {
+        children.push(this.cachedRecommendedGroup);
+      }
+      children.push(...this.cachedSourceGroups);
+      return children;
+    }
+
+    if (element instanceof RecommendedGroupItem) {
+      const children: AvailableTreeItem[] = [];
+      for (const p of element.pending) {
+        children.push(new AvailableArtifactItem(p.source, p.pkg, p.artifact, true));
+      }
+      for (const b of element.broken) {
+        children.push(new RecommendedBrokenItem(b.desired, b.reason));
+      }
+      return children;
     }
 
     if (element instanceof AvailableSourceGroupItem) {

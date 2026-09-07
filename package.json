@@ -149,6 +149,12 @@
         "title": "Open Dashboard",
         "icon": "$(dashboard)",
         "category": "AI Swissknife"
+      },
+      {
+        "command": "aiSwissknife.installRecommended",
+        "title": "Install Recommended",
+        "icon": "$(sparkle)",
+        "category": "AI Swissknife"
       }
     ],
     "menus": {
@@ -177,6 +183,11 @@
           "command": "aiSwissknife.reloadRegistry",
           "when": "view == aiSwissknife.sources",
           "group": "navigation@2"
+        },
+        {
+          "command": "aiSwissknife.installRecommended",
+          "when": "view == aiSwissknife.sources",
+          "group": "navigation@3"
         },
         {
           "command": "aiSwissknife.refreshCatalog",
