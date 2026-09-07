@@ -133,7 +133,10 @@ export class DashboardPanel {
       }
     }
 
-    // Drift
+    // Phase A: Fast render
+    this._panel.webview.html = this.getHtml(allSources, allManaged, allObserved, [], true);
+
+    // Phase B: Slow drift check
     for (const inst of allManaged) {
       const matchingSource = allSources.find((s) => s.id === inst.sourceId);
       let report: DriftReport;
@@ -143,16 +146,33 @@ export class DashboardPanel {
         report = await analyzeLocalDrift(inst);
       }
       driftReports.push(report);
+      this._panel.webview.postMessage({
+        command: 'driftResult',
+        key: `${inst.assistant}:${inst.scope}:${inst.name}`,
+        status: report.status
+      });
     }
 
-    this._panel.webview.html = this.getHtml(allSources, allManaged, allObserved, driftReports);
+    const updatesAvailable = driftReports.filter(
+      (r) => r.status === 'update-available' || r.status === 'modified-and-update-available'
+    ).length;
+    const modifiedLocally = driftReports.filter(
+      (r) => r.status === 'modified-locally' || r.status === 'modified-and-update-available'
+    ).length;
+    
+    this._panel.webview.postMessage({
+      command: 'scanComplete',
+      updatesAvailable,
+      modifiedLocally
+    });
   }
 
   public getHtml(
     sources: Source[],
     managed: ManagedInstallation[],
     observed: ObservedArtifact[],
-    reports: DriftReport[]
+    reports: DriftReport[],
+    scanning: boolean = false
   ): string {
     const totalInstalled = managed.length;
     const totalUnmanaged = observed.length;
@@ -168,10 +188,14 @@ export class DashboardPanel {
 
     const managedRows = managed
       .map((inst, idx) => {
-        const report = reportMap.get(`${inst.assistant}:${inst.scope}:${inst.name}`);
-        const status = report?.status ?? 'up-to-date';
+        const key = `${inst.assistant}:${inst.scope}:${inst.name}`;
+        const report = reportMap.get(key);
+        const isPending = scanning && !report;
+        const status = report?.status ?? (scanning ? 'checking…' : 'up-to-date');
         const badgeClass =
-          status === 'up-to-date'
+          isPending
+            ? 'badge-pending'
+            : status === 'up-to-date'
             ? 'badge-success'
             : status === 'update-available'
             ? 'badge-info'
@@ -187,7 +211,7 @@ export class DashboardPanel {
           <td><strong>${inst.name}</strong></td>
           <td>${inst.assistant}</td>
           <td><span class="scope-pill scope-${inst.scope}">${inst.scope}</span></td>
-          <td><span class="badge ${badgeClass}">${status}</span></td>
+          <td data-drift-key="${key}"><span class="badge ${badgeClass}">${status}</span></td>
           <td>
             <button class="btn btn-sm btn-secondary" onclick="editItem(${idx})">Edit</button>
           </td>
@@ -397,6 +421,10 @@ export class DashboardPanel {
     .badge-warning { background: rgba(210, 153, 34, 0.2); color: #d29922; }
     .badge-error { background: rgba(207, 34, 46, 0.2); color: #f85149; }
     .badge-unmanaged { background: rgba(255, 255, 255, 0.1); color: var(--fg); }
+    .badge-pending { background: rgba(136, 136, 136, 0.2); color: #888888; }
+    .scan-indicator { font-size: 11px; opacity: 0.8; display: flex; align-items: center; gap: 6px; }
+    .spinner { border: 2px solid rgba(136, 136, 136, 0.2); border-top-color: #888; border-radius: 50%; width: 10px; height: 10px; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
     .path-cell {
       font-size: 11px;
       opacity: 0.7;
@@ -422,6 +450,7 @@ export class DashboardPanel {
       <p>Inventory, drift tracking, and unmanaged artifact promotion</p>
     </div>
     <div class="header-actions">
+      ${scanning ? '<div class="scan-indicator" id="scan-indicator"><div class="spinner"></div>Scanning for updates…</div>' : ''}
       <button class="btn btn-secondary" onclick="refreshState()">Refresh</button>
     </div>
   </div>
@@ -432,11 +461,11 @@ export class DashboardPanel {
       <span class="stat-label">Managed Installations</span>
     </div>
     <div class="stat-chip stat-info">
-      <span class="stat-num">${updatesAvailable}</span>
+      <span class="stat-num" id="stat-updates-available">${updatesAvailable}</span>
       <span class="stat-label">Updates Available</span>
     </div>
     <div class="stat-chip stat-warning">
-      <span class="stat-num">${modifiedLocally}</span>
+      <span class="stat-num" id="stat-modified-locally">${modifiedLocally}</span>
       <span class="stat-label">Modified Locally</span>
     </div>
     <div class="stat-chip stat-unmanaged">
@@ -556,6 +585,30 @@ export class DashboardPanel {
         }
       });
     }
+
+    window.addEventListener('message', (event) => {
+      const msg = event.data;
+      if (msg.command === 'driftResult') {
+        const cell = document.querySelector('[data-drift-key="' + msg.key + '"]');
+        if (cell) {
+          let badgeClass = 'badge-error';
+          if (msg.status === 'up-to-date') badgeClass = 'badge-success';
+          else if (msg.status === 'update-available') badgeClass = 'badge-info';
+          else if (msg.status === 'modified-locally' || msg.status === 'modified-and-update-available') badgeClass = 'badge-warning';
+          
+          cell.innerHTML = '<span class="badge ' + badgeClass + '">' + msg.status + '</span>';
+        }
+      } else if (msg.command === 'scanComplete') {
+        const indicator = document.getElementById('scan-indicator');
+        if (indicator) indicator.style.display = 'none';
+        
+        const updatesStat = document.getElementById('stat-updates-available');
+        if (updatesStat) updatesStat.textContent = msg.updatesAvailable;
+        
+        const modifiedStat = document.getElementById('stat-modified-locally');
+        if (modifiedStat) modifiedStat.textContent = msg.modifiedLocally;
+      }
+    });
   </script>
 </body>
 </html>`;
