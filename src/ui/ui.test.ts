@@ -8,6 +8,10 @@ import * as path from 'path';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const Module = require('module');
 const originalRequire = Module.prototype.require;
+
+let mockQuickPickResult: any = undefined;
+let mockLastWarningMessage: string | undefined = undefined;
+
 Module.prototype.require = function (id: string, ...rest: unknown[]) {
   if (id === 'vscode') {
     return {
@@ -38,7 +42,9 @@ Module.prototype.require = function (id: string, ...rest: unknown[]) {
         constructor(public id: string) {}
       },
       workspace: {
-        workspaceFolders: [],
+        get workspaceFolders() {
+          return (globalThis as any).mockWorkspaceFolders || [];
+        },
         createFileSystemWatcher: () => ({
           onDidChange: () => ({ dispose: () => {} }),
           onDidCreate: () => ({ dispose: () => {} }),
@@ -51,9 +57,9 @@ Module.prototype.require = function (id: string, ...rest: unknown[]) {
       },
       window: {
         showInformationMessage: async () => undefined,
-        showWarningMessage: async () => undefined,
+        showWarningMessage: async (msg: string) => { mockLastWarningMessage = msg; return undefined; },
         showErrorMessage: async () => undefined,
-        showQuickPick: async () => undefined,
+        showQuickPick: async () => mockQuickPickResult,
         showInputBox: async () => undefined,
         createWebviewPanel: () => ({
           reveal: () => {},
@@ -73,6 +79,7 @@ Module.prototype.require = function (id: string, ...rest: unknown[]) {
 
 import type { ManagedInstallation, Source, Package } from '../domain/types';
 import {
+  readManifest,
   writeManifest,
   writeState,
   SCHEMA_VERSION,
@@ -88,6 +95,7 @@ import { InstalledTreeDataProvider, InstalledGroupItem, InstalledInstallationIte
 import { setupFileWatchers } from './watchers';
 import { DashboardPanel } from './dashboard';
 import { FormEditorPanel } from './formEditor';
+import { handleRecommendForWorkspace, handleUnrecommendForWorkspace } from '../extension';
 
 describe('UI TreeDataProviders', () => {
   let testTempDir: string;
@@ -96,6 +104,9 @@ describe('UI TreeDataProviders', () => {
   beforeEach(async () => {
     testTempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ai-swissknife-ui-ws-'));
     testHomeDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ai-swissknife-ui-home-'));
+    (globalThis as any).mockWorkspaceFolders = [{ uri: { fsPath: testTempDir } }];
+    mockQuickPickResult = undefined;
+    mockLastWarningMessage = undefined;
   });
 
   afterEach(async () => {
@@ -398,6 +409,75 @@ describe('UI TreeDataProviders', () => {
       assert.ok(html.includes('kilo-code'));
       assert.ok(html.includes('subagent'));
       panel.dispose();
+    });
+  });
+
+  describe('Recommend and Unrecommend Commands', () => {
+    it('manages desiredInstallations in manifest accurately', async () => {
+      const availableProvider = new AvailableTreeDataProvider();
+      const installedProvider = new InstalledTreeDataProvider();
+
+      const source: Source = { id: 'src-1', type: 'local-folder', scope: 'project' };
+      const pkg: Package = { id: 'src-1:pkg', sourceId: 'src-1', nativeFormat: 'raw', artifacts: [] };
+      const availableItem = new AvailableArtifactItem(source, pkg, {
+        id: 'art-1',
+        packageId: 'src-1:pkg',
+        kind: 'skill',
+        name: 'test-skill',
+        nativeFormat: 'raw',
+      });
+
+      // Recommend an item from Available
+      mockQuickPickResult = 'claude-code';
+      await handleRecommendForWorkspace(availableItem, availableProvider, installedProvider);
+
+      let manifest = await readManifest('project', testTempDir);
+      assert.strictEqual(manifest.desiredInstallations.length, 1);
+      assert.strictEqual(manifest.desiredInstallations[0].sourceId, 'src-1');
+      assert.strictEqual(manifest.desiredInstallations[0].artifactId, 'art-1');
+      assert.strictEqual(manifest.desiredInstallations[0].assistant, 'claude-code');
+
+      // Call recommend again on the same item/assistant
+      await handleRecommendForWorkspace(availableItem, availableProvider, installedProvider);
+      manifest = await readManifest('project', testTempDir);
+      assert.strictEqual(manifest.desiredInstallations.length, 1); // still exactly one entry
+
+      // Unrecommend
+      await handleUnrecommendForWorkspace(availableItem, availableProvider, installedProvider);
+      manifest = await readManifest('project', testTempDir);
+      assert.strictEqual(manifest.desiredInstallations.length, 0); // entry removed
+
+      // Recommend on a global-scope item
+      const globalSource: Source = { id: 'global-1', type: 'local-folder', scope: 'global' };
+      const globalAvailableItem = new AvailableArtifactItem(globalSource, pkg, {
+        id: 'art-1',
+        packageId: 'src-1:pkg',
+        kind: 'skill',
+        name: 'test-skill',
+        nativeFormat: 'raw',
+      });
+      mockLastWarningMessage = undefined;
+      await handleRecommendForWorkspace(globalAvailableItem, availableProvider, installedProvider);
+      manifest = await readManifest('project', testTempDir);
+      assert.strictEqual(manifest.desiredInstallations.length, 0); // no manifest change
+      assert.ok((mockLastWarningMessage as any)?.includes('Cannot recommend global-scope items'));
+
+      // Recommend on an installed item with no sourceId/artifactId
+      const unmanagedInstallation: ManagedInstallation = {
+        assistant: 'claude-code',
+        scope: 'project',
+        kind: 'skill',
+        name: 'test-skill',
+        path: '/tmp/skill',
+        installedAt: 'now',
+        // sourceId and artifactId missing
+      };
+      const installedItem = new InstalledInstallationItem(unmanagedInstallation);
+      mockLastWarningMessage = undefined;
+      await handleRecommendForWorkspace(installedItem, availableProvider, installedProvider);
+      manifest = await readManifest('project', testTempDir);
+      assert.strictEqual(manifest.desiredInstallations.length, 0); // no manifest change
+      assert.ok((mockLastWarningMessage as any)?.includes("This item isn't tracked to a source"));
     });
   });
 });
