@@ -283,8 +283,8 @@ describe('UI TreeDataProviders', () => {
     });
 
     it('renders RecommendedGroupItem and RecommendedBrokenItem correctly', () => {
-      const provider = new AvailableTreeDataProvider();
-      
+      const provider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any);
+
       const source: Source = { id: 's1', type: 'git-custom', scope: 'project' };
       const pkg: Package = { id: 'p1', sourceId: 's1', nativeFormat: 'raw', artifacts: [] };
       const artifact: Artifact = { id: 'a1', packageId: 'p1', kind: 'skill', name: 's', nativeFormat: 'md' };
