@@ -13,10 +13,15 @@ let mockQuickPickResult: any = undefined;
 let mockLastWarningMessage: string | undefined = undefined;
 let mockShowInformationMessageResult: string | undefined = undefined;
 let mockShowInformationMessageCalls: { msg: string, actions: string[] }[] = [];
+let mockLastCreatedStatusBarItem: any = undefined;
 
 Module.prototype.require = function (id: string, ...rest: unknown[]) {
   if (id === 'vscode') {
     return {
+      StatusBarAlignment: {
+        Left: 1,
+        Right: 2,
+      },
       TreeItem: class {
         description?: string;
         contextValue?: string;
@@ -83,6 +88,20 @@ Module.prototype.require = function (id: string, ...rest: unknown[]) {
           onDidChangeSelection: () => ({ dispose: () => {} }),
           dispose: () => {},
         }),
+        createStatusBarItem: (alignment?: any, priority?: number) => {
+          const item = {
+            alignment,
+            priority,
+            command: undefined as string | undefined,
+            text: '',
+            tooltip: undefined as string | undefined,
+            show: () => {},
+            hide: () => {},
+            dispose: () => {},
+          };
+          mockLastCreatedStatusBarItem = item;
+          return item;
+        },
       },
       commands: {
         registerCommand: () => ({ dispose: () => {} }),
@@ -777,4 +796,54 @@ describe('UI TreeDataProviders', () => {
       assert.strictEqual(fakeContext.workspaceState.get('aiSwissknife.ignoreRecommendations'), true);
     });
   });
+
+  describe('Status Bar Item', () => {
+    let fakeContext: any;
+    let extension: any;
+
+    beforeEach(async () => {
+      fakeContext = {
+        subscriptions: [],
+        workspaceState: {
+          _state: new Map<string, any>(),
+          get(key: string) { return this._state.get(key); },
+          async update(key: string, value: any) { this._state.set(key, value); }
+        }
+      };
+      delete require.cache[require.resolve('../extension')];
+      extension = require('../extension');
+    });
+
+    it('creates persistent status bar item with openDashboard command and default label', async () => {
+      extension.activate(fakeContext);
+      await new Promise(r => setTimeout(r, 50));
+
+      assert.ok(mockLastCreatedStatusBarItem);
+      assert.strictEqual(mockLastCreatedStatusBarItem.command, 'aiSwissknife.openDashboard');
+      assert.strictEqual(mockLastCreatedStatusBarItem.text, '$(dashboard) AI Swissknife');
+      assert.ok(fakeContext.subscriptions.includes(mockLastCreatedStatusBarItem));
+    });
+
+    it('updates status bar item label when unsatisfied recommendations exist', async () => {
+      await writeManifest(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          sources: [],
+          desiredInstallations: [
+            { sourceId: 'src-1', artifactId: 'art-1', assistant: 'claude-code', scope: 'project' },
+            { sourceId: 'src-1', artifactId: 'art-2', assistant: 'claude-code', scope: 'project' }
+          ],
+        },
+        testTempDir
+      );
+
+      extension.activate(fakeContext);
+      await new Promise(r => setTimeout(r, 50));
+
+      assert.ok(mockLastCreatedStatusBarItem);
+      assert.strictEqual(mockLastCreatedStatusBarItem.text, '$(dashboard) AI Swissknife: 2 recommendations');
+    });
+  });
 });
+

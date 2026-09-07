@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { AssistantId, Scope, ItemKind } from './domain/types';
-import { readManifest, writeManifest, readState } from './domain/registry';
+import { readManifest, writeManifest } from './domain/registry';
 import { SourcesTreeDataProvider, SourceItem } from './ui/sourcesView';
 import {
   AvailableTreeDataProvider,
@@ -20,6 +20,20 @@ import { getWorkspaceRoot } from './ui/workspacePicker';
 import { previewProvider, PreviewProvider } from './ui/previewProvider';
 
 import { handleInstallRecommended } from './ui/recommendations';
+import {
+  computePendingCounts,
+  formatStatusBarLabel,
+  formatStatusBarTooltip,
+  type PendingCounts,
+} from './engine/pendingCounts';
+
+export {
+  computePendingCounts,
+  countUnsatisfiedRecommendations,
+  formatStatusBarLabel,
+  formatStatusBarTooltip,
+  type PendingCounts,
+} from './engine/pendingCounts';
 
 export async function handleRecommendForWorkspace(
   item: AvailableArtifactItem | InstalledInstallationItem | undefined,
@@ -174,6 +188,26 @@ export function activate(context: vscode.ExtensionContext) {
   const availableProvider = new AvailableTreeDataProvider(context.extensionUri);
   const installedProvider = new InstalledTreeDataProvider(context.extensionUri);
 
+  const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  statusBarItem.command = 'aiSwissknife.openDashboard';
+  statusBarItem.text = '$(dashboard) AI Swissknife';
+  statusBarItem.tooltip = 'AI Swissknife: Open Dashboard';
+  statusBarItem.show();
+
+  const updateStatusBar = async (projectRoot?: string): Promise<PendingCounts> => {
+    try {
+      const root = projectRoot ?? (await getWorkspaceRoot());
+      const counts = await computePendingCounts(root);
+      statusBarItem.text = formatStatusBarLabel(counts);
+      statusBarItem.tooltip = formatStatusBarTooltip(counts);
+      return counts;
+    } catch {
+      statusBarItem.text = '$(dashboard) AI Swissknife';
+      statusBarItem.tooltip = 'AI Swissknife: Open Dashboard';
+      return { unsatisfiedRecommendations: 0, updatesAvailable: 0, total: 0 };
+    }
+  };
+
   availableProvider.setInstalledRefreshCallback(() => {
     installedProvider.refresh();
   });
@@ -185,6 +219,9 @@ export function activate(context: vscode.ExtensionContext) {
 
   let hasCheckedRecommendations = false;
   const checkRecommendations = async () => {
+    const projectRoot = await getWorkspaceRoot();
+    const counts = await updateStatusBar(projectRoot);
+
     if (hasCheckedRecommendations) return;
     hasCheckedRecommendations = true;
 
@@ -192,30 +229,9 @@ export function activate(context: vscode.ExtensionContext) {
       return;
     }
 
-    const projectRoot = await getWorkspaceRoot();
     if (!projectRoot) return;
 
-    let manifest, state;
-    try {
-      manifest = await readManifest('project', projectRoot);
-      state = await readState('project', projectRoot);
-    } catch {
-      return;
-    }
-
-    const desired = manifest.desiredInstallations;
-    if (desired.length === 0) return;
-
-    let unsatisfiedCount = 0;
-    for (const d of desired) {
-      const isInstalled = state.installations.some(
-        (inst) => inst.sourceId === d.sourceId && inst.artifactId === d.artifactId && inst.assistant === d.assistant
-      );
-      if (!isInstalled) {
-        unsatisfiedCount++;
-      }
-    }
-
+    const unsatisfiedCount = counts.unsatisfiedRecommendations;
     if (unsatisfiedCount > 0) {
       const msg = `This workspace recommends ${unsatisfiedCount} AI Swissknife item(s) not yet installed.`;
       const actionInstall = 'Install All';
@@ -227,6 +243,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (choice === actionInstall) {
         await handleInstallRecommended(() => {
           installedProvider.refresh();
+          updateStatusBar().catch(() => {});
         });
       } else if (choice === actionReview) {
         await vscode.commands.executeCommand('aiSwissknife.available.focus');
@@ -248,6 +265,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.workspace.registerTextDocumentContentProvider(PreviewProvider.scheme, previewProvider),
+    statusBarItem,
     ...watchers,
     sourcesTreeView,
     vscode.window.registerTreeDataProvider('aiSwissknife.available', availableProvider),
@@ -268,7 +286,10 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('aiSwissknife.installSourceGroup', (item?: AvailableSourceGroupItem) =>
       availableProvider.installSourceGroup(item)
     ),
-    vscode.commands.registerCommand('aiSwissknife.checkDrift', () => installedProvider.checkDrift()),
+    vscode.commands.registerCommand('aiSwissknife.checkDrift', async () => {
+      await installedProvider.checkDrift();
+      updateStatusBar().catch(() => {});
+    }),
     vscode.commands.registerCommand('aiSwissknife.updateItem', (item?: InstalledInstallationItem) =>
       installedProvider.updateInstallation(item)
     ),
@@ -361,19 +382,25 @@ export function activate(context: vscode.ExtensionContext) {
         }
       }
     ),
-    vscode.commands.registerCommand('aiSwissknife.recommendForWorkspace', (item?: AvailableArtifactItem | InstalledInstallationItem) => 
-      handleRecommendForWorkspace(item, availableProvider, installedProvider)
-    ),
-    vscode.commands.registerCommand('aiSwissknife.unrecommendForWorkspace', (item?: AvailableArtifactItem | InstalledInstallationItem) => 
-      handleUnrecommendForWorkspace(item, availableProvider, installedProvider)
-    ),
+    vscode.commands.registerCommand('aiSwissknife.recommendForWorkspace', async (item?: AvailableArtifactItem | InstalledInstallationItem) => {
+      await handleRecommendForWorkspace(item, availableProvider, installedProvider);
+      updateStatusBar().catch(() => {});
+    }),
+    vscode.commands.registerCommand('aiSwissknife.unrecommendForWorkspace', async (item?: AvailableArtifactItem | InstalledInstallationItem) => {
+      await handleUnrecommendForWorkspace(item, availableProvider, installedProvider);
+      updateStatusBar().catch(() => {});
+    }),
     vscode.commands.registerCommand('aiSwissknife.installRecommended', () =>
       handleInstallRecommended(() => {
         installedProvider.refresh();
+        updateStatusBar().catch(() => {});
       })
     ),
     vscode.commands.registerCommand('aiSwissknife.openDashboard', () => DashboardPanel.render(context.extensionUri)),
-    vscode.commands.registerCommand('aiSwissknife.refreshInstalled', () => installedProvider.refresh())
+    vscode.commands.registerCommand('aiSwissknife.refreshInstalled', () => {
+      installedProvider.refresh();
+      updateStatusBar().catch(() => {});
+    })
   );
 
   checkRecommendations().catch((err) => {

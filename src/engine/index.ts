@@ -11,3 +11,10 @@ export {
   type MatchStrategy,
   type RelatedInstallation,
 } from './crossFrameworkLookup';
+export {
+  computePendingCounts,
+  countUnsatisfiedRecommendations,
+  formatStatusBarLabel,
+  formatStatusBarTooltip,
+  type PendingCounts,
+} from './pendingCounts';
