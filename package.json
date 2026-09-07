@@ -3,10 +3,12 @@
   "displayName": "AI Swissknife",
   "description": "Cross-assistant marketplace and management for custom skill/agent/mcp/rule repositories (Claude Code, Kilo Code, and more).",
   "version": "0.0.1",
-  "publisher": "TODO-set-before-publish",
+  "publisher": "AlfredoOliviero",
+  "license": "MIT",
+  "icon": "resources/icon.png",
   "repository": {
     "type": "git",
-    "url": "git@github.com:primax79/vscode-ai-swissknife.git"
+    "url": "https://github.com/primax79/vscode-ai-swissknife.git"
   },
   "engines": {
     "vscode": "^1.95.0"

@@ -81,3 +81,10 @@ npm run build
 # Package extension as VSIX
 npx @vscode/vsce package --no-dependencies
 ```
+
+---
+
+## Credits
+
+The Marketplace icon is an AI-generated illustration. The Activity Bar icon
+uses the [Lucide](https://lucide.dev) `pocket-knife` icon, ISC License.
