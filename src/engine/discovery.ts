@@ -30,6 +30,8 @@ import { GeminiAdapter, geminiAdapter } from '../adapters/gemini';
 import { resolveLocalFolder, resolveArtifactContent as resolveLocalFolderContent } from '../sources/localFolder';
 import { resolveGitCustom, resolveArtifactContent as resolveGitCustomContent } from '../sources/gitCustom';
 import { resolveGitMarketplace, resolveArtifactContent as resolveGitMarketplaceContent } from '../sources/gitMarketplace';
+import { resolveGitSingleItem, resolveArtifactContent as resolveGitSingleItemContent } from '../sources/gitSingleItem';
+import { resolveRemoteUrl, resolveArtifactContent as resolveRemoteUrlContent } from '../sources/remoteUrl';
 import { translateSkill } from '../translator/skill';
 import { translateAgent } from '../translator/agent';
 import { translateCommand } from '../translator/command';
@@ -216,10 +218,7 @@ export async function scanInstalledInventory(
   const observed: ObservedArtifact[] = [];
 
   for (const obs of rawObserved) {
-    let match: ObservedSourceMatch = {
-      status: 'unmatched',
-      details: 'Local component (no registered source match)',
-    };
+    const candidates: ObservedSourceMatch[] = [];
 
     for (const source of allSources) {
       try {
@@ -230,69 +229,66 @@ export async function scanInstalledInventory(
           resolution = await resolveGitCustom(source);
         } else if (source.type === 'git-marketplace') {
           resolution = await resolveGitMarketplace(source);
+        } else if (source.type === 'git-single-item') {
+          resolution = await resolveGitSingleItem(source);
+        } else if (source.type === 'remote-url') {
+          resolution = await resolveRemoteUrl(source);
         }
 
         if (!resolution) continue;
 
-        let foundPkg;
-        let foundArt;
-
         for (const pkg of resolution.packages) {
           for (const art of pkg.artifacts) {
             if (art.kind === obs.kind && art.name === obs.name) {
-              foundPkg = pkg;
-              foundArt = art;
-              break;
-            }
-          }
-          if (foundArt) break;
-        }
+              let resolved;
+              if (source.type === 'local-folder') {
+                resolved = await resolveLocalFolderContent(source, pkg, art);
+              } else if (source.type === 'git-custom') {
+                resolved = await resolveGitCustomContent(source, pkg, art);
+              } else if (source.type === 'git-marketplace') {
+                resolved = await resolveGitMarketplaceContent(source, pkg, art);
+              } else if (source.type === 'git-single-item') {
+                resolved = await resolveGitSingleItemContent(source, pkg, art);
+              } else if (source.type === 'remote-url') {
+                resolved = await resolveRemoteUrlContent(source, pkg, art);
+              }
 
-        if (foundPkg && foundArt) {
-          let resolved;
-          if (source.type === 'local-folder') {
-            resolved = await resolveLocalFolderContent(source, foundPkg, foundArt);
-          } else if (source.type === 'git-custom') {
-            resolved = await resolveGitCustomContent(source, foundPkg, foundArt);
-          } else if (source.type === 'git-marketplace') {
-            resolved = await resolveGitMarketplaceContent(source, foundPkg, foundArt);
-          }
+              if (resolved) {
+                let sourceHash: string | undefined;
+                if (art.kind === 'skill') {
+                  const translated = translateSkill(resolved.content as CanonicalSkill, obs.assistant);
+                  sourceHash = canonicalSkillHash(translated.value);
+                } else if (art.kind === 'agent') {
+                  const translated = translateAgent(resolved.content as CanonicalAgent, obs.assistant);
+                  sourceHash = canonicalAgentHash(translated.value);
+                } else if (art.kind === 'command') {
+                  const translated = translateCommand(resolved.content as CanonicalCommand, obs.assistant);
+                  sourceHash = canonicalCommandHash(translated.value);
+                } else if (art.kind === 'mcp-server') {
+                  const translated = translateMcpServer(resolved.content as CanonicalMcpServer, obs.assistant);
+                  sourceHash = canonicalMcpServerHash(translated.value);
+                }
 
-          if (resolved) {
-            let sourceHash: string | undefined;
-            if (foundArt.kind === 'skill') {
-              const translated = translateSkill(resolved.content as CanonicalSkill, obs.assistant);
-              sourceHash = canonicalSkillHash(translated.value);
-            } else if (foundArt.kind === 'agent') {
-              const translated = translateAgent(resolved.content as CanonicalAgent, obs.assistant);
-              sourceHash = canonicalAgentHash(translated.value);
-            } else if (foundArt.kind === 'command') {
-              const translated = translateCommand(resolved.content as CanonicalCommand, obs.assistant);
-              sourceHash = canonicalCommandHash(translated.value);
-            } else if (foundArt.kind === 'mcp-server') {
-              const translated = translateMcpServer(resolved.content as CanonicalMcpServer, obs.assistant);
-              sourceHash = canonicalMcpServerHash(translated.value);
-            }
-
-            if (sourceHash && obs.contentHash && sourceHash === obs.contentHash) {
-              match = {
-                status: 'identical',
-                sourceId: source.id,
-                packageId: foundPkg.id,
-                artifactId: foundArt.id,
-                sourceRevision: foundPkg.version,
-                details: `Identical to source "${source.id}"`,
-              };
-              break; // exact match found
-            } else if (sourceHash) {
-              match = {
-                status: 'different',
-                sourceId: source.id,
-                packageId: foundPkg.id,
-                artifactId: foundArt.id,
-                sourceRevision: foundPkg.version,
-                details: `Differs from source "${source.id}"`,
-              };
+                if (sourceHash && obs.contentHash && sourceHash === obs.contentHash) {
+                  candidates.push({
+                    status: 'identical',
+                    sourceId: source.id,
+                    packageId: pkg.id,
+                    artifactId: art.id,
+                    sourceRevision: pkg.version,
+                    details: `Identical to source "${source.id}"`,
+                  });
+                } else if (sourceHash) {
+                  candidates.push({
+                    status: 'different',
+                    sourceId: source.id,
+                    packageId: pkg.id,
+                    artifactId: art.id,
+                    sourceRevision: pkg.version,
+                    details: `Differs from source "${source.id}"`,
+                  });
+                }
+              }
             }
           }
         }
@@ -301,8 +297,18 @@ export async function scanInstalledInventory(
       }
     }
 
+    let match: ObservedSourceMatch = {
+      status: 'unmatched',
+      details: 'Local component (no registered source match)',
+    };
+
+    if (candidates.length > 0) {
+      match = candidates.find((c) => c.status === 'identical') || candidates[0];
+    }
+
     observed.push({
       ...obs,
+      candidates,
       match,
     });
   }
