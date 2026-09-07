@@ -1,5 +1,5 @@
 export * from './types';
-export { planInstall } from './plan';
+export { planInstall, resolveAndTranslate } from './plan';
 export { applyInstall } from './apply';
 export { analyzeLocalDrift, checkForUpstreamUpdate } from './drift';
 export { resolveRecommendations } from './recommendations';

@@ -9,7 +9,7 @@ import type {
   CanonicalHook,
   CanonicalRule,
 } from '../adapters/types';
-import type { ResolvedArtifact, Source, Package, Artifact } from '../domain/types';
+import type { ResolvedArtifact, Source, Package, Artifact, AssistantId } from '../domain/types';
 import {
   serializeSkillMarkdown,
   serializeClaudeAgentMarkdown,
@@ -73,6 +73,47 @@ async function resolveContentFromSource(
   throw new Error(`Unsupported source type: ${source.type}`);
 }
 
+
+export async function resolveAndTranslate(
+  source: Source,
+  pkg: Package,
+  artifact: Artifact,
+  targetAssistant: AssistantId,
+  resolverOpts?: { cacheDir?: string }
+) {
+  if (artifact.kind === 'rule') {
+    const resolved = (await resolveContentFromSource(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalRule>;
+    const translation = translateRule(resolved.content, targetAssistant);
+    return { translated: translation.value, diagnostic: translation.overall, diagnostics: translation.diagnostics };
+  }
+  if (artifact.kind === 'hook') {
+    const resolved = (await resolveContentFromSource(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalHook>;
+    const translation = translateHook(resolved.content, targetAssistant);
+    return { translated: translation.value, diagnostic: translation.overall, diagnostics: translation.diagnostics };
+  }
+  if (artifact.kind === 'mcp-server') {
+    const resolved = (await resolveContentFromSource(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalMcpServer>;
+    const translation = translateMcpServer(resolved.content, targetAssistant);
+    return { translated: translation.value, diagnostic: translation.overall, diagnostics: translation.diagnostics };
+  }
+  if (artifact.kind === 'command') {
+    const resolved = (await resolveContentFromSource(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalCommand>;
+    const translation = translateCommand(resolved.content, targetAssistant);
+    return { translated: translation.value, diagnostic: translation.overall, diagnostics: translation.diagnostics };
+  }
+  if (artifact.kind === 'agent') {
+    const resolved = (await resolveContentFromSource(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalAgent>;
+    const translation = translateAgent(resolved.content, targetAssistant);
+    return { translated: translation.value, diagnostic: translation.overall, diagnostics: translation.diagnostics };
+  }
+  if (artifact.kind === 'skill') {
+    const resolved = (await resolveContentFromSource(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalSkill>;
+    const translation = translateSkill(resolved.content, targetAssistant);
+    return { translated: translation.value, diagnostic: translation.overall, diagnostics: translation.diagnostics };
+  }
+  throw new Error(`Unsupported artifact kind: ${artifact.kind}`);
+}
+
 export async function planInstall(params: PlanInstallParams): Promise<PreparedInstall> {
   const { source, pkg, artifact, targetAdapter, targetScope, projectRoot, resolverOpts } = params;
 
@@ -98,9 +139,9 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
 
   // --- RULE KIND ---
   if (artifact.kind === 'rule') {
-    let resolvedRule: ResolvedArtifact<CanonicalRule>;
+    let contentResult;
     try {
-      resolvedRule = (await resolveContentFromSource(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalRule>;
+      contentResult = await resolveAndTranslate(source, pkg, artifact, targetAdapter.assistant, resolverOpts);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       return {
@@ -115,8 +156,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
       };
     }
 
-    const translation = translateRule(resolvedRule.content, targetAdapter.assistant);
-    if (translation.overall === 'unsupported') {
+    if (contentResult.diagnostic === 'unsupported') {
       return {
         supported: false,
         plan: {
@@ -125,12 +165,12 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
           packageId: pkg.id,
           artifactId: artifact.id,
           reason: `Target assistant "${targetAdapter.assistant}" is not supported for rules`,
-          diagnostics: translation.diagnostics,
+          diagnostics: contentResult.diagnostics,
         },
       };
     }
 
-    const translatedRule = translation.value;
+    const translatedRule = contentResult.translated as CanonicalRule;
     if (!targetAdapter.rulePath) {
       return {
         supported: false,
@@ -140,7 +180,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
           packageId: pkg.id,
           artifactId: artifact.id,
           reason: `Target adapter for "${targetAdapter.assistant}" does not support rule installation`,
-          diagnostics: translation.diagnostics,
+          diagnostics: contentResult.diagnostics,
         },
       };
     }
@@ -185,7 +225,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
         conflict: existingFiles.length > 0,
         existingFiles,
         proposedFiles,
-        diagnostics: translation.diagnostics,
+        diagnostics: contentResult.diagnostics,
       },
       content: translatedRule,
       contentHash,
@@ -194,9 +234,9 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
 
   // --- HOOK KIND ---
   if (artifact.kind === 'hook') {
-    let resolvedHook: ResolvedArtifact<CanonicalHook>;
+    let contentResult;
     try {
-      resolvedHook = (await resolveContentFromSource(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalHook>;
+      contentResult = await resolveAndTranslate(source, pkg, artifact, targetAdapter.assistant, resolverOpts);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       return {
@@ -211,8 +251,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
       };
     }
 
-    const translation = translateHook(resolvedHook.content, targetAdapter.assistant);
-    if (translation.overall === 'unsupported') {
+    if (contentResult.diagnostic === 'unsupported') {
       return {
         supported: false,
         plan: {
@@ -221,12 +260,12 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
           packageId: pkg.id,
           artifactId: artifact.id,
           reason: `Target assistant "${targetAdapter.assistant}" is not supported for hooks`,
-          diagnostics: translation.diagnostics,
+          diagnostics: contentResult.diagnostics,
         },
       };
     }
 
-    const translatedHook = translation.value;
+    const translatedHook = contentResult.translated as CanonicalHook;
     if (!targetAdapter.hookPath) {
       return {
         supported: false,
@@ -236,7 +275,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
           packageId: pkg.id,
           artifactId: artifact.id,
           reason: `Target adapter for "${targetAdapter.assistant}" does not support hook installation`,
-          diagnostics: translation.diagnostics,
+          diagnostics: contentResult.diagnostics,
         },
       };
     }
@@ -281,7 +320,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
         conflict: existingFiles.length > 0,
         existingFiles,
         proposedFiles,
-        diagnostics: translation.diagnostics,
+        diagnostics: contentResult.diagnostics,
       },
       content: translatedHook,
       contentHash,
@@ -290,9 +329,9 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
 
   // --- MCP-SERVER KIND ---
   if (artifact.kind === 'mcp-server') {
-    let resolvedMcp: ResolvedArtifact<CanonicalMcpServer>;
+    let contentResult;
     try {
-      resolvedMcp = (await resolveContentFromSource(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalMcpServer>;
+      contentResult = await resolveAndTranslate(source, pkg, artifact, targetAdapter.assistant, resolverOpts);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       return {
@@ -307,8 +346,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
       };
     }
 
-    const translation = translateMcpServer(resolvedMcp.content, targetAdapter.assistant);
-    if (translation.overall === 'unsupported') {
+    if (contentResult.diagnostic === 'unsupported') {
       return {
         supported: false,
         plan: {
@@ -317,12 +355,12 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
           packageId: pkg.id,
           artifactId: artifact.id,
           reason: `Target assistant "${targetAdapter.assistant}" is not supported for MCP servers`,
-          diagnostics: translation.diagnostics,
+          diagnostics: contentResult.diagnostics,
         },
       };
     }
 
-    const translatedMcp = translation.value;
+    const translatedMcp = contentResult.translated as CanonicalMcpServer;
     if (!targetAdapter.mcpConfigPath) {
       return {
         supported: false,
@@ -332,7 +370,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
           packageId: pkg.id,
           artifactId: artifact.id,
           reason: `Target adapter for "${targetAdapter.assistant}" does not support MCP installation`,
-          diagnostics: translation.diagnostics,
+          diagnostics: contentResult.diagnostics,
         },
       };
     }
@@ -387,7 +425,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
         conflict,
         existingFiles,
         proposedFiles,
-        diagnostics: translation.diagnostics,
+        diagnostics: contentResult.diagnostics,
       },
       content: translatedMcp,
       contentHash,
@@ -396,9 +434,9 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
 
   // --- COMMAND KIND ---
   if (artifact.kind === 'command') {
-    let resolvedCmd: ResolvedArtifact<CanonicalCommand>;
+    let contentResult;
     try {
-      resolvedCmd = (await resolveContentFromSource(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalCommand>;
+      contentResult = await resolveAndTranslate(source, pkg, artifact, targetAdapter.assistant, resolverOpts);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       return {
@@ -413,9 +451,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
       };
     }
 
-    const translation = translateCommand(resolvedCmd.content, targetAdapter.assistant);
-
-    if (translation.overall === 'unsupported') {
+    if (contentResult.diagnostic === 'unsupported') {
       return {
         supported: false,
         plan: {
@@ -424,12 +460,12 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
           packageId: pkg.id,
           artifactId: artifact.id,
           reason: `Target assistant "${targetAdapter.assistant}" is not supported for commands`,
-          diagnostics: translation.diagnostics,
+          diagnostics: contentResult.diagnostics,
         },
       };
     }
 
-    const translatedCmd = translation.value;
+    const translatedCmd = contentResult.translated as CanonicalCommand;
     if (!targetAdapter.commandPath) {
       return {
         supported: false,
@@ -439,7 +475,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
           packageId: pkg.id,
           artifactId: artifact.id,
           reason: `Target adapter for "${targetAdapter.assistant}" does not support command installation`,
-          diagnostics: translation.diagnostics,
+          diagnostics: contentResult.diagnostics,
         },
       };
     }
@@ -461,7 +497,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
             packageId: pkg.id,
             artifactId: artifact.id,
             reason: `Target command path "${targetFilePath}" is a directory or symlink and will not be overwritten`,
-            diagnostics: translation.diagnostics,
+            diagnostics: contentResult.diagnostics,
           },
         };
       }
@@ -481,7 +517,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
             packageId: pkg.id,
             artifactId: artifact.id,
             reason: `Error inspecting target command file: ${msg}`,
-            diagnostics: translation.diagnostics,
+            diagnostics: contentResult.diagnostics,
           },
         };
       }
@@ -518,7 +554,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
         conflict,
         existingFiles,
         proposedFiles,
-        diagnostics: translation.diagnostics,
+        diagnostics: contentResult.diagnostics,
       },
       content: translatedCmd,
       contentHash,
@@ -527,9 +563,9 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
 
   // --- AGENT KIND ---
   if (artifact.kind === 'agent') {
-    let resolvedAgent: ResolvedArtifact<CanonicalAgent>;
+    let contentResult;
     try {
-      resolvedAgent = (await resolveContentFromSource(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalAgent>;
+      contentResult = await resolveAndTranslate(source, pkg, artifact, targetAdapter.assistant, resolverOpts);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       return {
@@ -544,9 +580,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
       };
     }
 
-    const translation = translateAgent(resolvedAgent.content, targetAdapter.assistant);
-
-    if (translation.overall === 'unsupported') {
+    if (contentResult.diagnostic === 'unsupported') {
       return {
         supported: false,
         plan: {
@@ -555,12 +589,12 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
           packageId: pkg.id,
           artifactId: artifact.id,
           reason: `Target assistant "${targetAdapter.assistant}" is not supported for agents`,
-          diagnostics: translation.diagnostics,
+          diagnostics: contentResult.diagnostics,
         },
       };
     }
 
-    const translatedAgent = translation.value;
+    const translatedAgent = contentResult.translated as CanonicalAgent;
     if (!targetAdapter.agentPath) {
       return {
         supported: false,
@@ -570,7 +604,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
           packageId: pkg.id,
           artifactId: artifact.id,
           reason: `Target adapter for "${targetAdapter.assistant}" does not support agent installation`,
-          diagnostics: translation.diagnostics,
+          diagnostics: contentResult.diagnostics,
         },
       };
     }
@@ -592,7 +626,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
             packageId: pkg.id,
             artifactId: artifact.id,
             reason: `Target agent path "${targetFilePath}" is a directory or symlink and will not be overwritten`,
-            diagnostics: translation.diagnostics,
+            diagnostics: contentResult.diagnostics,
           },
         };
       }
@@ -612,7 +646,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
             packageId: pkg.id,
             artifactId: artifact.id,
             reason: `Error inspecting target agent file: ${msg}`,
-            diagnostics: translation.diagnostics,
+            diagnostics: contentResult.diagnostics,
           },
         };
       }
@@ -649,7 +683,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
         conflict,
         existingFiles,
         proposedFiles,
-        diagnostics: translation.diagnostics,
+        diagnostics: contentResult.diagnostics,
       },
       content: translatedAgent,
       contentHash,
@@ -657,9 +691,9 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
   }
 
   // --- SKILL KIND ---
-  let resolvedContent: ResolvedArtifact<CanonicalSkill>;
+  let contentResult;
   try {
-    resolvedContent = (await resolveContentFromSource(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalSkill>;
+    contentResult = await resolveAndTranslate(source, pkg, artifact, targetAdapter.assistant, resolverOpts);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     return {
@@ -674,8 +708,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
     };
   }
 
-  const translation = translateSkill(resolvedContent.content, targetAdapter.assistant);
-  if (translation.overall === 'unsupported') {
+  if (contentResult.diagnostic === 'unsupported') {
     return {
       supported: false,
       plan: {
@@ -684,12 +717,12 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
         packageId: pkg.id,
         artifactId: artifact.id,
         reason: `Target assistant "${targetAdapter.assistant}" is not supported in Phase 1`,
-        diagnostics: translation.diagnostics,
+        diagnostics: contentResult.diagnostics,
       },
     };
   }
 
-  const translatedSkill = translation.value;
+  const translatedSkill = contentResult.translated as CanonicalSkill;
 
   let targetDir: string;
   try {
@@ -707,7 +740,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
         packageId: pkg.id,
         artifactId: artifact.id,
         reason: `Failed to resolve target directory: ${msg}`,
-        diagnostics: translation.diagnostics,
+        diagnostics: contentResult.diagnostics,
       },
     };
   }
@@ -725,7 +758,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
           packageId: pkg.id,
           artifactId: artifact.id,
           reason: `Target path "${targetDir}" is a ${targetStat.isSymbolicLink() ? 'symlink' : 'non-directory file'} and will not be followed or overwritten`,
-          diagnostics: translation.diagnostics,
+          diagnostics: contentResult.diagnostics,
         },
       };
     }
@@ -769,7 +802,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
           packageId: pkg.id,
           artifactId: artifact.id,
           reason: `Target directory "${targetDir}" contains symlinks, special files, or unreadable entries`,
-          diagnostics: translation.diagnostics,
+          diagnostics: contentResult.diagnostics,
         },
       };
     }
@@ -784,7 +817,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
           packageId: pkg.id,
           artifactId: artifact.id,
           reason: `Error inspecting target directory: ${msg}`,
-          diagnostics: translation.diagnostics,
+          diagnostics: contentResult.diagnostics,
         },
       };
     }
@@ -824,7 +857,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
       conflict,
       existingFiles,
       proposedFiles,
-      diagnostics: translation.diagnostics,
+      diagnostics: contentResult.diagnostics,
     },
     content: translatedSkill,
     contentHash,
