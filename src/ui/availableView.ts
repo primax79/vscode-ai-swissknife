@@ -18,6 +18,7 @@ import { applyInstall } from '../engine/apply';
 import type { PreparedInstall } from '../engine/types';
 import { getWorkspaceRoot } from './workspacePicker';
 import { getAssistantIconPath } from './assistantIcons';
+import { previewProvider } from './previewProvider';
 
 import { resolveRecommendations, SourceResolutionAttempt, BrokenReason } from '../engine/recommendations';
 import type { DesiredInstallation } from '../domain/registry';
@@ -532,28 +533,48 @@ export class AvailableTreeDataProvider
     }
 
     const plan = prepared.plan;
-    const itemName = prepared.kind === 'mcp-server' ? prepared.content.id : prepared.content.name;
+    const itemName = prepared.kind === 'mcp-server' ? prepared.content.id : (prepared.content.name ?? 'unnamed');
 
     if (plan.conflict) {
-      const conflictChoice = await vscode.window.showWarningMessage(
-        `${artifact.kind} "${itemName}" already exists at "${plan.targetDir}". Overwrite existing installation?`,
-        { modal: true },
-        'Overwrite'
-      );
+      let conflictChoice: string | undefined;
+      let promptUser = true;
+      while (promptUser) {
+        conflictChoice = await vscode.window.showWarningMessage(
+          `${artifact.kind} "${itemName}" already exists at "${plan.targetDir}". Overwrite existing installation?`,
+          { modal: true },
+          'Preview',
+          'Overwrite'
+        );
+        if (conflictChoice === 'Preview') {
+          await this.showPreview(prepared, itemName);
+          continue;
+        }
+        promptUser = false;
+      }
       if (conflictChoice !== 'Overwrite') {
         return;
       }
-    }
+    } else {
+      let confirmChoice: string | undefined;
+      let promptUser = true;
+      while (promptUser) {
+        const confirmMessage = `Install ${artifact.kind} "${itemName}" to ${targetAssistant} (${targetScope})?\nTarget path: ${plan.targetDir}\nFiles proposed: ${plan.proposedFiles.length} file(s)`;
+        confirmChoice = await vscode.window.showInformationMessage(
+          confirmMessage,
+          { modal: true },
+          'Preview',
+          'Install'
+        );
+        if (confirmChoice === 'Preview') {
+          await this.showPreview(prepared, itemName);
+          continue;
+        }
+        promptUser = false;
+      }
 
-    const confirmMessage = `Install ${artifact.kind} "${itemName}" to ${targetAssistant} (${targetScope})?\nTarget path: ${plan.targetDir}\nFiles proposed: ${plan.proposedFiles.length} file(s)`;
-    const confirmChoice = await vscode.window.showInformationMessage(
-      confirmMessage,
-      { modal: true },
-      'Install'
-    );
-
-    if (confirmChoice !== 'Install') {
-      return;
+      if (confirmChoice !== 'Install') {
+        return;
+      }
     }
 
     const outcome = await applyInstall(prepared);
@@ -682,24 +703,44 @@ export class AvailableTreeDataProvider
     }
 
     if (conflictCount > 0) {
-      const conflictChoice = await vscode.window.showWarningMessage(
-        `${conflictCount} of ${supportedCount} item(s) already exist at target. Overwrite existing installations?`,
-        { modal: true },
-        'Overwrite All'
-      );
+      let conflictChoice: string | undefined;
+      let promptUser = true;
+      while (promptUser) {
+        conflictChoice = await vscode.window.showWarningMessage(
+          `${conflictCount} of ${supportedCount} item(s) already exist at target. Overwrite existing installations?`,
+          { modal: true },
+          'Preview',
+          'Overwrite All'
+        );
+        if (conflictChoice === 'Preview') {
+          await this.showBatchPreview(preparedList);
+          continue;
+        }
+        promptUser = false;
+      }
       if (conflictChoice !== 'Overwrite All') {
         return;
       }
-    }
-
-    const confirmMessage = `Install ${supportedCount} item(s) from ${groupLabel} to ${targetAssistant} (${targetScope})?`;
-    const confirmChoice = await vscode.window.showInformationMessage(
-      confirmMessage,
-      { modal: true },
-      'Install All'
-    );
-    if (confirmChoice !== 'Install All') {
-      return;
+    } else {
+      let confirmChoice: string | undefined;
+      let promptUser = true;
+      while (promptUser) {
+        const confirmMessage = `Install ${supportedCount} item(s) from ${groupLabel} to ${targetAssistant} (${targetScope})?`;
+        confirmChoice = await vscode.window.showInformationMessage(
+          confirmMessage,
+          { modal: true },
+          'Preview',
+          'Install All'
+        );
+        if (confirmChoice === 'Preview') {
+          await this.showBatchPreview(preparedList);
+          continue;
+        }
+        promptUser = false;
+      }
+      if (confirmChoice !== 'Install All') {
+        return;
+      }
     }
 
     let appliedCount = 0;
@@ -708,7 +749,7 @@ export class AvailableTreeDataProvider
     for (const prepared of preparedList) {
       if (!prepared.supported) continue;
       const outcome = await applyInstall(prepared);
-      const itemName = prepared.kind === 'mcp-server' ? prepared.content.id : prepared.content.name;
+      const itemName = prepared.kind === 'mcp-server' ? prepared.content.id : (prepared.content.name ?? 'unnamed');
       if (outcome.status === 'applied') {
         appliedCount++;
       } else {
@@ -727,4 +768,35 @@ export class AvailableTreeDataProvider
       vscode.window.showErrorMessage(`Failed to install items. ${failedNames.join(', ')}`);
     }
   }
+
+  private async showPreview(prepared: PreparedInstall, itemName: string): Promise<void> {
+    const uri = previewProvider.setPreviewContent(itemName, prepared);
+    const doc = await vscode.workspace.openTextDocument(uri);
+    await vscode.window.showTextDocument(doc, { preview: true });
+  }
+
+  private async showBatchPreview(preparedList: PreparedInstall[]): Promise<void> {
+    const supported = preparedList.filter(
+      (p): p is Extract<PreparedInstall, { supported: true }> => p.supported
+    );
+    const items = supported.map((p) => {
+      const itemName = p.kind === 'mcp-server' ? p.content.id : (p.content.name ?? 'unnamed');
+      return {
+        label: itemName,
+        description: p.kind,
+        prepared: p
+      };
+    });
+
+    const choice = await vscode.window.showQuickPick(items, {
+      placeHolder: 'Select an item to preview'
+    });
+
+    if (choice) {
+      const p = choice.prepared as Extract<PreparedInstall, { supported: true }>;
+      const itemName = p.kind === 'mcp-server' ? p.content.id : (p.content.name ?? 'unnamed');
+      await this.showPreview(choice.prepared, itemName);
+    }
+  }
 }
+

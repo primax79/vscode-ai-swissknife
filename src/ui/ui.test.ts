@@ -53,6 +53,7 @@ Module.prototype.require = function (id: string, ...rest: unknown[]) {
           onDidDelete: () => ({ dispose: () => {} }),
           dispose: () => {},
         }),
+        registerTextDocumentContentProvider: () => ({ dispose: () => {} }),
       },
       ViewColumn: {
         One: 1,
