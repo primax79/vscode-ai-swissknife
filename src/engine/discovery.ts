@@ -13,6 +13,8 @@ import type {
   CanonicalAgent,
   CanonicalCommand,
   CanonicalMcpServer,
+  CanonicalHook,
+  CanonicalRule,
 } from '../adapters/types';
 import { readState, writeState, readManifest, fromDesiredSource } from '../domain/registry';
 import {
@@ -20,6 +22,8 @@ import {
   canonicalAgentHash,
   canonicalCommandHash,
   canonicalMcpServerHash,
+  canonicalHookHash,
+  canonicalRuleHash,
   readSkill,
 } from '../adapters/codec';
 import { ClaudeAdapter, claudeAdapter } from '../adapters/claude';
@@ -27,15 +31,12 @@ import { KiloAdapter, kiloAdapter } from '../adapters/kilo';
 import { CopilotAdapter, copilotAdapter } from '../adapters/copilot';
 import { CodexAdapter, codexAdapter } from '../adapters/codex';
 import { GeminiAdapter, geminiAdapter } from '../adapters/gemini';
-import { resolveLocalFolder, resolveArtifactContent as resolveLocalFolderContent } from '../sources/localFolder';
-import { resolveGitCustom, resolveArtifactContent as resolveGitCustomContent } from '../sources/gitCustom';
-import { resolveGitMarketplace, resolveArtifactContent as resolveGitMarketplaceContent } from '../sources/gitMarketplace';
-import { resolveGitSingleItem, resolveArtifactContent as resolveGitSingleItemContent } from '../sources/gitSingleItem';
-import { resolveRemoteUrl, resolveArtifactContent as resolveRemoteUrlContent } from '../sources/remoteUrl';
-import { translateSkill } from '../translator/skill';
-import { translateAgent } from '../translator/agent';
-import { translateCommand } from '../translator/command';
-import { translateMcpServer } from '../translator/mcp';
+import { resolveLocalFolder } from '../sources/localFolder';
+import { resolveGitCustom } from '../sources/gitCustom';
+import { resolveGitMarketplace } from '../sources/gitMarketplace';
+import { resolveGitSingleItem } from '../sources/gitSingleItem';
+import { resolveRemoteUrl } from '../sources/remoteUrl';
+import { resolveAndTranslate } from './plan';
 
 function getAdapter(assistant: AssistantId, homeRoot?: string) {
   if (homeRoot) {
@@ -240,33 +241,21 @@ export async function scanInstalledInventory(
         for (const pkg of resolution.packages) {
           for (const art of pkg.artifacts) {
             if (art.kind === obs.kind && art.name === obs.name) {
-              let resolved;
-              if (source.type === 'local-folder') {
-                resolved = await resolveLocalFolderContent(source, pkg, art);
-              } else if (source.type === 'git-custom') {
-                resolved = await resolveGitCustomContent(source, pkg, art);
-              } else if (source.type === 'git-marketplace') {
-                resolved = await resolveGitMarketplaceContent(source, pkg, art);
-              } else if (source.type === 'git-single-item') {
-                resolved = await resolveGitSingleItemContent(source, pkg, art);
-              } else if (source.type === 'remote-url') {
-                resolved = await resolveRemoteUrlContent(source, pkg, art);
-              }
-
-              if (resolved) {
+              try {
+                const result = await resolveAndTranslate(source, pkg, art, obs.assistant);
                 let sourceHash: string | undefined;
                 if (art.kind === 'skill') {
-                  const translated = translateSkill(resolved.content as CanonicalSkill, obs.assistant);
-                  sourceHash = canonicalSkillHash(translated.value);
+                  sourceHash = canonicalSkillHash(result.translated as CanonicalSkill);
                 } else if (art.kind === 'agent') {
-                  const translated = translateAgent(resolved.content as CanonicalAgent, obs.assistant);
-                  sourceHash = canonicalAgentHash(translated.value);
+                  sourceHash = canonicalAgentHash(result.translated as CanonicalAgent);
                 } else if (art.kind === 'command') {
-                  const translated = translateCommand(resolved.content as CanonicalCommand, obs.assistant);
-                  sourceHash = canonicalCommandHash(translated.value);
+                  sourceHash = canonicalCommandHash(result.translated as CanonicalCommand);
                 } else if (art.kind === 'mcp-server') {
-                  const translated = translateMcpServer(resolved.content as CanonicalMcpServer, obs.assistant);
-                  sourceHash = canonicalMcpServerHash(translated.value);
+                  sourceHash = canonicalMcpServerHash(result.translated as CanonicalMcpServer);
+                } else if (art.kind === 'hook') {
+                  sourceHash = canonicalHookHash(result.translated as CanonicalHook);
+                } else if (art.kind === 'rule') {
+                  sourceHash = canonicalRuleHash(result.translated as CanonicalRule);
                 }
 
                 if (sourceHash && obs.contentHash && sourceHash === obs.contentHash) {
@@ -288,6 +277,8 @@ export async function scanInstalledInventory(
                     details: `Differs from source "${source.id}"`,
                   });
                 }
+              } catch {
+                // ignore
               }
             }
           }
