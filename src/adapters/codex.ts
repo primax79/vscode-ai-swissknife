@@ -290,6 +290,37 @@ export class CodexAdapter implements Adapter {
     await fs.promises.writeFile(filePath, JSON.stringify(parsed, null, 2) + '\n', 'utf-8');
   }
 
+  async removeMcpServer(id: string, loc: LocationRef): Promise<void> {
+    const filePath = this.mcpConfigPath(loc);
+    let parsed: Record<string, unknown> = {};
+    try {
+      const content = await fs.promises.readFile(filePath, 'utf-8');
+      parsed = JSON.parse(content);
+    } catch {
+      return; // If file doesn't exist or is invalid, no-op
+    }
+
+    if (parsed.mcpServers && typeof parsed.mcpServers === 'object' && !Array.isArray(parsed.mcpServers)) {
+      const mcpServers = parsed.mcpServers as Record<string, unknown>;
+      if (id in mcpServers) {
+        delete mcpServers[id];
+        await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+        await fs.promises.writeFile(filePath, JSON.stringify(parsed, null, 2) + '\n', 'utf-8');
+      }
+    } else if (parsed.mcp_servers && typeof parsed.mcp_servers === 'object' && !Array.isArray(parsed.mcp_servers)) {
+      const mcpServers = parsed.mcp_servers as Record<string, unknown>;
+      if (id in mcpServers) {
+        delete mcpServers[id];
+        await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+        await fs.promises.writeFile(filePath, JSON.stringify(parsed, null, 2) + '\n', 'utf-8');
+      }
+    } else if (id in parsed) {
+      delete parsed[id];
+      await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+      await fs.promises.writeFile(filePath, JSON.stringify(parsed, null, 2) + '\n', 'utf-8');
+    }
+  }
+
   async listMcpServers(loc: LocationRef): Promise<string[]> {
     const filePath = this.mcpConfigPath(loc);
     try {

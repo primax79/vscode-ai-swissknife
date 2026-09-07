@@ -388,6 +388,27 @@ describe('KiloAdapter', () => {
       const list = await adapter.listMcpServers({ scope: 'project', projectRoot: testProjectDir });
       assert.deepStrictEqual(list, ['sqlite']);
     });
+
+    it('removeMcpServer removes only the specified server', async () => {
+      const server1: CanonicalMcpServer = { id: 'sqlite', type: 'stdio', command: 'uvx' };
+      const server2: CanonicalMcpServer = { id: 'remote-docs', type: 'sse', url: 'https://docs.example.com' };
+
+      await adapter.writeMcpServer(server1, { scope: 'project', projectRoot: testProjectDir });
+      await adapter.writeMcpServer(server2, { scope: 'project', projectRoot: testProjectDir });
+
+      await adapter.removeMcpServer('sqlite', { scope: 'project', projectRoot: testProjectDir });
+
+      const list = await adapter.listMcpServers({ scope: 'project', projectRoot: testProjectDir });
+      assert.deepStrictEqual(list, ['remote-docs']);
+
+      const loaded1 = await adapter.readMcpServer('sqlite', { scope: 'project', projectRoot: testProjectDir });
+      assert.strictEqual(loaded1, null);
+    });
+
+    it('removeMcpServer on nonexistent server does not throw', async () => {
+      await adapter.removeMcpServer('nonexistent', { scope: 'project', projectRoot: testProjectDir });
+      assert.ok(true);
+    });
   });
 
   describe('rules', () => {

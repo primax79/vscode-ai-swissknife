@@ -89,6 +89,7 @@ export interface Adapter {
   mcpConfigPath(loc: LocationRef): string;
   readMcpServer(id: string, loc: LocationRef): Promise<CanonicalMcpServer | null>;
   writeMcpServer(server: CanonicalMcpServer, loc: LocationRef): Promise<void>;
+  removeMcpServer(id: string, loc: LocationRef): Promise<void>;
   listMcpServers(loc: LocationRef): Promise<string[]>;
 
   hookPath(name: string, loc: LocationRef): string;
