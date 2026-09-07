@@ -1,11 +1,12 @@
 import * as vscode from 'vscode';
 import type { ManagedInstallation, ObservedArtifact, Source, AssistantId, Scope } from '../domain/types';
-import { readState, readManifest, fromDesiredSource } from '../domain/registry';
+import { readState, writeState, readManifest, fromDesiredSource } from '../domain/registry';
 import { analyzeLocalDrift, checkForUpstreamUpdate } from '../engine/drift';
 import { scanInstalledInventory, promoteObservedArtifact } from '../engine/discovery';
 import { planInstall } from '../engine/plan';
 import { planSync } from '../engine/sync';
 import { applyInstall } from '../engine/apply';
+import { softDeletePath } from '../engine/softDelete';
 import { ClaudeAdapter } from '../adapters/claude';
 import { KiloAdapter } from '../adapters/kilo';
 import { CopilotAdapter } from '../adapters/copilot';
@@ -507,6 +508,123 @@ export class InstalledTreeDataProvider
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       vscode.window.showErrorMessage(`Failed to promote "${obs.name}": ${msg}`);
+    }
+  }
+
+
+  async moveItem(item?: InstalledInstallationItem): Promise<void> {
+    if (!item) {
+      vscode.window.showWarningMessage('Please select a managed item to move.');
+      return;
+    }
+
+    const inst = item.installation;
+    if (inst.kind === 'hook' || inst.kind === 'rule') {
+      vscode.window.showErrorMessage("Move isn't supported for this kind yet.");
+      return;
+    }
+
+    const assistantPick = await vscode.window.showQuickPick(
+      (['claude-code', 'kilo-code', 'github-copilot', 'codex-cli', 'gemini-cli'] as const).map(
+        (id) => ({
+          label: id,
+          iconPath: getAssistantIconPath(id, this.extensionUri),
+        })
+      ),
+      {
+        placeHolder: `Select target assistant to move "${inst.name}" to`,
+      }
+    );
+    if (!assistantPick) return;
+    const targetAssistant = assistantPick.label as AssistantId;
+
+    const scopePick = await vscode.window.showQuickPick(['project', 'global'], {
+      placeHolder: `Select target scope for moved ${inst.kind}`,
+    });
+    if (!scopePick) return;
+    const targetScope = scopePick as Scope;
+
+    let targetProjectRoot: string | undefined;
+    if (targetScope === 'project') {
+      targetProjectRoot = await getWorkspaceRoot();
+      if (!targetProjectRoot) return;
+    }
+
+    const prepared = await planSync({
+      sourceItem: inst,
+      targetAssistant,
+      targetScope,
+      targetProjectRoot,
+    });
+
+    if (!prepared.supported) {
+      vscode.window.showErrorMessage(`Failed to plan move: ${prepared.plan.reason}`);
+      return;
+    }
+
+    if (prepared.plan.conflict) {
+      const conflictChoice = await vscode.window.showWarningMessage(
+        `Item "${inst.name}" already exists in target ${targetAssistant} (${targetScope}). Overwrite?`,
+        { modal: true },
+        'Overwrite'
+      );
+      if (conflictChoice !== 'Overwrite') return;
+    }
+
+    const confirm = await vscode.window.showInformationMessage(
+      `Move ${inst.kind} "${inst.name}" from ${inst.assistant} (${inst.scope}) to ${targetAssistant} (${targetScope})?`,
+      { modal: true },
+      'Move'
+    );
+    if (confirm !== 'Move') return;
+
+    const outcome = await applyInstall(prepared);
+    if (outcome.status === 'applied') {
+      try {
+        if (inst.kind === 'mcp-server') {
+          const originAdapter =
+            inst.assistant === 'claude-code'
+              ? this.claudeAdapter
+              : inst.assistant === 'github-copilot'
+              ? this.copilotAdapter
+              : inst.assistant === 'codex-cli'
+              ? this.codexAdapter
+              : inst.assistant === 'gemini-cli'
+              ? this.geminiAdapter
+              : this.kiloAdapter;
+          await originAdapter.removeMcpServer(inst.name, {
+            scope: inst.scope,
+            projectRoot: inst.projectPath,
+          });
+        } else {
+          await softDeletePath(
+            inst.path,
+            inst.kind,
+            inst.name,
+            inst.scope,
+            inst.projectPath
+          );
+        }
+
+        const state = await readState(inst.scope, inst.projectPath);
+        state.installations = state.installations.filter(
+          (i) => !(i.assistant === inst.assistant && i.kind === inst.kind && i.name === inst.name)
+        );
+        await writeState(inst.scope, state, inst.projectPath);
+
+        vscode.window.showInformationMessage(
+          `Successfully moved "${inst.name}" to ${targetAssistant} (${targetScope}).`
+        );
+        this.refresh();
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        vscode.window.showErrorMessage(
+          `CRITICAL: Moved "${inst.name}" to ${targetAssistant} (${targetScope}) successfully, but removing the original at ${inst.assistant} (${inst.scope}) failed: ${msg}. Manual cleanup needed. Path requiring inspection: ${inst.path}`,
+          { modal: true }
+        );
+      }
+    } else {
+      vscode.window.showErrorMessage(`Move failed: ${outcome.reason}`);
     }
   }
 
