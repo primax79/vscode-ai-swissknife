@@ -77,6 +77,10 @@ Module.prototype.require = function (id: string, ...rest: unknown[]) {
           },
         }),
         registerTreeDataProvider: () => ({ dispose: () => {} }),
+        createTreeView: () => ({
+          onDidChangeSelection: () => ({ dispose: () => {} }),
+          dispose: () => {},
+        }),
       },
       commands: {
         registerCommand: () => ({ dispose: () => {} }),
@@ -99,7 +103,7 @@ import {
   SCHEMA_VERSION,
 } from '../domain/registry';
 import { SourcesTreeDataProvider, ScopeGroupItem } from './sourcesView';
-import { AvailableTreeDataProvider, AvailableFolderItem, AvailableArtifactItem, buildHierarchy } from './availableView';
+import { AvailableTreeDataProvider, AvailableFolderItem, AvailableArtifactItem, buildHierarchy, AvailablePlaceholderItem, AvailableSourceGroupItem } from './availableView';
 import { InstalledTreeDataProvider, InstalledGroupItem, InstalledInstallationItem } from './installedView';
 import { getAssistantIconPath } from './assistantIcons';
 import { setupFileWatchers } from './watchers';
@@ -317,6 +321,54 @@ describe('UI TreeDataProviders', () => {
       assert.strictEqual(treeBroken.label, 'a2');
       assert.ok((treeBroken.description as string).includes('Source not registered'));
       assert.strictEqual(treeBroken.command, undefined, 'broken items must be non-actionable (no command)');
+    });
+
+    it('filters children based on selected source and retains Recommended group', async () => {
+      const provider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any);
+      const source1: Source = { id: 's1', type: 'git-custom', scope: 'project' };
+      const source2: Source = { id: 's1', type: 'git-custom', scope: 'global' }; // same id, different scope
+      const artifact1: Artifact = { id: 'a1', packageId: 'p1', kind: 'skill', name: 'art1', nativeFormat: 'md' };
+      const artifact2: Artifact = { id: 'a2', packageId: 'p2', kind: 'skill', name: 'art2', nativeFormat: 'md' };
+      const pkg1: Package = { id: 'p1', sourceId: 's1', nativeFormat: 'raw', artifacts: [artifact1] };
+      const pkg2: Package = { id: 'p2', sourceId: 's1', nativeFormat: 'raw', artifacts: [artifact2] };
+      
+      const desiredSat: DesiredInstallation = { sourceId: 's1', artifactId: 'a1', assistant: 'claude-code', scope: 'project' };
+      const pending = [{ desired: desiredSat, artifact: artifact1, pkg: pkg1, source: source1 }];
+      
+      provider['cachedSourceGroups'] = [
+        new AvailableSourceGroupItem(source1, { packages: [pkg1], diagnostics: [] }),
+        new AvailableSourceGroupItem(source2, { packages: [pkg2], diagnostics: [] })
+      ];
+      provider['cachedRecommendedGroup'] = new RecommendedGroupItem(pending, []);
+
+      // Test placeholder state (no filter)
+      let children = await provider.getChildren();
+      assert.strictEqual(children.length, 2);
+      assert.ok(children[0] instanceof RecommendedGroupItem);
+      assert.ok(children[1] instanceof AvailablePlaceholderItem);
+
+      // Test filtered state (match s1 project)
+      provider.setFilterSource({ id: 's1', scope: 'project' });
+      children = await provider.getChildren();
+      assert.strictEqual(children.length, 2);
+      assert.ok(children[0] instanceof RecommendedGroupItem);
+      assert.ok(children[1] instanceof AvailableArtifactItem);
+      assert.strictEqual((children[1] as AvailableArtifactItem).artifact.name, 'art1');
+
+      // Test filtered state (match s1 global, same id different scope)
+      provider.setFilterSource({ id: 's1', scope: 'global' });
+      children = await provider.getChildren();
+      assert.strictEqual(children.length, 2);
+      assert.ok(children[0] instanceof RecommendedGroupItem);
+      assert.ok(children[1] instanceof AvailableArtifactItem);
+      assert.strictEqual((children[1] as AvailableArtifactItem).artifact.name, 'art2');
+
+      // Test clear filter
+      provider.setFilterSource(undefined);
+      children = await provider.getChildren();
+      assert.strictEqual(children.length, 2);
+      assert.ok(children[0] instanceof RecommendedGroupItem);
+      assert.ok(children[1] instanceof AvailablePlaceholderItem);
     });
   });
 

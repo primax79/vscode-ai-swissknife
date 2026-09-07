@@ -235,9 +235,19 @@ export function activate(context: vscode.ExtensionContext) {
     }
   };
 
+  const sourcesTreeView = vscode.window.createTreeView('aiSwissknife.sources', { treeDataProvider: sourcesProvider });
+  sourcesTreeView.onDidChangeSelection((e) => {
+    if (e.selection.length > 0 && e.selection[0] instanceof SourceItem) {
+      const item = e.selection[0];
+      availableProvider.setFilterSource({ id: item.source.id, scope: item.source.scope });
+    } else {
+      availableProvider.setFilterSource(undefined);
+    }
+  });
+
   context.subscriptions.push(
     ...watchers,
-    vscode.window.registerTreeDataProvider('aiSwissknife.sources', sourcesProvider),
+    sourcesTreeView,
     vscode.window.registerTreeDataProvider('aiSwissknife.available', availableProvider),
     vscode.window.registerTreeDataProvider('aiSwissknife.installed', installedProvider),
 

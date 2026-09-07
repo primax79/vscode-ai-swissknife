@@ -29,7 +29,10 @@ export type AvailableTreeItem =
   | AvailableArtifactItem
   | DiagnosticTreeItem
   | RecommendedGroupItem
-  | RecommendedBrokenItem;
+  | RecommendedBrokenItem
+  | AvailablePlaceholderItem;
+
+export class AvailablePlaceholderItem {}
 
 export class RecommendedGroupItem {
   constructor(
@@ -189,6 +192,12 @@ export class AvailableTreeDataProvider
   private codexAdapter = new CodexAdapter();
   private geminiAdapter = new GeminiAdapter();
   private onInstalledRefreshCallback?: () => void;
+  private filterSource?: { id: string; scope: Scope };
+
+  setFilterSource(filter: { id: string; scope: Scope } | undefined): void {
+    this.filterSource = filter;
+    this.refresh();
+  }
 
   setInstalledRefreshCallback(cb: () => void) {
     this.onInstalledRefreshCallback = cb;
@@ -319,6 +328,10 @@ export class AvailableTreeDataProvider
       return item;
     }
 
+    if (element instanceof AvailablePlaceholderItem) {
+      return new vscode.TreeItem('Select a source in the Sources view to see its available items', vscode.TreeItemCollapsibleState.None);
+    }
+
     if (element instanceof AvailableSourceGroupItem) {
       const source = element.source;
       const count = element.resolution.packages.length;
@@ -397,7 +410,18 @@ export class AvailableTreeDataProvider
       if (this.cachedRecommendedGroup) {
         children.push(this.cachedRecommendedGroup);
       }
-      children.push(...this.cachedSourceGroups);
+
+      if (this.filterSource) {
+        const match = this.cachedSourceGroups.find(
+          (g) => g.source.id === this.filterSource!.id && g.source.scope === this.filterSource!.scope
+        );
+        if (match) {
+          const matchChildren = await this.getChildren(match);
+          children.push(...matchChildren);
+        }
+      } else {
+        children.push(new AvailablePlaceholderItem());
+      }
       return children;
     }
 
