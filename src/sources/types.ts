@@ -1,4 +1,12 @@
-import type { Package } from '../domain/types';
+import type { Artifact, Package, ResolvedArtifact, Source, SourceType } from '../domain/types';
+import type {
+  CanonicalAgent,
+  CanonicalCommand,
+  CanonicalHook,
+  CanonicalMcpServer,
+  CanonicalRule,
+  CanonicalSkill,
+} from '../adapters/types';
 
 export interface DetectionDiagnostic {
   severity: 'error' | 'warning';
@@ -57,3 +65,27 @@ export interface SourceResolution {
   packages: Package[];
   diagnostics: DetectionDiagnostic[];
 }
+
+/**
+ * Shared interface for source-type resolvers.
+ *
+ * Locked displayName and iconThemeId values (from sourcesView.ts / spec §4.3):
+ * - local-folder:    displayName "Local folder",      iconThemeId "folder"
+ * - git-custom:      displayName "Git (custom)",      iconThemeId "repo"
+ * - git-marketplace: displayName "Git marketplace",   iconThemeId "extensions"
+ * - git-single-item: displayName "Git (single item)", iconThemeId "git-commit"
+ * - remote-url:      displayName "Remote URL",        iconThemeId "link"
+ */
+export interface SourceResolver {
+  readonly type: SourceType;
+  readonly displayName: string;
+  readonly iconThemeId: string;
+  resolve(source: Source, opts?: { cacheDir?: string }): Promise<SourceResolution>;
+  resolveArtifactContent(
+    source: Source,
+    pkg: Package,
+    artifact: Artifact,
+    opts?: { cacheDir?: string }
+  ): Promise<ResolvedArtifact<CanonicalSkill | CanonicalAgent | CanonicalCommand | CanonicalMcpServer | CanonicalHook | CanonicalRule>>;
+}
+
