@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { ManagedInstallation, ObservedArtifact, Source, AssistantId } from '../domain/types';
+import type { ManagedInstallation, ObservedArtifact, Source, AssistantId, Scope } from '../domain/types';
 import { readManifest, fromDesiredSource } from '../domain/registry';
 import { scanInstalledInventory, promoteObservedArtifact } from '../engine/discovery';
 import { analyzeLocalDrift, checkForUpstreamUpdate } from '../engine/drift';
@@ -12,6 +12,8 @@ export class DashboardPanel {
   private readonly _panel: vscode.WebviewPanel;
   private readonly _extensionUri: vscode.Uri;
   private _disposables: vscode.Disposable[] = [];
+
+  private _sourceFilter?: { id: string; scope: Scope };
 
   private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
     this._panel = panel;
@@ -96,6 +98,11 @@ export class DashboardPanel {
     return DashboardPanel.currentPanel;
   }
 
+  public setSourceFilter(id: string, scope: Scope) {
+    this._sourceFilter = { id, scope };
+    this.update();
+  }
+
   public dispose() {
     DashboardPanel.currentPanel = undefined;
     this._panel.dispose();
@@ -138,7 +145,7 @@ export class DashboardPanel {
     }
 
     // Phase A: Fast render
-    this._panel.webview.html = this.getHtml(allSources, allManaged, allObserved, [], true);
+    this._panel.webview.html = this.getHtml(allSources, allManaged, allObserved, [], true, this._sourceFilter);
 
     // Phase B: Slow drift check
     for (const inst of allManaged) {
@@ -176,7 +183,8 @@ export class DashboardPanel {
     managed: ManagedInstallation[],
     observed: ObservedArtifact[],
     reports: DriftReport[],
-    scanning: boolean = false
+    scanning: boolean = false,
+    sourceFilter?: { id: string; scope: Scope }
   ): string {
     const escapeHtml = (unsafe: string) => {
       return (unsafe || '')
@@ -214,6 +222,9 @@ export class DashboardPanel {
     
     managed.forEach((inst, idx) => {
       const key = `${inst.assistant}:${inst.scope}:${inst.name}`;
+      const matchingSource = sources.find((s) => s.id === inst.sourceId);
+      const sourceScope = matchingSource?.scope || '';
+      const sourceId = inst.sourceId || '';
       const report = reportMap.get(key);
       const isPending = scanning && !report;
       const status = report?.status ?? (scanning ? 'checking…' : 'up-to-date');
@@ -228,7 +239,7 @@ export class DashboardPanel {
       }
 
       rowsHtml += `
-        <tr class="item-row" data-kind="${escapeHtml(inst.kind)}" data-name="${escapeHtml(inst.name.toLowerCase())}" data-assistant="${escapeHtml(inst.assistant)}" data-scope="${escapeHtml(inst.scope)}" data-membership="managed" data-status="${escapeHtml(status)}">
+        <tr class="item-row" data-kind="${escapeHtml(inst.kind)}" data-name="${escapeHtml(inst.name.toLowerCase())}" data-assistant="${escapeHtml(inst.assistant)}" data-scope="${escapeHtml(inst.scope)}" data-membership="managed" data-status="${escapeHtml(status)}" data-source-id="${escapeHtml(sourceId)}" data-source-scope="${escapeHtml(sourceScope)}">
           <td><span class="kind-pill kind-${escapeHtml(inst.kind)}">${escapeHtml(inst.kind)}</span></td>
           <td><strong>${escapeHtml(inst.name)}</strong></td>
           <td>${escapeHtml(inst.assistant)}</td>
@@ -242,6 +253,9 @@ export class DashboardPanel {
     });
 
     observed.forEach((obs, idx) => {
+      const sourceId = obs.match?.sourceId || '';
+      const matchingSource = sources.find((s) => s.id === sourceId);
+      const sourceScope = matchingSource?.scope || '';
       let badgeClass = 'badge-unmanaged';
       let badgeText = '◌ Unmanaged · local only';
       let tooltip = '';
@@ -257,7 +271,7 @@ export class DashboardPanel {
       }
 
       rowsHtml += `
-        <tr class="item-row" data-kind="${escapeHtml(obs.kind)}" data-name="${escapeHtml(obs.name.toLowerCase())}" data-assistant="${escapeHtml(obs.assistant)}" data-scope="${escapeHtml(obs.scope)}" data-membership="unmanaged" data-status="unmanaged">
+        <tr class="item-row" data-kind="${escapeHtml(obs.kind)}" data-name="${escapeHtml(obs.name.toLowerCase())}" data-assistant="${escapeHtml(obs.assistant)}" data-scope="${escapeHtml(obs.scope)}" data-membership="unmanaged" data-status="unmanaged" data-source-id="${escapeHtml(sourceId)}" data-source-scope="${escapeHtml(sourceScope)}">
           <td><span class="kind-pill kind-${escapeHtml(obs.kind)}">${escapeHtml(obs.kind)}</span></td>
           <td><strong>${escapeHtml(obs.name)}</strong></td>
           <td>${escapeHtml(obs.assistant)}</td>
@@ -565,9 +579,19 @@ export class DashboardPanel {
 
   <script type="application/json" id="managedDataJson">${JSON.stringify(managed).replace(/</g, '\\u003c')}</script>
   <script type="application/json" id="observedDataJson">${JSON.stringify(observed).replace(/</g, '\\u003c')}</script>
+  <script type="application/json" id="sourceFilterJson">${JSON.stringify(sourceFilter ?? null).replace(/</g, '\\u003c')}</script>
 
   <script>
     const vscode = acquireVsCodeApi();
+    function escapeHtmlClient(unsafe) {
+      return (unsafe || '')
+        .toString()
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
     const managedData = JSON.parse(document.getElementById('managedDataJson').textContent);
     const observedData = JSON.parse(document.getElementById('observedDataJson').textContent);
 
@@ -575,6 +599,7 @@ export class DashboardPanel {
     let currentEnv = 'all';
     let currentScope = 'all';
     let currentMembership = 'all';
+    let currentSource = JSON.parse(document.getElementById('sourceFilterJson').textContent);
 
     function refreshState() {
       vscode.postMessage({ command: 'refresh' });
@@ -634,11 +659,13 @@ export class DashboardPanel {
       if (type === 'scope') { setScopeFilter('all'); }
       if (type === 'membership') { setMembershipFilter('all'); }
       if (type === 'kind') { setKindFilter('all', null); }
+      if (type === 'source') { currentSource = null; filterTable(); }
     }
 
     function updateBreadcrumb() {
       const chipsContainer = document.getElementById('breadcrumb-chips');
       const chips = [];
+      if (currentSource) chips.push(\`<span class="chip">\${escapeHtmlClient(currentSource.id)} (\${escapeHtmlClient(currentSource.scope)}) <span class="chip-close" onclick="removeChip('source')">✕</span></span>\`);
       if (currentEnv !== 'all') chips.push(\`<span class="chip">\${currentEnv} <span class="chip-close" onclick="removeChip('env')">✕</span></span>\`);
       if (currentScope !== 'all') chips.push(\`<span class="chip">\${currentScope} <span class="chip-close" onclick="removeChip('scope')">✕</span></span>\`);
       if (currentMembership !== 'all') chips.push(\`<span class="chip">\${currentMembership} <span class="chip-close" onclick="removeChip('membership')">✕</span></span>\`);
@@ -670,14 +697,17 @@ export class DashboardPanel {
         const scope = row.getAttribute('data-scope');
         const mem = row.getAttribute('data-membership');
         const text = row.innerText.toLowerCase();
+        const rowSourceId = row.getAttribute('data-source-id');
+        const rowSourceScope = row.getAttribute('data-source-scope');
 
         const matchesKind = currentKind === 'all' || kind === currentKind;
         const matchesEnv = currentEnv === 'all' || env === currentEnv;
         const matchesScope = currentScope === 'all' || scope === currentScope;
         const matchesMem = currentMembership === 'all' || mem === currentMembership;
         const matchesQuery = !q || text.includes(q) || name.includes(q);
+        const matchesSource = !currentSource || (rowSourceId === currentSource.id && rowSourceScope === currentSource.scope);
 
-        if (matchesKind && matchesEnv && matchesScope && matchesMem && matchesQuery) {
+        if (matchesKind && matchesEnv && matchesScope && matchesMem && matchesQuery && matchesSource) {
           row.style.display = '';
           if (mem === 'managed') {
             visManaged++;
