@@ -323,6 +323,31 @@ describe('UI TreeDataProviders', () => {
       assert.strictEqual((mcpTreeItem.iconPath as { id: string }).id, 'plug');
     });
 
+    it('prefixes an installed artifact\'s label with the inline icon of every assistant it is installed in', () => {
+      const provider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any);
+      const source: Source = { id: 'src-1', type: 'local-folder', scope: 'project' };
+      const pkg: Package = { id: 'src-1:pkg', sourceId: 'src-1', nativeFormat: 'claude-skill', artifacts: [] };
+
+      const installedItem = new AvailableArtifactItem(source, pkg, {
+        id: 'art-installed', packageId: 'src-1:pkg', kind: 'skill', name: 'my-skill', nativeFormat: 'claude-skill',
+      });
+      const notInstalledItem = new AvailableArtifactItem(source, pkg, {
+        id: 'art-not-installed', packageId: 'src-1:pkg', kind: 'skill', name: 'other-skill', nativeFormat: 'claude-skill',
+      });
+
+      provider['installedByArtifactKey'] = new Map([
+        ['src-1:art-installed', ['claude-code', 'kilo-code']],
+      ]);
+
+      const installedTreeItem = provider.getTreeItem(installedItem);
+      assert.strictEqual(installedTreeItem.label, '$(ai-swissknife-claude-code)$(ai-swissknife-kilo-code) my-skill');
+      assert.ok((installedTreeItem.tooltip as string).includes('Installed in: claude-code, kilo-code'));
+
+      const notInstalledTreeItem = provider.getTreeItem(notInstalledItem);
+      assert.strictEqual(notInstalledTreeItem.label, 'other-skill');
+      assert.ok(!(notInstalledTreeItem.tooltip as string).includes('Installed in:'));
+    });
+
     it('renders RecommendedGroupItem and RecommendedBrokenItem correctly', () => {
       const provider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any);
 

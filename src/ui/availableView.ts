@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import type { Source, Package, Artifact, AssistantId, Scope } from '../domain/types';
+import type { Source, Package, Artifact, AssistantId, Scope, ManagedInstallation } from '../domain/types';
 import type { DetectionDiagnostic, SourceResolution } from '../sources/types';
 import { readManifest, fromDesiredSource } from '../domain/registry';
 import { resolveLocalFolder } from '../sources/localFolder';
@@ -17,7 +17,7 @@ import { planInstall } from '../engine/plan';
 import { applyInstall } from '../engine/apply';
 import type { PreparedInstall } from '../engine/types';
 import { getWorkspaceRoot } from './workspacePicker';
-import { getAssistantIconPath } from './assistantIcons';
+import { getAssistantIconPath, getAssistantInlineIcon } from './assistantIcons';
 import { getKindIconName } from './kindIcons';
 import { previewProvider } from './previewProvider';
 import type { SourceItem } from './sourcesView';
@@ -189,6 +189,7 @@ export class AvailableTreeDataProvider
 
   private cachedSourceGroups: AvailableSourceGroupItem[] = [];
   private cachedRecommendedGroup?: RecommendedGroupItem;
+  private installedByArtifactKey = new Map<string, AssistantId[]>();
   private claudeAdapter = new ClaudeAdapter();
   private kiloAdapter = new KiloAdapter();
   private copilotAdapter = new CopilotAdapter();
@@ -218,9 +219,42 @@ export class AvailableTreeDataProvider
     }
   }
 
+  private indexInstalledByArtifact(installations: ManagedInstallation[]): void {
+    for (const inst of installations) {
+      if (!inst.sourceId || !inst.artifactId) continue;
+      const key = `${inst.sourceId}:${inst.artifactId}`;
+      const list = this.installedByArtifactKey.get(key) ?? [];
+      if (!list.includes(inst.assistant)) {
+        list.push(inst.assistant);
+      }
+      this.installedByArtifactKey.set(key, list);
+    }
+  }
+
+  getInstalledAssistants(sourceId: string, artifactId: string): AssistantId[] {
+    return this.installedByArtifactKey.get(`${sourceId}:${artifactId}`) ?? [];
+  }
+
   async refreshCatalog(): Promise<void> {
     this.cachedSourceGroups = [];
     this.cachedRecommendedGroup = undefined;
+    this.installedByArtifactKey = new Map();
+
+    try {
+      const globalState = await readState('global', undefined, this.homeRoot);
+      this.indexInstalledByArtifact(globalState.installations);
+    } catch {
+      // ignore
+    }
+    const installedFolders = vscode.workspace.workspaceFolders;
+    if (installedFolders && installedFolders.length > 0) {
+      try {
+        const projectState = await readState('project', installedFolders[0].uri.fsPath);
+        this.indexInstalledByArtifact(projectState.installations);
+      } catch {
+        // ignore
+      }
+    }
 
     const sources: Source[] = [];
     const resolutionAttempts = new Map<string, SourceResolutionAttempt>();
@@ -380,12 +414,16 @@ export class AvailableTreeDataProvider
     }
 
     const artifact = element.artifact;
+    const installedIn = this.getInstalledAssistants(element.source.id, artifact.id);
+    const labelPrefix = installedIn.length > 0 ? `${installedIn.map(getAssistantInlineIcon).join('')} ` : '';
     const item = new vscode.TreeItem(
-      artifact.name,
+      `${labelPrefix}${artifact.name}`,
       vscode.TreeItemCollapsibleState.None
     );
     item.description = element.isRecommended ? `${artifact.description || ''} ★`.trim() : artifact.description;
-    item.tooltip = `Kind: ${artifact.kind}\nSource: ${element.source.id}\nPackage: ${element.pkg.id}`;
+    item.tooltip = `Kind: ${artifact.kind}\nSource: ${element.source.id}\nPackage: ${element.pkg.id}${
+      installedIn.length > 0 ? `\nInstalled in: ${installedIn.join(', ')}` : ''
+    }`;
     item.contextValue = element.isRecommended ? 'availableArtifact:recommended' : 'availableArtifact';
     item.iconPath = new vscode.ThemeIcon(getKindIconName(artifact.kind));
     item.command = {

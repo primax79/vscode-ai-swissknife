@@ -8,3 +8,5 @@ esbuild.config.js
 tsconfig.json
 SPEC.md
 .eslintrc.json
+resources/icon-font/svg/**
+resources/icon-font/ai-swissknife-icons.json

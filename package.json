@@ -22,6 +22,43 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "icons": {
+      "ai-swissknife-claude-code": {
+        "description": "Claude Code",
+        "default": {
+          "fontPath": "resources/icon-font/ai-swissknife-icons.woff",
+          "fontCharacter": "\\f105"
+        }
+      },
+      "ai-swissknife-kilo-code": {
+        "description": "Kilo Code",
+        "default": {
+          "fontPath": "resources/icon-font/ai-swissknife-icons.woff",
+          "fontCharacter": "\\f101"
+        }
+      },
+      "ai-swissknife-github-copilot": {
+        "description": "GitHub Copilot",
+        "default": {
+          "fontPath": "resources/icon-font/ai-swissknife-icons.woff",
+          "fontCharacter": "\\f102"
+        }
+      },
+      "ai-swissknife-codex-cli": {
+        "description": "Codex CLI",
+        "default": {
+          "fontPath": "resources/icon-font/ai-swissknife-icons.woff",
+          "fontCharacter": "\\f104"
+        }
+      },
+      "ai-swissknife-gemini-cli": {
+        "description": "Gemini CLI",
+        "default": {
+          "fontPath": "resources/icon-font/ai-swissknife-icons.woff",
+          "fontCharacter": "\\f103"
+        }
+      }
+    },
     "viewsContainers": {
       "activitybar": [
         {
@@ -322,6 +359,7 @@
     "vscode:prepublish": "npm run build",
     "build": "node esbuild.config.js",
     "watch": "node esbuild.config.js --watch",
+    "generate-icon-font": "fantasticon resources/icon-font/svg -o resources/icon-font -n ai-swissknife-icons -t woff -g json --normalize true",
     "lint": "eslint src --ext ts",
     "typecheck": "tsc --noEmit",
     "test": "tsc && node --test out"
@@ -335,6 +373,7 @@
     "@vscode/test-electron": "^2.3.8",
     "esbuild": "^0.19.0",
     "eslint": "^8.54.0",
+    "fantasticon": "^3.0.0",
     "typescript": "^5.3.0"
   }
 }
