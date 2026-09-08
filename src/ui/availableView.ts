@@ -196,6 +196,7 @@ export class AvailableTreeDataProvider
   private codexAdapter = new CodexAdapter();
   private geminiAdapter = new GeminiAdapter();
   private onInstalledRefreshCallback?: () => void;
+  private refreshInFlight?: Promise<void>;
 
   setInstalledRefreshCallback(cb: () => void) {
     this.onInstalledRefreshCallback = cb;
@@ -235,7 +236,26 @@ export class AvailableTreeDataProvider
     return this.installedByArtifactKey.get(`${sourceId}:${artifactId}`) ?? [];
   }
 
+  /**
+   * Deduped: a concurrent caller while a resolve is already in flight awaits
+   * that same run instead of starting a second, independent one — without
+   * this, a slow/hung source (e.g. an SSH auth hang) left a window where
+   * every re-render of the tree kicked off its own full resolve, each
+   * looping through every source independently.
+   */
   async refreshCatalog(): Promise<void> {
+    if (this.refreshInFlight) {
+      return this.refreshInFlight;
+    }
+    this.refreshInFlight = this.doRefreshCatalog();
+    try {
+      await this.refreshInFlight;
+    } finally {
+      this.refreshInFlight = undefined;
+    }
+  }
+
+  private async doRefreshCatalog(): Promise<void> {
     this.cachedSourceGroups = [];
     this.cachedRecommendedGroup = undefined;
     this.installedByArtifactKey = new Map();

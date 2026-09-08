@@ -1,8 +1,6 @@
-import * as child_process from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { promisify } from 'util';
 import type { Source, Package, Artifact, ResolvedRevision, ResolvedArtifact } from '../domain/types';
 import type {
   CanonicalSkill,
@@ -23,8 +21,7 @@ import {
   findHookFiles,
   findRuleFiles,
 } from './detect';
-
-const execFileAsync = promisify(child_process.execFile);
+import { runGit } from './gitProcess';
 
 export interface GitCustomResolveOptions {
   cacheDir?: string;
@@ -54,22 +51,6 @@ export class KeyedMutex {
 }
 
 export const gitCustomMutex = new KeyedMutex();
-
-async function runGit(args: string[], cwd?: string): Promise<{ stdout: string; stderr: string }> {
-  try {
-    return await execFileAsync('git', args, {
-      cwd,
-      env: {
-        ...process.env,
-        GIT_TERMINAL_PROMPT: '0',
-      },
-    });
-  } catch (err: unknown) {
-    const error = err as Error & { stdout?: string; stderr?: string; code?: number };
-    const stderr = error.stderr ? `: ${error.stderr.trim()}` : (error.message ? `: ${error.message}` : '');
-    throw new Error(`Git command failed [git ${args.join(' ')}]${stderr}`);
-  }
-}
 
 async function getDefaultBranch(cwd: string): Promise<string> {
   try {

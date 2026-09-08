@@ -391,6 +391,22 @@ describe('UI TreeDataProviders', () => {
       assert.ok(children[0] instanceof RecommendedGroupItem);
       assert.ok(children[1] instanceof AvailableSourceGroupItem);
     });
+
+    it('refreshCatalog dedupes concurrent calls into a single resolve pass', async () => {
+      const provider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+      let callCount = 0;
+      const original = (provider as any).doRefreshCatalog.bind(provider);
+      (provider as any).doRefreshCatalog = async () => {
+        callCount++;
+        await original();
+      };
+
+      // Regression guard: before this fix, every concurrent caller (e.g. the
+      // tree re-rendering while a slow/hung source was still resolving)
+      // kicked off its own independent full resolve pass.
+      await Promise.all([provider.refreshCatalog(), provider.refreshCatalog(), provider.refreshCatalog()]);
+      assert.strictEqual(callCount, 1);
+    });
   });
 
   describe('SourcesTreeDataProvider merged with Available content', () => {
