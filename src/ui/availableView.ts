@@ -21,6 +21,13 @@ import { getAssistantIconPath, getAssistantInlineIcon } from './assistantIcons';
 import { getKindIconName } from './kindIcons';
 import { previewProvider } from './previewProvider';
 import type { SourceItem } from './sourcesView';
+import {
+  ArtifactFileItem,
+  getArtifactFileChildren,
+  getArtifactFileTreeItem,
+  isBrowsableDirectory,
+  listArtifactFiles,
+} from './artifactFileTree';
 
 import { resolveRecommendations, SourceResolutionAttempt, BrokenReason } from '../engine/recommendations';
 import type { DesiredInstallation } from '../domain/registry';
@@ -32,7 +39,8 @@ export type AvailableTreeItem =
   | AvailableArtifactItem
   | DiagnosticTreeItem
   | RecommendedGroupItem
-  | RecommendedBrokenItem;
+  | RecommendedBrokenItem
+  | ArtifactFileItem;
 
 export class RecommendedGroupItem {
   constructor(
@@ -433,17 +441,22 @@ export class AvailableTreeDataProvider
       return item;
     }
 
+    if (element instanceof ArtifactFileItem) {
+      return getArtifactFileTreeItem(element);
+    }
+
     const artifact = element.artifact;
     const installedIn = this.getInstalledAssistants(element.source.id, artifact.id);
     const labelPrefix = installedIn.length > 0 ? `${installedIn.map(getAssistantInlineIcon).join('')} ` : '';
+    const isDir = isBrowsableDirectory(artifact.path);
     const item = new vscode.TreeItem(
       `${labelPrefix}${artifact.name}`,
-      vscode.TreeItemCollapsibleState.None
+      isDir ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
     );
-    item.description = element.isRecommended ? `${artifact.description || ''} ★`.trim() : artifact.description;
+    item.description = element.isRecommended ? `${artifact.description || ''} $(star-full)`.trim() : artifact.description;
     item.tooltip = `Kind: ${artifact.kind}\nSource: ${element.source.id}\nPackage: ${element.pkg.id}${
-      installedIn.length > 0 ? `\nInstalled in: ${installedIn.join(', ')}` : ''
-    }`;
+      artifact.description ? `\nDescription: ${artifact.description}` : ''
+    }${installedIn.length > 0 ? `\nInstalled in: ${installedIn.join(', ')}` : ''}`;
     item.contextValue = element.isRecommended ? 'availableArtifact:recommended' : 'availableArtifact';
     item.iconPath = new vscode.ThemeIcon(getKindIconName(artifact.kind));
     item.command = {
@@ -508,6 +521,22 @@ export class AvailableTreeDataProvider
 
     if (element instanceof AvailableFolderItem) {
       return element.items;
+    }
+
+    if (element instanceof ArtifactFileItem) {
+      return getArtifactFileChildren(element);
+    }
+
+    if (element instanceof AvailableArtifactItem) {
+      const artifactPath = element.artifact.path;
+      if (isBrowsableDirectory(artifactPath)) {
+        // Files from local-folder sources are the user's own, editable copy;
+        // everything else (git-*, remote-url) lives in a replaceable local
+        // clone/cache, so it's browsed read-only.
+        const readonly = element.source.type !== 'local-folder';
+        return listArtifactFiles(artifactPath, readonly);
+      }
+      return [];
     }
 
     return [];

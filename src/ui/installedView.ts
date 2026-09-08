@@ -19,6 +19,13 @@ import type { DriftReport } from '../engine/types';
 import { getWorkspaceRoot } from './workspacePicker';
 import { getAssistantIconPath } from './assistantIcons';
 import { getKindIconName } from './kindIcons';
+import {
+  ArtifactFileItem,
+  getArtifactFileChildren,
+  getArtifactFileTreeItem,
+  isBrowsableDirectory,
+  listArtifactFiles,
+} from './artifactFileTree';
 
 export type InstalledTreeItem =
   | ScopeGroupItem
@@ -27,13 +34,7 @@ export type InstalledTreeItem =
   | ObservedArtifactItem
   | ArtifactFileItem;
 
-export class ArtifactFileItem {
-  constructor(
-    public readonly label: string,
-    public readonly fsPath: string,
-    public readonly isDir: boolean
-  ) {}
-}
+export { ArtifactFileItem };
 
 export class ScopeGroupItem {
   constructor(
@@ -57,12 +58,40 @@ export class InstalledInstallationItem {
   constructor(
     public readonly installation: ManagedInstallation,
     public report?: DriftReport,
-    public readonly isRecommended?: boolean
+    public readonly isRecommended?: boolean,
+    public readonly tooltipDescription?: string
   ) {}
 }
 
 export class ObservedArtifactItem {
-  constructor(public readonly observed: ObservedArtifact) {}
+  constructor(
+    public readonly observed: ObservedArtifact,
+    public readonly tooltipDescription?: string
+  ) {}
+}
+
+import { extractSkillFrontmatter } from '../sources/detect';
+
+function getArtifactDescription(kind: ItemKind, artifactPath: string): string | undefined {
+  try {
+    if (kind === 'skill') {
+      const skillMdPath = path.join(artifactPath, 'SKILL.md');
+      if (fs.existsSync(skillMdPath)) {
+        const content = fs.readFileSync(skillMdPath, 'utf8');
+        const fm = extractSkillFrontmatter(content);
+        return fm.description;
+      }
+    } else if (kind === 'agent' || kind === 'command') {
+      if (fs.existsSync(artifactPath)) {
+        const content = fs.readFileSync(artifactPath, 'utf8');
+        const fm = extractSkillFrontmatter(content);
+        return fm.description;
+      }
+    }
+  } catch {
+    // ignore
+  }
+  return undefined;
 }
 
 const KIND_ORDER: ItemKind[] = ['skill', 'agent', 'command', 'mcp-server', 'hook', 'rule'];
@@ -180,22 +209,7 @@ export class InstalledTreeDataProvider {
     }
 
     if (element instanceof ArtifactFileItem) {
-      const item = new vscode.TreeItem(
-        element.label,
-        element.isDir ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
-      );
-      item.contextValue = 'artifactFile';
-      if (element.isDir) {
-        item.iconPath = vscode.ThemeIcon.Folder;
-      } else {
-        item.iconPath = vscode.ThemeIcon.File;
-        item.command = {
-          command: 'vscode.open',
-          title: 'Open File',
-          arguments: [vscode.Uri.file(element.fsPath)],
-        };
-      }
-      return item;
+      return getArtifactFileTreeItem(element);
     }
 
     if (element instanceof ObservedArtifactItem) {
@@ -214,10 +228,7 @@ export class InstalledTreeDataProvider {
         iconName = 'eye';
       }
 
-      let isDir = false;
-      try {
-        isDir = fs.statSync(obs.path).isDirectory();
-      } catch { /* ignore */ }
+      const isDir = isBrowsableDirectory(obs.path);
 
       const item = new vscode.TreeItem(
         obs.name,
@@ -225,8 +236,8 @@ export class InstalledTreeDataProvider {
       );
       item.description = desc;
       item.tooltip = `Name: ${obs.name}\nKind: ${obs.kind}\nAssistant: ${obs.assistant}\nScope: ${obs.scope}\nPath: ${obs.path}\nDiscovered: ${obs.discoveredAt}${
-        obs.match?.details ? `\nFeedback: ${obs.match.details}` : ''
-      }`;
+        element.tooltipDescription ? `\nDescription: ${element.tooltipDescription}` : ''
+      }${obs.match?.details ? `\nFeedback: ${obs.match.details}` : ''}`;
       item.iconPath = new vscode.ThemeIcon(iconName);
       if (!isDir) {
         item.command = {
@@ -256,7 +267,7 @@ export class InstalledTreeDataProvider {
 
       let desc = `${inst.kind} [managed]`;
       if (element.isRecommended) {
-        desc += ' ★';
+        desc += ' $(star-full)';
       }
       let iconName = getKindIconName(inst.kind);
 
@@ -276,10 +287,7 @@ export class InstalledTreeDataProvider {
         }
       }
 
-      let isDir = false;
-      try {
-        isDir = fs.statSync(inst.path).isDirectory();
-      } catch { /* ignore */ }
+      const isDir = isBrowsableDirectory(inst.path);
 
       const item = new vscode.TreeItem(
         inst.name,
@@ -287,8 +295,8 @@ export class InstalledTreeDataProvider {
       );
       item.description = desc;
       item.tooltip = `Name: ${inst.name}\nKind: ${inst.kind}\nAssistant: ${inst.assistant}\nScope: ${inst.scope}\nPath: ${inst.path}\nInstalled at: ${inst.installedAt}${
-        report?.details ? `\nStatus: ${report.details}` : ''
-      }${inst.sourceRevision?.commit ? `\nCommit: ${inst.sourceRevision.commit}` : ''}`;
+        element.tooltipDescription ? `\nDescription: ${element.tooltipDescription}` : ''
+      }${report?.details ? `\nStatus: ${report.details}` : ''}${inst.sourceRevision?.commit ? `\nCommit: ${inst.sourceRevision.commit}` : ''}`;
       item.iconPath = new vscode.ThemeIcon(iconName);
       if (!isDir) {
         item.command = {
@@ -307,61 +315,22 @@ export class InstalledTreeDataProvider {
 
   async getChildren(element?: InstalledTreeItem, overrideAssistantId?: AssistantId): Promise<InstalledTreeItem[]> {
     if (element instanceof ArtifactFileItem) {
-      if (element.isDir) {
-        try {
-          const files = fs.readdirSync(element.fsPath);
-          return files.map(f => {
-            const p = path.join(element.fsPath, f);
-            let isDir = false;
-            try { isDir = fs.statSync(p).isDirectory(); } catch { /* ignore */ }
-            return new ArtifactFileItem(f, p, isDir);
-          }).sort((a, b) => {
-            if (a.isDir && !b.isDir) return -1;
-            if (!a.isDir && b.isDir) return 1;
-            return a.label.localeCompare(b.label);
-          });
-        } catch { /* ignore */ }
-      }
-      return [];
+      return getArtifactFileChildren(element);
     }
 
     if (element instanceof InstalledInstallationItem) {
       const inst = element.installation;
-      try {
-        if (fs.statSync(inst.path).isDirectory()) {
-          const files = fs.readdirSync(inst.path);
-          return files.map(f => {
-            const p = path.join(inst.path, f);
-            let isDir = false;
-            try { isDir = fs.statSync(p).isDirectory(); } catch { /* ignore */ }
-            return new ArtifactFileItem(f, p, isDir);
-          }).sort((a, b) => {
-            if (a.isDir && !b.isDir) return -1;
-            if (!a.isDir && b.isDir) return 1;
-            return a.label.localeCompare(b.label);
-          });
-        }
-      } catch { /* ignore */ }
+      if (isBrowsableDirectory(inst.path)) {
+        return listArtifactFiles(inst.path);
+      }
       return [];
     }
 
     if (element instanceof ObservedArtifactItem) {
       const obs = element.observed;
-      try {
-        if (fs.statSync(obs.path).isDirectory()) {
-          const files = fs.readdirSync(obs.path);
-          return files.map(f => {
-            const p = path.join(obs.path, f);
-            let isDir = false;
-            try { isDir = fs.statSync(p).isDirectory(); } catch { /* ignore */ }
-            return new ArtifactFileItem(f, p, isDir);
-          }).sort((a, b) => {
-            if (a.isDir && !b.isDir) return -1;
-            if (!a.isDir && b.isDir) return 1;
-            return a.label.localeCompare(b.label);
-          });
-        }
-      } catch { /* ignore */ }
+      if (isBrowsableDirectory(obs.path)) {
+        return listArtifactFiles(obs.path);
+      }
       return [];
     }
 
@@ -428,10 +397,12 @@ export class InstalledTreeDataProvider {
           inst.sourceId &&
           inst.artifactId &&
           recommendedSet.has(`${inst.sourceId}:${inst.artifactId}:${inst.assistant}`);
-        items.push(new InstalledInstallationItem(inst, report, !!isRecommended));
+        const desc = getArtifactDescription(inst.kind, inst.path);
+        items.push(new InstalledInstallationItem(inst, report, !!isRecommended, desc));
       }
       for (const obs of element.observed) {
-        items.push(new ObservedArtifactItem(obs));
+        const desc = getArtifactDescription(obs.kind, obs.path);
+        items.push(new ObservedArtifactItem(obs, desc));
       }
       return groupByKind(items, (item) => item instanceof InstalledInstallationItem ? item.installation.kind : item.observed.kind);
     }
@@ -1084,13 +1055,14 @@ export class InstalledTreeDataProvider {
 }
 
 export class AssistantTreeDataProvider implements vscode.TreeDataProvider<InstalledTreeItem> {
+  private _onDidChangeTreeData = new vscode.EventEmitter<InstalledTreeItem | undefined | null | void>();
+  readonly onDidChangeTreeData: vscode.Event<InstalledTreeItem | undefined | null | void> = this._onDidChangeTreeData.event;
+
   constructor(
     private readonly provider: InstalledTreeDataProvider,
     private readonly assistantId: AssistantId
-  ) {}
-
-  get onDidChangeTreeData(): vscode.Event<InstalledTreeItem | undefined | null | void> {
-    return this.provider.onDidChangeTreeData;
+  ) {
+    this.provider.onDidChangeTreeData(e => this._onDidChangeTreeData.fire(e));
   }
 
   getTreeItem(element: InstalledTreeItem): vscode.TreeItem {

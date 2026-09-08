@@ -119,6 +119,7 @@ export async function resolveGitSingleItem(
       name,
       description,
       nativeFormat: `claude-${kind}`,
+      path: targetDir,
     };
 
     const pkg: Package = {

@@ -42,6 +42,13 @@ export interface Artifact {
   name: string;
   description?: string;
   nativeFormat: string;
+  /**
+   * Absolute filesystem path to this artifact's file or directory on disk
+   * (inside the source's local clone/cache), when the resolver that produced
+   * it could determine one. Lets the UI offer file browsing/preview before
+   * install, same as it does for already-installed artifacts.
+   */
+  path?: string;
 }
 
 export interface ResolvedRevision {

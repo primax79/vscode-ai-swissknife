@@ -214,13 +214,13 @@
       {
         "command": "aiSwissknife.recommendForWorkspace",
         "title": "Recommend for Workspace",
-        "icon": "$(star)",
+        "icon": "$(star-empty)",
         "category": "AI Swissknife"
       },
       {
         "command": "aiSwissknife.unrecommendForWorkspace",
         "title": "Unrecommend from Workspace",
-        "icon": "$(star-empty)",
+        "icon": "$(star-full)",
         "category": "AI Swissknife"
       },
       {

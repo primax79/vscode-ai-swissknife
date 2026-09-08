@@ -24,6 +24,7 @@ import { DashboardPanel } from './ui/dashboard';
 import { FormEditorPanel } from './ui/formEditor';
 import { getWorkspaceRoot } from './ui/workspacePicker';
 import { previewProvider, PreviewProvider } from './ui/previewProvider';
+import { readonlyFileContentProvider, ReadonlyFileContentProvider } from './ui/artifactFileTree';
 
 import { handleInstallRecommended } from './ui/recommendations';
 import {
@@ -385,6 +386,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.workspace.registerTextDocumentContentProvider(PreviewProvider.scheme, previewProvider),
+    vscode.workspace.registerTextDocumentContentProvider(ReadonlyFileContentProvider.scheme, readonlyFileContentProvider),
     statusBarItem,
     ...watchers,
     sourcesTreeView,
@@ -434,6 +436,12 @@ export function activate(context: vscode.ExtensionContext) {
       'aiSwissknife.syncItem',
       async (item?: InstalledInstallationItem | ObservedArtifactItem) => {
         await installedProvider.syncItem(item);
+      }
+    ),
+    vscode.commands.registerCommand(
+      'aiSwissknife.moveItem',
+      async (item?: InstalledInstallationItem) => {
+        await installedProvider.moveItem(item);
       }
     ),
     vscode.commands.registerCommand('aiSwissknife.createArtifact', async () => {

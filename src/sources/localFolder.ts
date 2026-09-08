@@ -63,6 +63,7 @@ export async function resolveLocalFolder(source: Source): Promise<SourceResoluti
       name: skillDir.name,
       description: skillDir.description,
       nativeFormat: 'claude-skill',
+      path: skillDir.path,
     };
 
     const pkg: Package = {
@@ -87,6 +88,7 @@ export async function resolveLocalFolder(source: Source): Promise<SourceResoluti
       name: agentFile.name,
       description: agentFile.description,
       nativeFormat: 'claude-agent',
+      path: agentFile.path,
     };
 
     const pkg: Package = {
@@ -111,6 +113,7 @@ export async function resolveLocalFolder(source: Source): Promise<SourceResoluti
       name: cmdFile.name,
       description: cmdFile.description,
       nativeFormat: 'claude-command',
+      path: cmdFile.path,
     };
 
     const pkg: Package = {
@@ -135,6 +138,7 @@ export async function resolveLocalFolder(source: Source): Promise<SourceResoluti
       name: mcpServer.id,
       description: mcpServer.description ?? `MCP Server (${mcpServer.type})`,
       nativeFormat: 'mcp-config',
+      path: mcpServer.path,
     };
 
     const pkg: Package = {
@@ -159,6 +163,7 @@ export async function resolveLocalFolder(source: Source): Promise<SourceResoluti
       name: h.name,
       description: `Hook on ${h.event}: ${h.command}`,
       nativeFormat: 'claude-hook',
+      path: h.path,
     };
 
     const pkg: Package = {
@@ -183,6 +188,7 @@ export async function resolveLocalFolder(source: Source): Promise<SourceResoluti
       name: r.name,
       description: 'Project rule instructions',
       nativeFormat: 'plain-rule',
+      path: r.path,
     };
 
     const pkg: Package = {

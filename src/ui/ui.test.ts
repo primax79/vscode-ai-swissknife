@@ -46,6 +46,8 @@ Module.prototype.require = function (id: string, ...rest: unknown[]) {
         };
       },
       ThemeIcon: class {
+        static Folder = { id: 'folder' };
+        static File = { id: 'file' };
         constructor(public id: string) {}
       },
       workspace: {
@@ -109,7 +111,8 @@ Module.prototype.require = function (id: string, ...rest: unknown[]) {
       },
       Uri: {
         joinPath: (base: any, ...segments: string[]) => ({ fsPath: [base.fsPath, ...segments].join('/') }),
-        file: (path: string) => ({ fsPath: path })
+        file: (path: string) => ({ fsPath: path }),
+        parse: (value: string) => ({ toString: () => value }),
       },
     };
   }
@@ -125,6 +128,7 @@ import {
 } from '../domain/registry';
 import { SourcesTreeDataProvider, ScopeGroupItem, SourceItem } from './sourcesView';
 import { AvailableTreeDataProvider, AvailableFolderItem, AvailableArtifactItem, buildHierarchy, AvailableSourceGroupItem } from './availableView';
+import { ArtifactFileItem } from './artifactFileTree';
 import { InstalledTreeDataProvider, ScopeGroupItem as InstalledScopeGroupItem, InstalledInstallationItem, KindGroupItem } from './installedView';
 import { getAssistantIconPath } from './assistantIcons';
 import { setupFileWatchers } from './watchers';
@@ -321,6 +325,50 @@ describe('UI TreeDataProviders', () => {
       });
       const mcpTreeItem = provider.getTreeItem(mcpItem);
       assert.strictEqual((mcpTreeItem.iconPath as { id: string }).id, 'plug');
+    });
+
+    it('AvailableArtifactItem exposes read-only file browsing for git/remote sources but editable for local-folder', async () => {
+      const provider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any);
+      const artifactDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ai-swissknife-available-art-'));
+      await fs.promises.writeFile(path.join(artifactDir, 'SKILL.md'), '# test');
+
+      try {
+        const gitSource: Source = { id: 'src-git', type: 'git-marketplace', scope: 'project', url: 'https://example.invalid/repo.git' };
+        const pkg: Package = { id: 'src-git:pkg', sourceId: 'src-git', nativeFormat: 'claude-skill', artifacts: [] };
+        const gitArtifact: Artifact = {
+          id: 'art-git', packageId: 'src-git:pkg', kind: 'skill', name: 'cloned-skill',
+          nativeFormat: 'claude-skill', path: artifactDir,
+        };
+        const gitItem = new AvailableArtifactItem(gitSource, pkg, gitArtifact);
+
+        const gitTreeItem = provider.getTreeItem(gitItem);
+        assert.strictEqual(gitTreeItem.collapsibleState, 1 /* Collapsed */);
+
+        const gitChildren = await provider.getChildren(gitItem);
+        assert.strictEqual(gitChildren.length, 1);
+        const gitFile = gitChildren[0] as ArtifactFileItem;
+        assert.strictEqual(gitFile.label, 'SKILL.md');
+        assert.strictEqual(gitFile.readonly, true);
+
+        const gitFileTreeItem = provider.getTreeItem(gitFile);
+        assert.strictEqual(gitFileTreeItem.command?.title, 'Preview File (read-only)');
+
+        const localSource: Source = { id: 'src-local', type: 'local-folder', scope: 'project', localPath: artifactDir };
+        const localArtifact: Artifact = {
+          id: 'art-local', packageId: 'src-local:pkg', kind: 'skill', name: 'local-skill',
+          nativeFormat: 'claude-skill', path: artifactDir,
+        };
+        const localItem = new AvailableArtifactItem(localSource, pkg, localArtifact);
+
+        const localChildren = await provider.getChildren(localItem);
+        const localFile = localChildren[0] as ArtifactFileItem;
+        assert.strictEqual(localFile.readonly, false);
+
+        const localFileTreeItem = provider.getTreeItem(localFile);
+        assert.strictEqual(localFileTreeItem.command?.title, 'Open File');
+      } finally {
+        await fs.promises.rm(artifactDir, { recursive: true, force: true });
+      }
     });
 
     it('prefixes an installed artifact\'s label with the inline icon of every assistant it is installed in', () => {

@@ -182,6 +182,7 @@ export async function resolveGitMarketplace(
             name: s.name,
             description: s.description,
             nativeFormat: 'claude-skill',
+            path: s.path,
           });
         }
 
@@ -193,6 +194,7 @@ export async function resolveGitMarketplace(
             name: a.name,
             description: a.description,
             nativeFormat: 'claude-agent',
+            path: a.path,
           });
         }
 
@@ -204,6 +206,7 @@ export async function resolveGitMarketplace(
             name: c.name,
             description: c.description,
             nativeFormat: 'claude-command',
+            path: c.path,
           });
         }
 
@@ -215,6 +218,7 @@ export async function resolveGitMarketplace(
             name: m.id,
             description: m.description,
             nativeFormat: 'mcp-config',
+            path: m.path,
           });
         }
 
@@ -253,6 +257,7 @@ export async function resolveGitMarketplace(
             name: s.name,
             description: s.description,
             nativeFormat: 'claude-skill',
+            path: s.path,
           },
         ],
       });
@@ -274,6 +279,7 @@ export async function resolveGitMarketplace(
             name: a.name,
             description: a.description,
             nativeFormat: 'claude-agent',
+            path: a.path,
           },
         ],
       });
@@ -295,6 +301,7 @@ export async function resolveGitMarketplace(
             name: c.name,
             description: c.description,
             nativeFormat: 'claude-command',
+            path: c.path,
           },
         ],
       });
@@ -316,6 +323,7 @@ export async function resolveGitMarketplace(
             name: m.id,
             description: m.description,
             nativeFormat: 'mcp-config',
+            path: m.path,
           },
         ],
       });

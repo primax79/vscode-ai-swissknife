@@ -79,6 +79,7 @@ export async function resolveRemoteUrl(
     name,
     description,
     nativeFormat: `claude-${kind}`,
+    path: targetFilePath,
   };
 
   const pkg: Package = {

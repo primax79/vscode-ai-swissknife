@@ -479,7 +479,7 @@ export class FormEditorPanel {
       </div>
       <div class="form-group">
         <label for="description">Description</label>
-        <input type="text" id="description" value="${data.description || ''}" placeholder="Short summary of what this component does">
+        <textarea id="description" rows="3" placeholder="Short summary of what this component does">${data.description || ''}</textarea>
       </div>
     </div>
 

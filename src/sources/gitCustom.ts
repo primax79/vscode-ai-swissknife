@@ -154,6 +154,7 @@ export async function resolveGitCustom(
         name: skillDir.name,
         description: skillDir.description,
         nativeFormat: 'claude-skill',
+        path: skillDir.path,
       };
 
       const pkg: Package = {
@@ -179,6 +180,7 @@ export async function resolveGitCustom(
         name: agentFile.name,
         description: agentFile.description,
         nativeFormat: 'claude-agent',
+        path: agentFile.path,
       };
 
       const pkg: Package = {
@@ -204,6 +206,7 @@ export async function resolveGitCustom(
         name: cmdFile.name,
         description: cmdFile.description,
         nativeFormat: 'claude-command',
+        path: cmdFile.path,
       };
 
       const pkg: Package = {
@@ -229,6 +232,7 @@ export async function resolveGitCustom(
         name: mcpServer.id,
         description: mcpServer.description ?? `MCP Server (${mcpServer.type})`,
         nativeFormat: 'mcp-config',
+        path: mcpServer.path,
       };
 
       const pkg: Package = {
@@ -254,6 +258,7 @@ export async function resolveGitCustom(
         name: h.name,
         description: `Hook on ${h.event}: ${h.command}`,
         nativeFormat: 'claude-hook',
+        path: h.path,
       };
 
       const pkg: Package = {
@@ -279,6 +284,7 @@ export async function resolveGitCustom(
         name: r.name,
         description: 'Project rule instructions',
         nativeFormat: 'plain-rule',
+        path: r.path,
       };
 
       const pkg: Package = {
