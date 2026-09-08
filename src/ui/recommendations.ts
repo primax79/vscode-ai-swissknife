@@ -397,6 +397,31 @@ export async function recommendInstalledArtifact(
   }
 }
 
+export async function unrecommendArtifactForWorkspace(
+  sourceId: string,
+  artifactId: string,
+  assistant: AssistantId,
+  projectRoot: string
+): Promise<boolean> {
+  try {
+    const manifest = await readManifest('project', projectRoot);
+    const existingIndex = manifest.desiredInstallations.findIndex(
+      (d) => d.sourceId === sourceId && d.artifactId === artifactId && d.assistant === assistant
+    );
+    if (existingIndex !== -1) {
+      manifest.desiredInstallations.splice(existingIndex, 1);
+      await writeManifest('project', manifest, projectRoot);
+      vscode.window.showInformationMessage(`Recommendation removed.`);
+      return true;
+    }
+    return false;
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    vscode.window.showErrorMessage(`Failed to unrecommend item: ${msg}`);
+    return false;
+  }
+}
+
 export async function unrecommendAvailableArtifact(
   sourceId: string,
   scope: Scope,
