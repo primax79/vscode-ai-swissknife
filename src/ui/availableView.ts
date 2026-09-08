@@ -18,6 +18,7 @@ import { applyInstall } from '../engine/apply';
 import type { PreparedInstall } from '../engine/types';
 import { getWorkspaceRoot } from './workspacePicker';
 import { getAssistantIconPath } from './assistantIcons';
+import { getKindIconName } from './kindIcons';
 import { previewProvider } from './previewProvider';
 import type { SourceItem } from './sourcesView';
 
@@ -386,19 +387,7 @@ export class AvailableTreeDataProvider
     item.description = element.isRecommended ? `${artifact.description || ''} ★`.trim() : artifact.description;
     item.tooltip = `Kind: ${artifact.kind}\nSource: ${element.source.id}\nPackage: ${element.pkg.id}`;
     item.contextValue = element.isRecommended ? 'availableArtifact:recommended' : 'availableArtifact';
-    const icon =
-      artifact.kind === 'agent'
-        ? 'robot'
-        : artifact.kind === 'command'
-        ? 'terminal'
-        : artifact.kind === 'mcp-server'
-        ? 'plug'
-        : artifact.kind === 'hook'
-        ? 'zap'
-        : artifact.kind === 'rule'
-        ? 'book'
-        : 'tools';
-    item.iconPath = new vscode.ThemeIcon(icon);
+    item.iconPath = new vscode.ThemeIcon(getKindIconName(artifact.kind));
     item.command = {
       command: 'aiSwissknife.installArtifact',
       title: `Install ${artifact.kind}`,

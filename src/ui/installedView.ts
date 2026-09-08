@@ -18,6 +18,7 @@ import { GeminiAdapter } from '../adapters/gemini';
 import type { DriftReport } from '../engine/types';
 import { getWorkspaceRoot } from './workspacePicker';
 import { getAssistantIconPath } from './assistantIcons';
+import { getKindIconName } from './kindIcons';
 
 export type InstalledTreeItem =
   | InstalledGroupItem
@@ -73,23 +74,6 @@ const KIND_LABELS: Record<ItemKind, string> = {
   hook: 'Hooks',
   rule: 'Rules',
 };
-
-function getKindIconName(kind: ItemKind): string {
-  switch (kind) {
-    case 'agent':
-      return 'robot';
-    case 'command':
-      return 'terminal';
-    case 'mcp-server':
-      return 'plug';
-    case 'hook':
-      return 'zap';
-    case 'rule':
-      return 'book';
-    default:
-      return 'check';
-  }
-}
 
 function groupByKind<T extends InstalledInstallationItem | ObservedArtifactItem>(
   items: T[],

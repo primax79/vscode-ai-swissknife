@@ -290,7 +290,7 @@ describe('UI TreeDataProviders', () => {
       });
       const skillTreeItem = provider.getTreeItem(skillItem);
       assert.strictEqual(skillTreeItem.label, 'test-skill');
-      assert.strictEqual((skillTreeItem.iconPath as { id: string }).id, 'tools');
+      assert.strictEqual((skillTreeItem.iconPath as { id: string }).id, 'lightbulb');
 
       const agentItem = new AvailableArtifactItem(source, pkg, {
         id: 'art-2',
@@ -531,7 +531,7 @@ describe('UI TreeDataProviders', () => {
 
       const skillsTreeItem = provider.getTreeItem(skillsGroup);
       assert.strictEqual(skillsTreeItem.label, 'Skills (2)');
-      assert.strictEqual((skillsTreeItem.iconPath as { id: string }).id, 'check');
+      assert.strictEqual((skillsTreeItem.iconPath as { id: string }).id, 'lightbulb');
 
       const resolvedSkillItems = await provider.getChildren(skillsGroup);
       assert.strictEqual(resolvedSkillItems.length, 2);
