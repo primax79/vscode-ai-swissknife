@@ -49,11 +49,13 @@ export function getEnabledAdapters(): Adapter[] {
   }
 
   const config = vscode.workspace.getConfiguration('aiSwissknife');
-  const enabledIds = config.get('enabledAssistants');
+  const enabledConfig = config.get('enabledAssistants');
 
-  if (!enabledIds || !Array.isArray(enabledIds) || enabledIds.length === 0) {
+  // If the setting is missing, undefined, or still in the old array shape (which gives undefined properties),
+  // config[adapter.assistant] will be undefined. Under the `!== false` rule, these count as enabled.
+  if (enabledConfig === undefined || enabledConfig === null || typeof enabledConfig !== 'object') {
     return [...ALL_ADAPTERS];
   }
 
-  return ALL_ADAPTERS.filter((a) => enabledIds.includes(a.assistant));
+  return ALL_ADAPTERS.filter((a) => (enabledConfig as Record<string, boolean>)[a.assistant] !== false);
 }

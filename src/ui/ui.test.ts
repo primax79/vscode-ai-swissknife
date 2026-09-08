@@ -15,6 +15,11 @@ let mockShowInformationMessageResult: string | undefined = undefined;
 let mockShowInformationMessageCalls: { msg: string, actions: string[] }[] = [];
 let mockLastCreatedStatusBarItem: any = undefined;
 
+const mockRegisteredCommands = new Map<string, (...args: any[]) => any>();
+
+let mockConfigUpdates: { section: string, value: any, target: any }[] = [];
+let mockConfigGetResult: any = undefined;
+
 Module.prototype.require = function (id: string, ...rest: unknown[]) {
   if (id === 'vscode') {
     return {
@@ -50,11 +55,21 @@ Module.prototype.require = function (id: string, ...rest: unknown[]) {
         static File = { id: 'file' };
         constructor(public id: string) {}
       },
+      ConfigurationTarget: {
+        Global: 1,
+        Workspace: 2,
+        WorkspaceFolder: 3
+      },
       workspace: {
         get workspaceFolders() {
           return (globalThis as any).mockWorkspaceFolders || [];
         },
-        getConfiguration: () => ({ get: () => undefined }),
+        getConfiguration: () => ({ 
+          get: () => mockConfigGetResult,
+          update: async (section: string, value: any, target: any) => {
+            mockConfigUpdates.push({ section, value, target });
+          }
+        }),
         onDidChangeConfiguration: () => ({ dispose: () => {} }),
         createFileSystemWatcher: () => ({
           onDidChange: () => ({ dispose: () => {} }),
@@ -108,7 +123,10 @@ Module.prototype.require = function (id: string, ...rest: unknown[]) {
         },
       },
       commands: {
-        registerCommand: () => ({ dispose: () => {} }),
+        registerCommand: (command: string, callback: (...args: any[]) => any) => {
+          mockRegisteredCommands.set(command, callback);
+          return { dispose: () => {} };
+        },
         executeCommand: async () => {},
       },
       Uri: {
@@ -1075,5 +1093,66 @@ describe('UI TreeDataProviders', () => {
       assert.strictEqual(mockLastCreatedStatusBarItem.text, '$(dashboard) AI Swissknife: 2 recommendations');
     });
   });
+
+  describe('configureEnabledAssistants Command', () => {
+    let fakeContext: any;
+    let extension: any;
+
+    beforeEach(async () => {
+      fakeContext = {
+        subscriptions: [],
+        workspaceState: {
+          _state: new Map<string, any>(),
+          get(key: string) { return this._state.get(key); },
+          async update(key: string, value: any) { this._state.set(key, value); }
+        }
+      };
+      mockRegisteredCommands.clear();
+      mockConfigUpdates = [];
+      mockConfigGetResult = undefined;
+      delete require.cache[require.resolve('../extension')];
+      extension = require('../extension');
+    });
+
+    it('updates config when QuickPick returns a selection', async () => {
+      extension.activate(fakeContext);
+      const handler = mockRegisteredCommands.get('aiSwissknife.configureEnabledAssistants');
+      assert.ok(handler);
+
+      mockConfigGetResult = { 'claude-code': true, 'kilo-code': true };
+      
+      // Simulate user selecting only claude-code and codex-cli
+      mockQuickPickResult = [
+        { label: 'Claude Code', picked: true, assistantId: 'claude-code' },
+        { label: 'Codex CLI', picked: true, assistantId: 'codex-cli' }
+      ];
+
+      await handler();
+
+      assert.strictEqual(mockConfigUpdates.length, 1);
+      const update = mockConfigUpdates[0];
+      assert.strictEqual(update.section, 'enabledAssistants');
+      assert.strictEqual(update.target, 1); // Global
+      assert.deepStrictEqual(update.value, {
+        'claude-code': true,
+        'kilo-code': false,
+        'github-copilot': false,
+        'codex-cli': true,
+        'gemini-cli': false
+      });
+    });
+
+    it('does not update config when QuickPick is cancelled', async () => {
+      extension.activate(fakeContext);
+      const handler = mockRegisteredCommands.get('aiSwissknife.configureEnabledAssistants');
+      assert.ok(handler);
+
+      mockQuickPickResult = undefined; // Cancelled
+      await handler();
+
+      assert.strictEqual(mockConfigUpdates.length, 0);
+    });
+  });
 });
+
 

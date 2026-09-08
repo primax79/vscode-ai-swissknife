@@ -26,25 +26,23 @@
       "title": "AI Swissknife",
       "properties": {
         "aiSwissknife.enabledAssistants": {
-          "type": "array",
-          "items": {
-            "type": "string",
-            "enum": [
-              "claude-code",
-              "kilo-code",
-              "github-copilot",
-              "codex-cli",
-              "gemini-cli"
-            ]
+          "type": "object",
+          "description": "Which AI assistants show their own sidebar section and appear in assistant pickers.",
+          "additionalProperties": false,
+          "properties": {
+            "claude-code": { "type": "boolean", "default": true, "description": "Claude Code" },
+            "kilo-code": { "type": "boolean", "default": true, "description": "Kilo Code" },
+            "github-copilot": { "type": "boolean", "default": true, "description": "GitHub Copilot" },
+            "codex-cli": { "type": "boolean", "default": true, "description": "Codex CLI" },
+            "gemini-cli": { "type": "boolean", "default": true, "description": "Gemini CLI" }
           },
-          "default": [
-            "claude-code",
-            "kilo-code",
-            "github-copilot",
-            "codex-cli",
-            "gemini-cli"
-          ],
-          "description": "List of AI assistants enabled in AI Swissknife. Disabling an assistant hides its view."
+          "default": {
+            "claude-code": true,
+            "kilo-code": true,
+            "github-copilot": true,
+            "codex-cli": true,
+            "gemini-cli": true
+          }
         }
       }
     },
@@ -128,6 +126,12 @@
       ]
     },
     "commands": [
+      {
+        "command": "aiSwissknife.configureEnabledAssistants",
+        "title": "Configure Enabled Assistants...",
+        "icon": "$(gear)",
+        "category": "AI Swissknife"
+      },
       {
         "command": "aiSwissknife.addSource",
         "title": "Add Source",

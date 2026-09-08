@@ -6,7 +6,7 @@ import { describe, it, beforeEach } from 'node:test';
 const Module = require('module');
 const originalRequire = Module.prototype.require;
 
-let mockEnabledAssistants: string[] | undefined = undefined;
+let mockEnabledAssistants: any = undefined;
 
 Module.prototype.require = function (id: string, ...rest: unknown[]) {
   if (id === 'vscode') {
@@ -94,14 +94,20 @@ describe('Adapter Registry', () => {
       assert.deepStrictEqual(enabled.map((a) => a.assistant).sort(), ALL_ADAPTERS.map((a) => a.assistant).sort());
     });
 
-    it('returns all adapters when setting is empty array', () => {
-      mockEnabledAssistants = [];
+    it('returns all adapters when setting is an object missing some keys (default true rule)', () => {
+      mockEnabledAssistants = { 'claude-code': false, 'kilo-code': true };
+      // github-copilot, codex-cli, gemini-cli are missing, so they default to true.
       const enabled = getEnabledAdapters();
-      assert.strictEqual(enabled.length, 5);
+      assert.strictEqual(enabled.length, 4);
+      assert.ok(enabled.includes(kiloAdapter));
+      assert.ok(enabled.includes(copilotAdapter));
+      assert.ok(enabled.includes(codexAdapter));
+      assert.ok(enabled.includes(geminiAdapter));
+      assert.strictEqual(enabled.includes(claudeAdapter), false);
     });
 
-    it('returns only the subset of adapters specified in the setting', () => {
-      mockEnabledAssistants = ['claude-code', 'kilo-code'];
+    it('returns only the subset of adapters strictly set to true or missing (object shape)', () => {
+      mockEnabledAssistants = { 'claude-code': true, 'kilo-code': true, 'github-copilot': false, 'codex-cli': false, 'gemini-cli': false };
       const enabled = getEnabledAdapters();
       assert.strictEqual(enabled.length, 2);
       assert.ok(enabled.includes(claudeAdapter));
@@ -110,10 +116,11 @@ describe('Adapter Registry', () => {
     });
 
     it('ignores unknown ids in the setting and returns valid matching adapters', () => {
-      mockEnabledAssistants = ['claude-code', 'bogus-id'];
+      mockEnabledAssistants = { 'claude-code': true, 'github-copilot': false, 'codex-cli': false, 'gemini-cli': false, 'bogus-id': false };
       const enabled = getEnabledAdapters();
-      assert.strictEqual(enabled.length, 1);
+      assert.strictEqual(enabled.length, 2);
       assert.ok(enabled.includes(claudeAdapter));
+      assert.ok(enabled.includes(kiloAdapter)); // missing, so true
     });
   });
 });
