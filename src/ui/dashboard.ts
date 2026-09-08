@@ -1304,6 +1304,11 @@ export class DashboardPanel {
           }
         }
 
+        if (typeof msg.sourcesHtml === 'string') {
+          const catalogSection = document.getElementById('section-catalog');
+          if (catalogSection) catalogSection.innerHTML = msg.sourcesHtml;
+        }
+
         let indicator = document.getElementById('scan-indicator');
         if (msg.scanning) {
           if (!indicator) {
