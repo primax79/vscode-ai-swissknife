@@ -312,7 +312,7 @@ export async function scanInstalledInventory(
  */
 export async function promoteObservedArtifact(
   observed: ObservedArtifact,
-  sourceId?: string,
+  provenance: Pick<ObservedSourceMatch, 'sourceId' | 'packageId' | 'artifactId' | 'sourceRevision'>,
   homeRoot?: string
 ): Promise<ManagedInstallation> {
   const adapter = getAdapter(observed.assistant, homeRoot);
@@ -348,10 +348,13 @@ export async function promoteObservedArtifact(
     }
   }
 
-  const finalSourceId = observed.match?.sourceId ?? sourceId ?? 'local-promotion';
-  const finalPackageId = observed.match?.packageId;
-  const finalArtifactId = observed.match?.artifactId;
-  const finalSourceRevision = observed.match?.sourceRevision;
+  const finalSourceId = provenance.sourceId;
+  if (!finalSourceId) {
+    throw new Error('Explicit source provenance is required to promote an artifact.');
+  }
+  const finalPackageId = provenance.packageId;
+  const finalArtifactId = provenance.artifactId;
+  const finalSourceRevision = provenance.sourceRevision;
 
   const installation: ManagedInstallation = {
     assistant: observed.assistant,

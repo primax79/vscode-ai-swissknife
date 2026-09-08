@@ -43,7 +43,7 @@ describe('inventory discovery & promotion — scanInstalledInventory & promoteOb
     assert.strictEqual(observed.assistant, 'kilo-code');
     assert.strictEqual(observed.match?.status, 'unmatched');
 
-    const promoted = await promoteObservedArtifact(observed, 'local-source', testHomeDir);
+    const promoted = await promoteObservedArtifact(observed, { sourceId: 'local-source' }, testHomeDir);
     assert.strictEqual(promoted.name, 'manual-skill');
     assert.ok(promoted.contentHash);
 
@@ -98,7 +98,7 @@ describe('inventory discovery & promotion — scanInstalledInventory & promoteOb
     assert.strictEqual(obs.match?.sourceId, 'team-toolkit');
 
     // 5. Promote and verify provenance is attached
-    const promoted = await promoteObservedArtifact(obs, undefined, testHomeDir);
+    const promoted = await promoteObservedArtifact(obs, obs.candidates![0], testHomeDir);
     assert.strictEqual(promoted.sourceId, 'team-toolkit');
     assert.strictEqual(promoted.name, 'shared-tool');
 

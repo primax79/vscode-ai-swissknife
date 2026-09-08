@@ -273,7 +273,12 @@
         },
         {
           "command": "aiSwissknife.promoteItem",
-          "when": "view == aiSwissknife.installed && viewItem == observedArtifactItem",
+          "when": "view == aiSwissknife.installed && viewItem == observedArtifactItem:one",
+          "group": "inline@1"
+        },
+        {
+          "command": "aiSwissknife.promoteItem",
+          "when": "view == aiSwissknife.installed && viewItem == observedArtifactItem:many",
           "group": "inline@1"
         },
         {
