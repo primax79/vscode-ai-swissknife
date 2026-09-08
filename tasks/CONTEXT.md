@@ -180,7 +180,49 @@ review, `_inbox/analyzed/codex-analysis-2.md` — don't let it drift again).
   `Installed` gained a per-kind grouping level. Both are still "navigate to
   act," so the split itself stands; only the sidebar's own tree count
   (three views → two: `Sources`, `Installed`) and `Installed`'s hierarchy
-  depth changed.
+  depth changed. **Narrowed further 2026-09-08** (`specs/phase-9-spec.md`):
+  direct user assessment found the *split of availability* — the Dashboard
+  only exposing 9 of ~26 total user actions — too costly, separate from
+  whether the *split of responsibility* (sidebar navigates, Dashboard
+  explains) is sound. The Dashboard becomes a superset of sidebar
+  capability; the sidebar itself is unchanged. Both engines' review
+  (Codex + Kilo/gemini-3.7-flash) independently found this requires a real
+  prerequisite refactor first — see `specs/phase-9-spec.md` §1.1 — most
+  sidebar action methods (`installFolder`, `uninstallItem`,
+  `updateInstallation`, `recommendForWorkspace`, ...) are coupled to live
+  `TreeItem` instances (`instanceof` checks, prototype methods like
+  `AvailableFolderItem.getAllArtifacts()`), not plain domain objects, so a
+  webview `postMessage` payload cannot call them as-is. No `src/engine/*`
+  changes needed either way (confirmed independently by both reviews) —
+  the decoupling is UI-layer only. **Further split 2026-09-08** (ad-hoc UI iteration, not a
+  numbered initiative): `Installed` itself was replaced by **five**
+  per-assistant views (`aiSwissknife.installed.claude-code`/`.kilo-code`/
+  `.github-copilot`/`.codex-cli`/`.gemini-cli`, `contributes.views` in
+  `package.json`), each backed by an `AssistantTreeDataProvider` wrapping
+  one shared `InstalledTreeDataProvider` (`src/ui/installedView.ts`). So
+  the sidebar's real current view count is **six** (`Sources` + 5
+  per-assistant `Installed` sections), not two — this paragraph's earlier
+  "two: Sources, Installed" is stale; re-verify against
+  `package.json`'s `contributes.views` before trusting either number, per
+  this file's own drift warning.
+- **"Framework" and "Adapter" are the same entity — the existing `Adapter`
+  interface (`src/adapters/types.ts`) is the canonical per-assistant
+  abstraction, enriched in place rather than wrapped by a new class**
+  (locked 2026-09-08). *Why:* explicit user decision when asked to choose
+  between a new class composing an existing `Adapter` vs. merging
+  `Adapter`'s methods into a new class: *"io ho chiamato framework, ma se
+  preferisci chiama adapter... credo sia la stessa entità"* — see
+  `specs/adapter-and-source-registries.md`. Keeps the refactor additive to
+  the hardening-gated install/translate pipeline instead of restructuring
+  it.
+- **User-facing "which assistants are active" config lives in a native VS
+  Code setting (`contributes.configuration`), never the shared
+  git-tracked `manifest.json`** (locked 2026-09-08). *Why:* explicit user
+  choice — a personal "which of my 5 assistants do I use" preference must
+  not risk overwriting a teammate's own choice the way a git-shared file
+  would; matches VS Code's own user/workspace setting scopes. This was the
+  first `contributes.configuration` this extension ever declared. See
+  `specs/adapter-and-source-registries.md`.
 
 ## Conventions
 
