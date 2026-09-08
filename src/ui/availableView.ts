@@ -695,7 +695,89 @@ export class AvailableTreeDataProvider
     await this.installBatch(artifacts, `source "${group.source.name ?? group.source.id}"`);
   }
 
-  private async installBatch(
+  resolveArtifactById(sourceId: string, scope: Scope, artifactId: string): AvailableArtifactItem | undefined {
+    const group = this.cachedSourceGroups.find(
+      (g) => g.source.id === sourceId && g.source.scope === scope
+    );
+    if (!group) return undefined;
+
+    for (const pkg of group.resolution.packages) {
+      for (const art of pkg.artifacts) {
+        if (art.id === artifactId) {
+          return new AvailableArtifactItem(group.source, pkg, art);
+        }
+      }
+    }
+    return undefined;
+  }
+
+  async doInstallArtifact(sourceId: string, scope: Scope, artifactId: string): Promise<void> {
+    await this.ensureCatalogLoaded();
+    const item = this.resolveArtifactById(sourceId, scope, artifactId);
+    if (!item) {
+      vscode.window.showWarningMessage(`Artifact "${artifactId}" not found in source "${sourceId}".`);
+      return;
+    }
+    await this.installArtifact(item);
+  }
+
+  async doInstallSourceGroup(sourceId: string, scope: Scope): Promise<void> {
+    await this.ensureCatalogLoaded();
+    const group = this.cachedSourceGroups.find(
+      (g) => g.source.id === sourceId && g.source.scope === scope
+    );
+    if (!group) {
+      vscode.window.showWarningMessage(`No available items found for source "${sourceId}".`);
+      return;
+    }
+    const artifacts: AvailableArtifactItem[] = [];
+    for (const pkg of group.resolution.packages) {
+      for (const art of pkg.artifacts) {
+        artifacts.push(new AvailableArtifactItem(group.source, pkg, art));
+      }
+    }
+    await this.installBatch(artifacts, `source "${group.source.name ?? group.source.id}"`);
+  }
+
+  async doInstallFolder(sourceId: string, scope: Scope, folderPath: string): Promise<void> {
+    await this.ensureCatalogLoaded();
+    const group = this.cachedSourceGroups.find(
+      (g) => g.source.id === sourceId && g.source.scope === scope
+    );
+    if (!group) {
+      vscode.window.showWarningMessage(`No available items found for source "${sourceId}".`);
+      return;
+    }
+
+    const hierarchy = buildHierarchy(group.source, group.resolution.packages);
+    
+    const findFolder = (
+      items: Array<AvailableFolderItem | AvailableArtifactItem>,
+      targetPath: string
+    ): AvailableFolderItem | undefined => {
+      for (const item of items) {
+        if (item instanceof AvailableFolderItem) {
+          if (item.folderPath === targetPath) {
+            return item;
+          }
+          const found = findFolder(item.items, targetPath);
+          if (found) return found;
+        }
+      }
+      return undefined;
+    };
+
+    const targetFolder = findFolder(hierarchy, folderPath);
+    if (!targetFolder) {
+      vscode.window.showWarningMessage(`Folder "${folderPath}" not found in source "${sourceId}".`);
+      return;
+    }
+
+    const artifacts = targetFolder.getAllArtifacts();
+    await this.installBatch(artifacts, `folder "${targetFolder.label}"`);
+  }
+
+  async installBatch(
     items: AvailableArtifactItem[],
     groupLabel: string
   ): Promise<void> {

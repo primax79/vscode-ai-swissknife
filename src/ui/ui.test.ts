@@ -517,6 +517,42 @@ describe('UI TreeDataProviders', () => {
       await Promise.all([provider.refreshCatalog(), provider.refreshCatalog(), provider.refreshCatalog()]);
       assert.strictEqual(callCount, 1);
     });
+
+    it('resolveArtifactById finds the correct artifact by sourceId, scope and artifactId', async () => {
+      const provider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+      const source1: Source = { id: 's1', type: 'git-custom', scope: 'project' };
+      const artifact1: Artifact = { id: 'a1', packageId: 'p1', kind: 'skill', name: 'art1', nativeFormat: 'md' };
+      const pkg1: Package = { id: 'p1', sourceId: 's1', nativeFormat: 'raw', artifacts: [artifact1] };
+      
+      provider['cachedSourceGroups'] = [
+        new AvailableSourceGroupItem(source1, { packages: [pkg1], diagnostics: [] }),
+      ];
+
+      const found = provider.resolveArtifactById('s1', 'project', 'a1');
+      assert.ok(found);
+      assert.strictEqual(found!.artifact.name, 'art1');
+
+      const notFoundScope = provider.resolveArtifactById('s1', 'global', 'a1');
+      assert.strictEqual(notFoundScope, undefined);
+
+      const notFoundId = provider.resolveArtifactById('s1', 'project', 'a2');
+      assert.strictEqual(notFoundId, undefined);
+    });
+
+    it('doInstallFolder safely aborts if the target folderPath is not found via buildHierarchy', async () => {
+      const provider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+      const source1: Source = { id: 's1', type: 'git-custom', scope: 'project' };
+      const artifact1: Artifact = { id: 'a1', packageId: 's1:pkg1/sub', kind: 'skill', name: 'art1', nativeFormat: 'md' };
+      const pkg1: Package = { id: 's1:pkg1/sub', sourceId: 's1', nativeFormat: 'raw', artifacts: [artifact1] };
+      
+      provider['cachedSourceGroups'] = [
+        new AvailableSourceGroupItem(source1, { packages: [pkg1], diagnostics: [] }),
+      ];
+
+      mockLastWarningMessage = undefined as string | undefined;
+      await provider.doInstallFolder('s1', 'project', 'nonexistent/folder');
+      assert.ok((mockLastWarningMessage as string | undefined)?.includes('Folder "nonexistent/folder" not found'), 'Should warn if folder is missing');
+    });
   });
 
   describe('SourcesTreeDataProvider merged with Available content', () => {
