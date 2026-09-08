@@ -465,7 +465,10 @@ export class InstalledTreeDataProvider {
       return;
     }
 
-    const inst = item.installation;
+    await this.doUpdateInstallation(item.installation);
+  }
+
+  async doUpdateInstallation(inst: ManagedInstallation): Promise<void> {
     if (!inst.sourceId) {
       vscode.window.showWarningMessage(`Cannot update "${inst.name}": no source ID recorded.`);
       return;
@@ -792,7 +795,10 @@ export class InstalledTreeDataProvider {
       return;
     }
 
-    const inst = item.installation;
+    await this.doUninstallItem(item.installation);
+  }
+
+  async doUninstallItem(inst: ManagedInstallation): Promise<void> {
     const confirm = await vscode.window.showInformationMessage(
       `Uninstall ${inst.kind} "${inst.name}" from ${inst.assistant} (${inst.scope})? This deletes it from disk.`,
       { modal: true },
