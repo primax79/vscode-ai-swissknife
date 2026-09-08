@@ -15,19 +15,27 @@ export class PreviewProvider implements vscode.TextDocumentContentProvider {
   private contentMap = new Map<string, string>();
 
   provideTextDocumentContent(uri: vscode.Uri): string {
-    return this.contentMap.get(uri.path) || 'No preview content found.';
+    return this.contentMap.get(uri.toString()) || 'No preview content found.';
   }
 
   public setDiffContent(id: string, contentStr: string, ext: string = '.md'): vscode.Uri {
-    this.contentMap.set(id, contentStr);
-    return vscode.Uri.parse(`${PreviewProvider.scheme}:${id}${ext}`);
+    const uri = vscode.Uri.parse(`${PreviewProvider.scheme}:${id}${ext}`);
+    this.contentMap.set(uri.toString(), contentStr);
+    return uri;
   }
 
   public setPreviewContent(id: string, prepared: PreparedInstall): vscode.Uri {
     if (!prepared.supported) {
-      this.contentMap.set(id, 'Installation not supported.');
-      return vscode.Uri.parse(`${PreviewProvider.scheme}:${id}.md`);
+      const uri = vscode.Uri.parse(`${PreviewProvider.scheme}:${id}.md`);
+      this.contentMap.set(uri.toString(), 'Installation not supported.');
+      return uri;
     }
+
+    let ext = '.md';
+    if (prepared.kind === 'mcp-server') ext = '.json';
+    if (prepared.kind === 'hook') ext = '.ts';
+    
+    const uri = vscode.Uri.parse(`${PreviewProvider.scheme}:${id}${ext}`);
 
     let contentStr = '';
     const assistant = prepared.plan.targetAssistant;
@@ -61,13 +69,8 @@ export class PreviewProvider implements vscode.TextDocumentContentProvider {
         contentStr = 'Unknown kind.';
     }
 
-    this.contentMap.set(id, contentStr);
-    
-    let ext = '.md';
-    if (prepared.kind === 'mcp-server') ext = '.json';
-    if (prepared.kind === 'hook') ext = '.ts';
-    
-    return vscode.Uri.parse(`${PreviewProvider.scheme}:${id}${ext}`);
+    this.contentMap.set(uri.toString(), contentStr);
+    return uri;
   }
 }
 

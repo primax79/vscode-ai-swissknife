@@ -123,6 +123,7 @@ import type { ManagedInstallation, Source, Package, Artifact } from '../domain/t
 import {
   readManifest,
   writeManifest,
+  readState,
   writeState,
   SCHEMA_VERSION,
 } from '../domain/registry';
@@ -614,6 +615,34 @@ describe('UI TreeDataProviders', () => {
 
       const treeInstMcp = provider.getTreeItem(new InstalledInstallationItem(inst4));
       assert.strictEqual((treeInstMcp.iconPath as { id: string }).id, 'plug');
+    });
+
+    it('uninstallItem soft-deletes a managed item and drops it from state, but only after confirmation', async () => {
+      const provider = new InstalledTreeDataProvider({ fsPath: '/test/ext' } as any);
+      const skillDir = path.join(testTempDir, 'my-skill');
+      await fs.promises.mkdir(skillDir, { recursive: true });
+      await fs.promises.writeFile(path.join(skillDir, 'SKILL.md'), '# test');
+
+      const inst: ManagedInstallation = {
+        assistant: 'claude-code', scope: 'project', projectPath: testTempDir, kind: 'skill',
+        name: 'my-skill', path: skillDir, installedAt: '2026-08-19T12:00:00.000Z',
+      };
+      await writeState('project', { schemaVersion: SCHEMA_VERSION, installations: [inst] }, testTempDir);
+
+      await provider.uninstallItem(undefined);
+      assert.ok(mockLastWarningMessage?.includes('Please select a managed item to uninstall'));
+
+      mockShowInformationMessageResult = undefined;
+      await provider.uninstallItem(new InstalledInstallationItem(inst));
+      assert.ok(fs.existsSync(skillDir), 'declining the confirmation must leave the file in place');
+      let state = await readState('project', testTempDir);
+      assert.strictEqual(state.installations.length, 1);
+
+      mockShowInformationMessageResult = 'Uninstall';
+      await provider.uninstallItem(new InstalledInstallationItem(inst));
+      assert.ok(!fs.existsSync(skillDir), 'confirming must remove the original file');
+      state = await readState('project', testTempDir);
+      assert.strictEqual(state.installations.length, 0);
     });
 
     it('groups a ScopeGroupItem\'s children into one KindGroupItem per kind present, in stable order, none for absent kinds', async () => {

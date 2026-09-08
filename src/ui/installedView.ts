@@ -765,37 +765,7 @@ export class InstalledTreeDataProvider {
     const outcome = await applyInstall(prepared);
     if (outcome.status === 'applied') {
       try {
-        if (inst.kind === 'mcp-server') {
-          const originAdapter =
-            inst.assistant === 'claude-code'
-              ? this.claudeAdapter
-              : inst.assistant === 'github-copilot'
-              ? this.copilotAdapter
-              : inst.assistant === 'codex-cli'
-              ? this.codexAdapter
-              : inst.assistant === 'gemini-cli'
-              ? this.geminiAdapter
-              : this.kiloAdapter;
-          await originAdapter.removeMcpServer(inst.name, {
-            scope: inst.scope,
-            projectRoot: inst.projectPath,
-          });
-        } else {
-          await softDeletePath(
-            inst.path,
-            inst.kind,
-            inst.name,
-            inst.scope,
-            inst.projectPath
-          );
-        }
-
-        const state = await readState(inst.scope, inst.projectPath);
-        state.installations = state.installations.filter(
-          (i) => !(i.assistant === inst.assistant && i.kind === inst.kind && i.name === inst.name)
-        );
-        await writeState(inst.scope, state, inst.projectPath);
-
+        await this.removeManagedInstallation(inst);
         vscode.window.showInformationMessage(
           `Successfully moved "${inst.name}" to ${targetAssistant} (${targetScope}).`
         );
@@ -809,6 +779,64 @@ export class InstalledTreeDataProvider {
       }
     } else {
       vscode.window.showErrorMessage(`Move failed: ${outcome.reason}`);
+    }
+  }
+
+  /**
+   * Deletes a managed installation's files (or MCP server entry) from disk
+   * and drops its record from state.json. Shared by moveItem (remove the
+   * origin after copying to the target) and uninstallItem.
+   */
+  private async removeManagedInstallation(inst: ManagedInstallation): Promise<void> {
+    if (inst.kind === 'mcp-server') {
+      const originAdapter =
+        inst.assistant === 'claude-code'
+          ? this.claudeAdapter
+          : inst.assistant === 'github-copilot'
+          ? this.copilotAdapter
+          : inst.assistant === 'codex-cli'
+          ? this.codexAdapter
+          : inst.assistant === 'gemini-cli'
+          ? this.geminiAdapter
+          : this.kiloAdapter;
+      await originAdapter.removeMcpServer(inst.name, {
+        scope: inst.scope,
+        projectRoot: inst.projectPath,
+      });
+    } else {
+      await softDeletePath(inst.path, inst.kind, inst.name, inst.scope, inst.projectPath);
+    }
+
+    const state = await readState(inst.scope, inst.projectPath);
+    state.installations = state.installations.filter(
+      (i) => !(i.assistant === inst.assistant && i.kind === inst.kind && i.name === inst.name)
+    );
+    await writeState(inst.scope, state, inst.projectPath);
+  }
+
+  async uninstallItem(item?: InstalledInstallationItem): Promise<void> {
+    if (!item) {
+      vscode.window.showWarningMessage('Please select a managed item to uninstall.');
+      return;
+    }
+
+    const inst = item.installation;
+    const confirm = await vscode.window.showInformationMessage(
+      `Uninstall ${inst.kind} "${inst.name}" from ${inst.assistant} (${inst.scope})? This deletes it from disk.`,
+      { modal: true },
+      'Uninstall'
+    );
+    if (confirm !== 'Uninstall') return;
+
+    try {
+      await this.removeManagedInstallation(inst);
+      vscode.window.showInformationMessage(
+        `Uninstalled "${inst.name}" from ${inst.assistant} (${inst.scope}).`
+      );
+      this.refresh();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      vscode.window.showErrorMessage(`Failed to uninstall "${inst.name}": ${msg}`);
     }
   }
 

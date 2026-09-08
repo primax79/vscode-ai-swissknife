@@ -447,6 +447,12 @@ export function activate(context: vscode.ExtensionContext) {
         await installedProvider.moveItem(item);
       }
     ),
+    vscode.commands.registerCommand(
+      'aiSwissknife.uninstallItem',
+      async (item?: InstalledInstallationItem) => {
+        await installedProvider.uninstallItem(item);
+      }
+    ),
     vscode.commands.registerCommand('aiSwissknife.createArtifact', async () => {
       const kindPick = await vscode.window.showQuickPick(['skill', 'agent', 'command', 'mcp-server'], {
         placeHolder: 'Select artifact kind to create',

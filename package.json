@@ -206,6 +206,12 @@
         "category": "AI Swissknife"
       },
       {
+        "command": "aiSwissknife.uninstallItem",
+        "title": "Uninstall",
+        "icon": "$(trash)",
+        "category": "AI Swissknife"
+      },
+      {
         "command": "aiSwissknife.createArtifact",
         "title": "Create New Artifact",
         "icon": "$(new-file)",
@@ -381,6 +387,11 @@
           "command": "aiSwissknife.unrecommendForWorkspace",
           "when": "view =~ /^aiSwissknife\\.installed/ && viewItem == installedInstallation:recommended",
           "group": "inline@4"
+        },
+        {
+          "command": "aiSwissknife.uninstallItem",
+          "when": "view =~ /^aiSwissknife\\.installed/ && viewItem =~ /^installedInstallation/",
+          "group": "inline@5"
         },
         {
           "command": "aiSwissknife.promoteItem",
