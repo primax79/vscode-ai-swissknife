@@ -428,6 +428,10 @@ export class InstalledTreeDataProvider
     const sourceItem =
       item instanceof InstalledInstallationItem ? item.installation : item.observed;
 
+    await this.doSyncItem(sourceItem);
+  }
+
+  async doSyncItem(sourceItem: ManagedInstallation | ObservedArtifact): Promise<void> {
     const assistantPick = await vscode.window.showQuickPick(
       (['claude-code', 'kilo-code', 'github-copilot', 'codex-cli', 'gemini-cli'] as const).map(
         (id) => ({
@@ -499,7 +503,10 @@ export class InstalledTreeDataProvider
       return;
     }
 
-    const obs = item.observed;
+    await this.doPromoteItem(item.observed);
+  }
+
+  async doPromoteItem(obs: ObservedArtifact): Promise<void> {
     const candidates = obs.candidates ?? [];
     
     if (candidates.length === 0) {
@@ -553,7 +560,10 @@ export class InstalledTreeDataProvider
       return;
     }
 
-    const inst = item.installation;
+    await this.doMoveItem(item.installation);
+  }
+
+  async doMoveItem(inst: ManagedInstallation): Promise<void> {
     if (inst.kind === 'hook' || inst.kind === 'rule') {
       vscode.window.showErrorMessage("Move isn't supported for this kind yet.");
       return;
@@ -669,6 +679,11 @@ export class InstalledTreeDataProvider
       return;
     }
 
+    const sourceItem = item instanceof InstalledInstallationItem ? item.installation : item.observed;
+    await this.doDiffAgainstOriginal(sourceItem);
+  }
+
+  async doDiffAgainstOriginal(item: ManagedInstallation | ObservedArtifact): Promise<void> {
     let sourceId: string | undefined;
     let artifactId: string | undefined;
     let assistant: AssistantId;
@@ -678,8 +693,8 @@ export class InstalledTreeDataProvider
     let name: string;
     let localDiskPath: string;
 
-    if (item instanceof InstalledInstallationItem) {
-      const inst = item.installation;
+    if ('installedAt' in item) {
+      const inst = item;
       sourceId = inst.sourceId;
       artifactId = inst.artifactId;
       assistant = inst.assistant;
@@ -689,7 +704,7 @@ export class InstalledTreeDataProvider
       name = inst.name;
       localDiskPath = inst.path;
     } else {
-      const obs = item.observed;
+      const obs = item;
       if (obs.match?.status === 'different') {
         sourceId = obs.match.sourceId;
         artifactId = obs.match.artifactId;
