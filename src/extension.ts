@@ -15,6 +15,7 @@ import {
 } from './ui/availableView';
 import {
   InstalledTreeDataProvider,
+  AssistantTreeDataProvider,
   InstalledInstallationItem,
   ObservedArtifactItem,
 } from './ui/installedView';
@@ -307,6 +308,22 @@ export function activate(context: vscode.ExtensionContext) {
   const availableProvider = new AvailableTreeDataProvider(context.extensionUri);
   const sourcesProvider = new SourcesTreeDataProvider(availableProvider);
   const installedProvider = new InstalledTreeDataProvider(context.extensionUri);
+  const claudeProvider = new AssistantTreeDataProvider(installedProvider, 'claude-code');
+  const kiloProvider = new AssistantTreeDataProvider(installedProvider, 'kilo-code');
+  const copilotProvider = new AssistantTreeDataProvider(installedProvider, 'github-copilot');
+  const codexProvider = new AssistantTreeDataProvider(installedProvider, 'codex-cli');
+  const geminiProvider = new AssistantTreeDataProvider(installedProvider, 'gemini-cli');
+
+  const refreshAllInstalled = () => {
+    installedProvider.refresh();
+  };
+
+  availableProvider.setInstalledRefreshCallback(refreshAllInstalled);
+
+  const watchers = setupFileWatchers(() => {
+    sourcesProvider.refresh();
+    refreshAllInstalled();
+  });
 
   const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   statusBarItem.command = 'aiSwissknife.openDashboard';
@@ -327,15 +344,6 @@ export function activate(context: vscode.ExtensionContext) {
       return { unsatisfiedRecommendations: 0, updatesAvailable: 0, total: 0 };
     }
   };
-
-  availableProvider.setInstalledRefreshCallback(() => {
-    installedProvider.refresh();
-  });
-
-  const watchers = setupFileWatchers(() => {
-    sourcesProvider.refresh();
-    installedProvider.refresh();
-  });
 
   let hasCheckedRecommendations = false;
   const checkRecommendations = async () => {
@@ -380,7 +388,11 @@ export function activate(context: vscode.ExtensionContext) {
     statusBarItem,
     ...watchers,
     sourcesTreeView,
-    vscode.window.registerTreeDataProvider('aiSwissknife.installed', installedProvider),
+    vscode.window.registerTreeDataProvider('aiSwissknife.installed.claude-code', claudeProvider),
+    vscode.window.registerTreeDataProvider('aiSwissknife.installed.kilo-code', kiloProvider),
+    vscode.window.registerTreeDataProvider('aiSwissknife.installed.github-copilot', copilotProvider),
+    vscode.window.registerTreeDataProvider('aiSwissknife.installed.codex-cli', codexProvider),
+    vscode.window.registerTreeDataProvider('aiSwissknife.installed.gemini-cli', geminiProvider),
 
     vscode.commands.registerCommand('aiSwissknife.addSource', () => sourcesProvider.addSource()),
     vscode.commands.registerCommand('aiSwissknife.removeSource', (item?: SourceItem) =>

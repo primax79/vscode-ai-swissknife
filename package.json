@@ -75,8 +75,24 @@
           "name": "Sources"
         },
         {
-          "id": "aiSwissknife.installed",
-          "name": "Installed"
+          "id": "aiSwissknife.installed.claude-code",
+          "name": "Claude Code"
+        },
+        {
+          "id": "aiSwissknife.installed.kilo-code",
+          "name": "Kilo Code"
+        },
+        {
+          "id": "aiSwissknife.installed.github-copilot",
+          "name": "GitHub Copilot"
+        },
+        {
+          "id": "aiSwissknife.installed.codex-cli",
+          "name": "Codex CLI"
+        },
+        {
+          "id": "aiSwissknife.installed.gemini-cli",
+          "name": "Gemini CLI"
         }
       ]
     },
@@ -235,7 +251,7 @@
         },
         {
           "command": "aiSwissknife.openDashboard",
-          "when": "view == aiSwissknife.installed",
+          "when": "view =~ /^aiSwissknife\\.installed/",
           "group": "navigation@0"
         },
         {
@@ -270,17 +286,17 @@
         },
         {
           "command": "aiSwissknife.createArtifact",
-          "when": "view == aiSwissknife.installed",
+          "when": "view =~ /^aiSwissknife\\.installed/",
           "group": "navigation@1"
         },
         {
           "command": "aiSwissknife.checkDrift",
-          "when": "view == aiSwissknife.installed",
+          "when": "view =~ /^aiSwissknife\\.installed/",
           "group": "navigation@2"
         },
         {
           "command": "aiSwissknife.refreshInstalled",
-          "when": "view == aiSwissknife.installed",
+          "when": "view =~ /^aiSwissknife\\.installed/",
           "group": "navigation@3"
         }
       ],
@@ -297,42 +313,42 @@
         },
         {
           "command": "aiSwissknife.updateItem",
-          "when": "view == aiSwissknife.installed && viewItem =~ /^installedInstallation/",
+          "when": "view =~ /^aiSwissknife\\.installed/ && viewItem =~ /^installedInstallation/",
           "group": "inline@1"
         },
         {
           "command": "aiSwissknife.diffAgainstOriginal",
-          "when": "view == aiSwissknife.installed && viewItem =~ /^installedInstallation.*:(modified-locally|modified-and-update-available)/",
+          "when": "view =~ /^aiSwissknife\\.installed/ && viewItem =~ /^installedInstallation.*:(modified-locally|modified-and-update-available)/",
           "group": "inline@1"
         },
         {
           "command": "aiSwissknife.diffAgainstOriginal",
-          "when": "view == aiSwissknife.installed && viewItem =~ /^observedArtifactItem.*:different/",
+          "when": "view =~ /^aiSwissknife\\.installed/ && viewItem =~ /^observedArtifactItem.*:different/",
           "group": "inline@1"
         },
         {
           "command": "aiSwissknife.syncItem",
-          "when": "view == aiSwissknife.installed && viewItem =~ /^installedInstallation/",
+          "when": "view =~ /^aiSwissknife\\.installed/ && viewItem =~ /^installedInstallation/",
           "group": "inline@2"
         },
         {
           "command": "aiSwissknife.moveItem",
-          "when": "view == aiSwissknife.installed && viewItem =~ /^installedInstallation/",
+          "when": "view =~ /^aiSwissknife\\.installed/ && viewItem =~ /^installedInstallation/",
           "group": "inline@2"
         },
         {
           "command": "aiSwissknife.syncItem",
-          "when": "view == aiSwissknife.installed && viewItem == observedArtifactItem",
+          "when": "view =~ /^aiSwissknife\\.installed/ && viewItem == observedArtifactItem",
           "group": "inline@2"
         },
         {
           "command": "aiSwissknife.editArtifact",
-          "when": "view == aiSwissknife.installed && viewItem =~ /^installedInstallation/",
+          "when": "view =~ /^aiSwissknife\\.installed/ && viewItem =~ /^installedInstallation/",
           "group": "inline@3"
         },
         {
           "command": "aiSwissknife.editArtifact",
-          "when": "view == aiSwissknife.installed && viewItem == observedArtifactItem",
+          "when": "view =~ /^aiSwissknife\\.installed/ && viewItem == observedArtifactItem",
           "group": "inline@3"
         },
         {
@@ -347,22 +363,22 @@
         },
         {
           "command": "aiSwissknife.recommendForWorkspace",
-          "when": "view == aiSwissknife.installed && viewItem =~ /^installedInstallation/ && viewItem != installedInstallation:recommended",
+          "when": "view =~ /^aiSwissknife\\.installed/ && viewItem =~ /^installedInstallation/ && viewItem != installedInstallation:recommended",
           "group": "inline@4"
         },
         {
           "command": "aiSwissknife.unrecommendForWorkspace",
-          "when": "view == aiSwissknife.installed && viewItem == installedInstallation:recommended",
+          "when": "view =~ /^aiSwissknife\\.installed/ && viewItem == installedInstallation:recommended",
           "group": "inline@4"
         },
         {
           "command": "aiSwissknife.promoteItem",
-          "when": "view == aiSwissknife.installed && viewItem == observedArtifactItem:one",
+          "when": "view =~ /^aiSwissknife\\.installed/ && viewItem == observedArtifactItem:one",
           "group": "inline@1"
         },
         {
           "command": "aiSwissknife.promoteItem",
-          "when": "view == aiSwissknife.installed && viewItem == observedArtifactItem:many",
+          "when": "view =~ /^aiSwissknife\\.installed/ && viewItem == observedArtifactItem:many",
           "group": "inline@1"
         },
         {

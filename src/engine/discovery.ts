@@ -36,6 +36,7 @@ import { resolveGitCustom } from '../sources/gitCustom';
 import { resolveGitMarketplace } from '../sources/gitMarketplace';
 import { resolveGitSingleItem } from '../sources/gitSingleItem';
 import { resolveRemoteUrl } from '../sources/remoteUrl';
+import type { SourceResolution } from '../sources/types';
 import { resolveAndTranslate } from './plan';
 
 function getAdapter(assistant: AssistantId, homeRoot?: string) {
@@ -215,76 +216,84 @@ export async function scanInstalledInventory(
     }
   }
 
-  // Match each observed artifact against registered sources
+  // Resolve each registered source at most once per scan. Resolution can involve a
+  // `git fetch` or a network request, so it must not be repeated per observed artifact
+  // (that previously made this loop O(observed × sources) network calls).
+  const resolvedSources: { source: Source; resolution: SourceResolution }[] = [];
+  for (const source of allSources) {
+    try {
+      let resolution;
+      if (source.type === 'local-folder') {
+        resolution = await resolveLocalFolder(source);
+      } else if (source.type === 'git-custom') {
+        resolution = await resolveGitCustom(source);
+      } else if (source.type === 'git-marketplace') {
+        resolution = await resolveGitMarketplace(source);
+      } else if (source.type === 'git-single-item') {
+        resolution = await resolveGitSingleItem(source);
+      } else if (source.type === 'remote-url') {
+        resolution = await resolveRemoteUrl(source);
+      }
+
+      if (resolution) {
+        resolvedSources.push({ source, resolution });
+      }
+    } catch {
+      // ignore source resolution errors during passive discovery
+    }
+  }
+
+  // Match each observed artifact against the already-resolved sources
   const observed: ObservedArtifact[] = [];
 
   for (const obs of rawObserved) {
     const candidates: ObservedSourceMatch[] = [];
 
-    for (const source of allSources) {
-      try {
-        let resolution;
-        if (source.type === 'local-folder') {
-          resolution = await resolveLocalFolder(source);
-        } else if (source.type === 'git-custom') {
-          resolution = await resolveGitCustom(source);
-        } else if (source.type === 'git-marketplace') {
-          resolution = await resolveGitMarketplace(source);
-        } else if (source.type === 'git-single-item') {
-          resolution = await resolveGitSingleItem(source);
-        } else if (source.type === 'remote-url') {
-          resolution = await resolveRemoteUrl(source);
-        }
-
-        if (!resolution) continue;
-
-        for (const pkg of resolution.packages) {
-          for (const art of pkg.artifacts) {
-            if (art.kind === obs.kind && art.name === obs.name) {
-              try {
-                const result = await resolveAndTranslate(source, pkg, art, obs.assistant);
-                let sourceHash: string | undefined;
-                if (art.kind === 'skill') {
-                  sourceHash = canonicalSkillHash(result.translated as CanonicalSkill);
-                } else if (art.kind === 'agent') {
-                  sourceHash = canonicalAgentHash(result.translated as CanonicalAgent);
-                } else if (art.kind === 'command') {
-                  sourceHash = canonicalCommandHash(result.translated as CanonicalCommand);
-                } else if (art.kind === 'mcp-server') {
-                  sourceHash = canonicalMcpServerHash(result.translated as CanonicalMcpServer);
-                } else if (art.kind === 'hook') {
-                  sourceHash = canonicalHookHash(result.translated as CanonicalHook);
-                } else if (art.kind === 'rule') {
-                  sourceHash = canonicalRuleHash(result.translated as CanonicalRule);
-                }
-
-                if (sourceHash && obs.contentHash && sourceHash === obs.contentHash) {
-                  candidates.push({
-                    status: 'identical',
-                    sourceId: source.id,
-                    packageId: pkg.id,
-                    artifactId: art.id,
-                    sourceRevision: pkg.version,
-                    details: `Identical to source "${source.id}"`,
-                  });
-                } else if (sourceHash) {
-                  candidates.push({
-                    status: 'different',
-                    sourceId: source.id,
-                    packageId: pkg.id,
-                    artifactId: art.id,
-                    sourceRevision: pkg.version,
-                    details: `Differs from source "${source.id}"`,
-                  });
-                }
-              } catch {
-                // ignore
+    for (const { source, resolution } of resolvedSources) {
+      for (const pkg of resolution.packages) {
+        for (const art of pkg.artifacts) {
+          if (art.kind === obs.kind && art.name === obs.name) {
+            try {
+              const result = await resolveAndTranslate(source, pkg, art, obs.assistant);
+              let sourceHash: string | undefined;
+              if (art.kind === 'skill') {
+                sourceHash = canonicalSkillHash(result.translated as CanonicalSkill);
+              } else if (art.kind === 'agent') {
+                sourceHash = canonicalAgentHash(result.translated as CanonicalAgent);
+              } else if (art.kind === 'command') {
+                sourceHash = canonicalCommandHash(result.translated as CanonicalCommand);
+              } else if (art.kind === 'mcp-server') {
+                sourceHash = canonicalMcpServerHash(result.translated as CanonicalMcpServer);
+              } else if (art.kind === 'hook') {
+                sourceHash = canonicalHookHash(result.translated as CanonicalHook);
+              } else if (art.kind === 'rule') {
+                sourceHash = canonicalRuleHash(result.translated as CanonicalRule);
               }
+
+              if (sourceHash && obs.contentHash && sourceHash === obs.contentHash) {
+                candidates.push({
+                  status: 'identical',
+                  sourceId: source.id,
+                  packageId: pkg.id,
+                  artifactId: art.id,
+                  sourceRevision: pkg.version,
+                  details: `Identical to source "${source.id}"`,
+                });
+              } else if (sourceHash) {
+                candidates.push({
+                  status: 'different',
+                  sourceId: source.id,
+                  packageId: pkg.id,
+                  artifactId: art.id,
+                  sourceRevision: pkg.version,
+                  details: `Differs from source "${source.id}"`,
+                });
+              }
+            } catch {
+              // ignore
             }
           }
         }
-      } catch {
-        // ignore source resolution errors during passive discovery
       }
     }
 

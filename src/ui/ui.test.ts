@@ -125,7 +125,7 @@ import {
 } from '../domain/registry';
 import { SourcesTreeDataProvider, ScopeGroupItem, SourceItem } from './sourcesView';
 import { AvailableTreeDataProvider, AvailableFolderItem, AvailableArtifactItem, buildHierarchy, AvailableSourceGroupItem } from './availableView';
-import { InstalledTreeDataProvider, InstalledGroupItem, InstalledInstallationItem, KindGroupItem } from './installedView';
+import { InstalledTreeDataProvider, ScopeGroupItem as InstalledScopeGroupItem, InstalledInstallationItem, KindGroupItem } from './installedView';
 import { getAssistantIconPath } from './assistantIcons';
 import { setupFileWatchers } from './watchers';
 import { DashboardPanel } from './dashboard';
@@ -510,10 +510,12 @@ describe('UI TreeDataProviders', () => {
       );
 
       const provider = new InstalledTreeDataProvider({ fsPath: '/test/ext' } as any);
-      const groupItem = new InstalledGroupItem('kilo-code (global)', 'Kilo Code (global)', [inst2, inst3, inst4], 'kilo-code');
+      const groupItem = new InstalledScopeGroupItem(
+        'kilo-code', 'global', 'global', [inst2, inst3, inst4], []
+      );
       const treeGroup = provider.getTreeItem(groupItem);
-      assert.strictEqual(treeGroup.label, 'Kilo Code (global)');
-      assert.strictEqual(treeGroup.description, '3 managed');
+      assert.strictEqual(treeGroup.label, 'global');
+      assert.strictEqual(treeGroup.description, '3 managed, 0 unmanaged');
 
       const treeInstAgent = provider.getTreeItem(new InstalledInstallationItem(inst2));
       assert.strictEqual((treeInstAgent.iconPath as { id: string }).id, 'robot');
@@ -525,17 +527,7 @@ describe('UI TreeDataProviders', () => {
       assert.strictEqual((treeInstMcp.iconPath as { id: string }).id, 'plug');
     });
 
-    it('sets correct iconPath for InstalledGroupItem based on assistant', () => {
-      const provider = new InstalledTreeDataProvider({ fsPath: '/test/ext' } as any);
-      const groupItem = new InstalledGroupItem('claude-code (global)', 'Claude Code (global)', [], 'claude-code');
-      const treeGroup = provider.getTreeItem(groupItem);
-      const iconPath = treeGroup.iconPath as { light: { fsPath: string }, dark: { fsPath: string } };
-      assert.ok(iconPath);
-      assert.strictEqual(iconPath.light.fsPath, '/test/ext/resources/claude.svg');
-      assert.strictEqual(iconPath.dark.fsPath, '/test/ext/resources/claude.svg');
-    });
-
-    it('groups an InstalledGroupItem\'s children into one KindGroupItem per kind present, in stable order, none for absent kinds', async () => {
+    it('groups a ScopeGroupItem\'s children into one KindGroupItem per kind present, in stable order, none for absent kinds', async () => {
       const skillA: ManagedInstallation = {
         assistant: 'kilo-code', scope: 'global', kind: 'skill', name: 'skill-a',
         path: '/tmp/skill-a', installedAt: '2026-08-19T12:00:00.000Z',
@@ -554,8 +546,8 @@ describe('UI TreeDataProviders', () => {
       };
 
       const provider = new InstalledTreeDataProvider({ fsPath: '/test/ext' } as any);
-      const groupItem = new InstalledGroupItem(
-        'kilo-code (global)', 'Kilo Code (global)', [skillA, skillB, agentA, mcpA], 'kilo-code'
+      const groupItem = new InstalledScopeGroupItem(
+        'kilo-code', 'global', 'global', [skillA, skillB, agentA, mcpA], []
       );
 
       const kindGroups = await provider.getChildren(groupItem);

@@ -21,25 +21,26 @@ import { getAssistantIconPath } from './assistantIcons';
 import { getKindIconName } from './kindIcons';
 
 export type InstalledTreeItem =
-  | InstalledGroupItem
-  | UnmanagedGroupItem
+  | ScopeGroupItem
   | KindGroupItem
   | InstalledInstallationItem
-  | ObservedArtifactItem;
+  | ObservedArtifactItem
+  | ArtifactFileItem;
 
-export class InstalledGroupItem {
+export class ArtifactFileItem {
   constructor(
-    public readonly groupKey: string,
     public readonly label: string,
-    public readonly installations: ManagedInstallation[],
-    public readonly assistant: AssistantId
+    public readonly fsPath: string,
+    public readonly isDir: boolean
   ) {}
 }
 
-export class UnmanagedGroupItem {
+export class ScopeGroupItem {
   constructor(
-    public readonly groupKey: string,
+    public readonly assistant: AssistantId,
+    public readonly scope: Scope,
     public readonly label: string,
+    public readonly managed: ManagedInstallation[],
     public readonly observed: ObservedArtifact[]
   ) {}
 }
@@ -97,10 +98,10 @@ function groupByKind<T extends InstalledInstallationItem | ObservedArtifactItem>
   return result;
 }
 
-export class InstalledTreeDataProvider
-  implements vscode.TreeDataProvider<InstalledTreeItem>
-{
-  constructor(private readonly extensionUri: vscode.Uri) {}
+export class InstalledTreeDataProvider {
+  constructor(
+    private readonly extensionUri: vscode.Uri
+  ) {}
 
   private _onDidChangeTreeData = new vscode.EventEmitter<
     InstalledTreeItem | undefined | null | void
@@ -116,30 +117,55 @@ export class InstalledTreeDataProvider
   private codexAdapter = new CodexAdapter();
   private geminiAdapter = new GeminiAdapter();
 
+  private rawInventoryCache: Promise<{ allManaged: ManagedInstallation[]; allObserved: ObservedArtifact[] }> | null = null;
+
   refresh(): void {
+    this.rawInventoryCache = null;
     this._onDidChangeTreeData.fire();
   }
 
+  private getRawInventory(): Promise<{ allManaged: ManagedInstallation[]; allObserved: ObservedArtifact[] }> {
+    if (!this.rawInventoryCache) {
+      this.rawInventoryCache = this.scanRawInventory();
+    }
+    return this.rawInventoryCache;
+  }
+
+  private async scanRawInventory(): Promise<{ allManaged: ManagedInstallation[]; allObserved: ObservedArtifact[] }> {
+    const allManaged: ManagedInstallation[] = [];
+    const allObserved: ObservedArtifact[] = [];
+
+    try {
+      const globalInv = await scanInstalledInventory('global');
+      allManaged.push(...globalInv.managed);
+      allObserved.push(...globalInv.observed);
+    } catch {
+      // ignore
+    }
+
+    const folders = vscode.workspace.workspaceFolders;
+    if (folders && folders.length > 0) {
+      const projectRoot = folders[0].uri.fsPath;
+      try {
+        const projectInv = await scanInstalledInventory('project', projectRoot);
+        allManaged.push(...projectInv.managed);
+        allObserved.push(...projectInv.observed);
+      } catch {
+        // ignore
+      }
+    }
+
+    return { allManaged, allObserved };
+  }
+
   getTreeItem(element: InstalledTreeItem): vscode.TreeItem {
-    if (element instanceof InstalledGroupItem) {
+    if (element instanceof ScopeGroupItem) {
       const item = new vscode.TreeItem(
         element.label,
         vscode.TreeItemCollapsibleState.Expanded
       );
-      item.description = `${element.installations.length} managed`;
-      item.contextValue = 'installedGroup';
-      item.iconPath = getAssistantIconPath(element.assistant, this.extensionUri);
-      return item;
-    }
-
-    if (element instanceof UnmanagedGroupItem) {
-      const item = new vscode.TreeItem(
-        element.label,
-        vscode.TreeItemCollapsibleState.Collapsed
-      );
-      item.description = `${element.observed.length} unmanaged`;
-      item.iconPath = new vscode.ThemeIcon('eye');
-      item.contextValue = 'unmanagedGroup';
+      item.description = `${element.managed.length} managed, ${element.observed.length} unmanaged`;
+      item.contextValue = 'scopeGroup';
       return item;
     }
 
@@ -150,6 +176,25 @@ export class InstalledTreeDataProvider
       );
       item.iconPath = new vscode.ThemeIcon(getKindIconName(element.kind));
       item.contextValue = 'kindGroup';
+      return item;
+    }
+
+    if (element instanceof ArtifactFileItem) {
+      const item = new vscode.TreeItem(
+        element.label,
+        element.isDir ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
+      );
+      item.contextValue = 'artifactFile';
+      if (element.isDir) {
+        item.iconPath = vscode.ThemeIcon.Folder;
+      } else {
+        item.iconPath = vscode.ThemeIcon.File;
+        item.command = {
+          command: 'vscode.open',
+          title: 'Open File',
+          arguments: [vscode.Uri.file(element.fsPath)],
+        };
+      }
       return item;
     }
 
@@ -169,20 +214,27 @@ export class InstalledTreeDataProvider
         iconName = 'eye';
       }
 
+      let isDir = false;
+      try {
+        isDir = fs.statSync(obs.path).isDirectory();
+      } catch { /* ignore */ }
+
       const item = new vscode.TreeItem(
         obs.name,
-        vscode.TreeItemCollapsibleState.None
+        isDir ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
       );
       item.description = desc;
       item.tooltip = `Name: ${obs.name}\nKind: ${obs.kind}\nAssistant: ${obs.assistant}\nScope: ${obs.scope}\nPath: ${obs.path}\nDiscovered: ${obs.discoveredAt}${
         obs.match?.details ? `\nFeedback: ${obs.match.details}` : ''
       }`;
       item.iconPath = new vscode.ThemeIcon(iconName);
-      item.command = {
-        command: 'vscode.open',
-        title: 'Open File',
-        arguments: [vscode.Uri.file(obs.path)],
-      };
+      if (!isDir) {
+        item.command = {
+          command: 'vscode.open',
+          title: 'Open File',
+          arguments: [vscode.Uri.file(obs.path)],
+        };
+      }
 
       let candidateContext = 'observedArtifactItem:none';
       if (obs.candidates && obs.candidates.length === 1) {
@@ -198,137 +250,194 @@ export class InstalledTreeDataProvider
       return item;
     }
 
-    const inst = element.installation;
-    const report = element.report ?? this.driftReports.get(this.getInstallKey(inst));
+    if (element instanceof InstalledInstallationItem) {
+      const inst = element.installation;
+      const report = element.report ?? this.driftReports.get(this.getInstallKey(inst));
 
-    let desc = `${inst.kind} (${inst.scope})`;
-    if (element.isRecommended) {
-      desc += ' ★';
-    }
-    let iconName = getKindIconName(inst.kind);
-
-    if (report) {
-      if (report.status === 'modified-locally') {
-        desc = `${inst.kind} [modified locally]`;
-        iconName = 'diff-modified';
-      } else if (report.status === 'update-available') {
-        desc = `${inst.kind} [update available]`;
-        iconName = 'cloud-download';
-      } else if (report.status === 'modified-and-update-available') {
-        desc = `${inst.kind} [modified & update available]`;
-        iconName = 'warning';
-      } else if (report.status === 'missing-on-disk') {
-        desc = `${inst.kind} [missing on disk]`;
-        iconName = 'error';
+      let desc = `${inst.kind} [managed]`;
+      if (element.isRecommended) {
+        desc += ' ★';
       }
+      let iconName = getKindIconName(inst.kind);
+
+      if (report) {
+        if (report.status === 'modified-locally') {
+          desc = `${inst.kind} [managed, modified locally]`;
+          iconName = 'diff-modified';
+        } else if (report.status === 'update-available') {
+          desc = `${inst.kind} [managed, update available]`;
+          iconName = 'cloud-download';
+        } else if (report.status === 'modified-and-update-available') {
+          desc = `${inst.kind} [managed, modified & update available]`;
+          iconName = 'warning';
+        } else if (report.status === 'missing-on-disk') {
+          desc = `${inst.kind} [managed, missing on disk]`;
+          iconName = 'error';
+        }
+      }
+
+      let isDir = false;
+      try {
+        isDir = fs.statSync(inst.path).isDirectory();
+      } catch { /* ignore */ }
+
+      const item = new vscode.TreeItem(
+        inst.name,
+        isDir ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
+      );
+      item.description = desc;
+      item.tooltip = `Name: ${inst.name}\nKind: ${inst.kind}\nAssistant: ${inst.assistant}\nScope: ${inst.scope}\nPath: ${inst.path}\nInstalled at: ${inst.installedAt}${
+        report?.details ? `\nStatus: ${report.details}` : ''
+      }${inst.sourceRevision?.commit ? `\nCommit: ${inst.sourceRevision.commit}` : ''}`;
+      item.iconPath = new vscode.ThemeIcon(iconName);
+      if (!isDir) {
+        item.command = {
+          command: 'vscode.open',
+          title: 'Open File',
+          arguments: [vscode.Uri.file(inst.path)],
+        };
+      }
+      const baseContext = element.isRecommended ? 'installedInstallation:recommended' : 'installedInstallation';
+      item.contextValue = report ? `${baseContext}:${report.status}` : baseContext;
+      return item;
     }
 
-    const item = new vscode.TreeItem(
-      inst.name,
-      vscode.TreeItemCollapsibleState.None
-    );
-    item.description = desc;
-    item.tooltip = `Name: ${inst.name}\nKind: ${inst.kind}\nAssistant: ${inst.assistant}\nScope: ${inst.scope}\nPath: ${inst.path}\nInstalled at: ${inst.installedAt}${
-      report?.details ? `\nStatus: ${report.details}` : ''
-    }${inst.sourceRevision?.commit ? `\nCommit: ${inst.sourceRevision.commit}` : ''}`;
-    item.iconPath = new vscode.ThemeIcon(iconName);
-    item.command = {
-      command: 'vscode.open',
-      title: 'Open File',
-      arguments: [vscode.Uri.file(inst.path)],
-    };
-    const baseContext = element.isRecommended ? 'installedInstallation:recommended' : 'installedInstallation';
-    item.contextValue = report ? `${baseContext}:${report.status}` : baseContext;
-    return item;
+    return new vscode.TreeItem('Unknown item');
   }
 
-  async getChildren(element?: InstalledTreeItem): Promise<InstalledTreeItem[]> {
-    if (!element) {
-      const allManaged: ManagedInstallation[] = [];
-      const allObserved: ObservedArtifact[] = [];
+  async getChildren(element?: InstalledTreeItem, overrideAssistantId?: AssistantId): Promise<InstalledTreeItem[]> {
+    if (element instanceof ArtifactFileItem) {
+      if (element.isDir) {
+        try {
+          const files = fs.readdirSync(element.fsPath);
+          return files.map(f => {
+            const p = path.join(element.fsPath, f);
+            let isDir = false;
+            try { isDir = fs.statSync(p).isDirectory(); } catch { /* ignore */ }
+            return new ArtifactFileItem(f, p, isDir);
+          }).sort((a, b) => {
+            if (a.isDir && !b.isDir) return -1;
+            if (!a.isDir && b.isDir) return 1;
+            return a.label.localeCompare(b.label);
+          });
+        } catch { /* ignore */ }
+      }
+      return [];
+    }
 
+    if (element instanceof InstalledInstallationItem) {
+      const inst = element.installation;
       try {
-        const globalInv = await scanInstalledInventory('global');
-        allManaged.push(...globalInv.managed);
-        allObserved.push(...globalInv.observed);
-      } catch {
-        // ignore
+        if (fs.statSync(inst.path).isDirectory()) {
+          const files = fs.readdirSync(inst.path);
+          return files.map(f => {
+            const p = path.join(inst.path, f);
+            let isDir = false;
+            try { isDir = fs.statSync(p).isDirectory(); } catch { /* ignore */ }
+            return new ArtifactFileItem(f, p, isDir);
+          }).sort((a, b) => {
+            if (a.isDir && !b.isDir) return -1;
+            if (!a.isDir && b.isDir) return 1;
+            return a.label.localeCompare(b.label);
+          });
+        }
+      } catch { /* ignore */ }
+      return [];
+    }
+
+    if (element instanceof ObservedArtifactItem) {
+      const obs = element.observed;
+      try {
+        if (fs.statSync(obs.path).isDirectory()) {
+          const files = fs.readdirSync(obs.path);
+          return files.map(f => {
+            const p = path.join(obs.path, f);
+            let isDir = false;
+            try { isDir = fs.statSync(p).isDirectory(); } catch { /* ignore */ }
+            return new ArtifactFileItem(f, p, isDir);
+          }).sort((a, b) => {
+            if (a.isDir && !b.isDir) return -1;
+            if (!a.isDir && b.isDir) return 1;
+            return a.label.localeCompare(b.label);
+          });
+        }
+      } catch { /* ignore */ }
+      return [];
+    }
+
+    if (!element) {
+      const rawInventory = await this.getRawInventory();
+      const allManaged = rawInventory.allManaged.filter(
+        (m) => !overrideAssistantId || m.assistant === overrideAssistantId
+      );
+      const allObserved = rawInventory.allObserved.filter(
+        (o) => !overrideAssistantId || o.assistant === overrideAssistantId
+      );
+
+      const scopes = new Set<Scope>();
+      const managedByScope = new Map<Scope, ManagedInstallation[]>();
+      const observedByScope = new Map<Scope, ObservedArtifact[]>();
+
+      for (const inst of allManaged) {
+        scopes.add(inst.scope);
+        const list = managedByScope.get(inst.scope) ?? [];
+        list.push(inst);
+        managedByScope.set(inst.scope, list);
+      }
+      for (const obs of allObserved) {
+        scopes.add(obs.scope);
+        const list = observedByScope.get(obs.scope) ?? [];
+        list.push(obs);
+        observedByScope.set(obs.scope, list);
       }
 
-      const folders = vscode.workspace.workspaceFolders;
-      if (folders && folders.length > 0) {
-        const projectRoot = folders[0].uri.fsPath;
+      const result: InstalledTreeItem[] = [];
+      for (const scope of Array.from(scopes).sort()) {
+        const managed = managedByScope.get(scope) ?? [];
+        const observed = observedByScope.get(scope) ?? [];
+        // Use overrideAssistantId, or if somehow missing, take from the first managed/observed item or fallback
+        const assistant = overrideAssistantId ?? managed[0]?.assistant ?? observed[0]?.assistant ?? 'claude-code';
+        result.push(new ScopeGroupItem(assistant, scope, scope, managed, observed));
+      }
+      return result;
+    }
+
+    if (element instanceof ScopeGroupItem) {
+      const recommendedSet = new Set<string>();
+      if (element.scope === 'project') {
         try {
-          const projectInv = await scanInstalledInventory('project', projectRoot);
-          allManaged.push(...projectInv.managed);
-          allObserved.push(...projectInv.observed);
+          const folders = vscode.workspace.workspaceFolders;
+          if (folders && folders.length > 0) {
+            const projectRoot = folders[0].uri.fsPath;
+            const manifest = await readManifest('project', projectRoot);
+            for (const d of manifest.desiredInstallations) {
+              recommendedSet.add(`${d.sourceId}:${d.artifactId}:${d.assistant}`);
+            }
+          }
         } catch {
           // ignore
         }
       }
 
-      const result: InstalledTreeItem[] = [];
-
-      const managedGroups = new Map<string, ManagedInstallation[]>();
-      for (const inst of allManaged) {
-        const key = `${inst.assistant} (${inst.scope})`;
-        const list = managedGroups.get(key) ?? [];
-        list.push(inst);
-        managedGroups.set(key, list);
-      }
-
-      for (const [key, list] of managedGroups.entries()) {
-        result.push(new InstalledGroupItem(key, key, list, list[0].assistant));
-      }
-
-      const unmanagedGroups = new Map<string, ObservedArtifact[]>();
-      for (const obs of allObserved) {
-        const key = `Unmanaged: ${obs.assistant} (${obs.scope})`;
-        const list = unmanagedGroups.get(key) ?? [];
-        list.push(obs);
-        unmanagedGroups.set(key, list);
-      }
-
-      for (const [key, list] of unmanagedGroups.entries()) {
-        result.push(new UnmanagedGroupItem(key, key, list));
-      }
-
-      return result;
-    }
-
-    if (element instanceof InstalledGroupItem) {
-      const recommendedSet = new Set<string>();
-      try {
-        const folders = vscode.workspace.workspaceFolders;
-        if (folders && folders.length > 0) {
-          const projectRoot = folders[0].uri.fsPath;
-          const manifest = await readManifest('project', projectRoot);
-          for (const d of manifest.desiredInstallations) {
-            recommendedSet.add(`${d.sourceId}:${d.artifactId}:${d.assistant}`);
-          }
-        }
-      } catch {
-        // ignore
-      }
-
-      const items = element.installations.map((inst) => {
+      const items: (InstalledInstallationItem | ObservedArtifactItem)[] = [];
+      for (const inst of element.managed) {
         const report = this.driftReports.get(this.getInstallKey(inst));
         const isRecommended =
           inst.scope === 'project' &&
           inst.sourceId &&
           inst.artifactId &&
           recommendedSet.has(`${inst.sourceId}:${inst.artifactId}:${inst.assistant}`);
-        return new InstalledInstallationItem(inst, report, !!isRecommended);
-      });
-      return groupByKind(items, (item) => item.installation.kind);
-    }
-
-    if (element instanceof UnmanagedGroupItem) {
-      const items = element.observed.map((obs) => new ObservedArtifactItem(obs));
-      return groupByKind(items, (item) => item.observed.kind);
+        items.push(new InstalledInstallationItem(inst, report, !!isRecommended));
+      }
+      for (const obs of element.observed) {
+        items.push(new ObservedArtifactItem(obs));
+      }
+      return groupByKind(items, (item) => item instanceof InstalledInstallationItem ? item.installation.kind : item.observed.kind);
     }
 
     if (element instanceof KindGroupItem) {
+      // Return the direct items inside this KindGroupItem (the actual installations/observations)
+      // They are rendered as ObservedArtifactItem or InstalledInstallationItem
       return element.items;
     }
 
@@ -970,5 +1079,24 @@ export class InstalledTreeDataProvider
 
   private getInstallKey(inst: ManagedInstallation): string {
     return `${inst.assistant}:${inst.scope}:${inst.projectPath ?? ''}:${inst.name}`;
+  }
+}
+
+export class AssistantTreeDataProvider implements vscode.TreeDataProvider<InstalledTreeItem> {
+  constructor(
+    private readonly provider: InstalledTreeDataProvider,
+    private readonly assistantId: AssistantId
+  ) {}
+
+  get onDidChangeTreeData(): vscode.Event<InstalledTreeItem | undefined | null | void> {
+    return this.provider.onDidChangeTreeData;
+  }
+
+  getTreeItem(element: InstalledTreeItem): vscode.TreeItem {
+    return this.provider.getTreeItem(element);
+  }
+
+  getChildren(element?: InstalledTreeItem): vscode.ProviderResult<InstalledTreeItem[]> {
+    return this.provider.getChildren(element, this.assistantId);
   }
 }
