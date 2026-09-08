@@ -410,7 +410,7 @@ describe('UI TreeDataProviders', () => {
       }
     });
 
-    it('prefixes an installed artifact\'s label with the inline icon of every assistant it is installed in', () => {
+    it('shows which assistants an artifact is installed in via description and tooltip, not the label', () => {
       const provider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any);
       const source: Source = { id: 'src-1', type: 'local-folder', scope: 'project' };
       const pkg: Package = { id: 'src-1:pkg', sourceId: 'src-1', nativeFormat: 'claude-skill', artifacts: [] };
@@ -427,11 +427,13 @@ describe('UI TreeDataProviders', () => {
       ]);
 
       const installedTreeItem = provider.getTreeItem(installedItem);
-      assert.strictEqual(installedTreeItem.label, '$(ai-swissknife-claude-code)$(ai-swissknife-kilo-code) my-skill');
+      assert.strictEqual(installedTreeItem.label, 'my-skill');
+      assert.strictEqual(installedTreeItem.description, 'installed: claude-code, kilo-code');
       assert.ok((installedTreeItem.tooltip as string).includes('Installed in: claude-code, kilo-code'));
 
       const notInstalledTreeItem = provider.getTreeItem(notInstalledItem);
       assert.strictEqual(notInstalledTreeItem.label, 'other-skill');
+      assert.strictEqual(notInstalledTreeItem.description, undefined);
       assert.ok(!(notInstalledTreeItem.tooltip as string).includes('Installed in:'));
     });
 

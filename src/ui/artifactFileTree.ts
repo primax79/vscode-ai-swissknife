@@ -72,6 +72,34 @@ export function getArtifactFileChildren(element: ArtifactFileItem): ArtifactFile
 }
 
 /**
+ * Whether an artifact's own root path is worth an expand arrow at all: a
+ * real directory to browse (skills), or a single existing file that can be
+ * shown as its own one-item "contents" (agent/command/hook/rule/
+ * mcp-server) — so every kind gets the same expand-to-preview affordance
+ * instead of only directory-based ones.
+ */
+export function hasArtifactRootChildren(artifactPath: string | undefined): boolean {
+  if (!artifactPath) return false;
+  return isBrowsableDirectory(artifactPath) || fs.existsSync(artifactPath);
+}
+
+/**
+ * Children to show when expanding an artifact's own root row: the full
+ * directory listing for a skill, or the artifact's single file wrapped as
+ * one child for every other kind.
+ */
+export function getArtifactRootChildren(artifactPath: string | undefined, readonly: boolean): ArtifactFileItem[] {
+  if (!artifactPath) return [];
+  if (isBrowsableDirectory(artifactPath)) {
+    return listArtifactFiles(artifactPath, readonly);
+  }
+  if (fs.existsSync(artifactPath)) {
+    return [new ArtifactFileItem(path.basename(artifactPath), artifactPath, false, readonly)];
+  }
+  return [];
+}
+
+/**
  * Serves read-only previews of cached source files under the
  * `ai-swissknife-readonly-file` scheme, so opening them can never be
  * mistaken for editing the user's own files (there is nothing to save

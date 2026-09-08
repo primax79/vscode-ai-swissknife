@@ -17,7 +17,7 @@ import { planInstall } from '../engine/plan';
 import { applyInstall } from '../engine/apply';
 import type { PreparedInstall } from '../engine/types';
 import { getWorkspaceRoot } from './workspacePicker';
-import { getAssistantIconPath, getAssistantInlineIcon } from './assistantIcons';
+import { getAssistantIconPath } from './assistantIcons';
 import { getKindIconName } from './kindIcons';
 import { previewProvider } from './previewProvider';
 import type { SourceItem } from './sourcesView';
@@ -25,8 +25,8 @@ import {
   ArtifactFileItem,
   getArtifactFileChildren,
   getArtifactFileTreeItem,
-  isBrowsableDirectory,
-  listArtifactFiles,
+  getArtifactRootChildren,
+  hasArtifactRootChildren,
   openArtifactFile,
   resolveArtifactPreviewPath,
 } from './artifactFileTree';
@@ -449,13 +449,23 @@ export class AvailableTreeDataProvider
 
     const artifact = element.artifact;
     const installedIn = this.getInstalledAssistants(element.source.id, artifact.id);
-    const labelPrefix = installedIn.length > 0 ? `${installedIn.map(getAssistantInlineIcon).join('')} ` : '';
-    const isDir = isBrowsableDirectory(artifact.path);
+    const isExpandable = hasArtifactRootChildren(artifact.path);
     const item = new vscode.TreeItem(
-      `${labelPrefix}${artifact.name}`,
-      isDir ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
+      artifact.name,
+      isExpandable ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
     );
-    item.description = element.isRecommended ? `${artifact.description || ''} $(star-full)`.trim() : artifact.description;
+    const descriptionParts: string[] = [];
+    if (installedIn.length > 0) {
+      descriptionParts.push(`installed: ${installedIn.join(', ')}`);
+    }
+    if (artifact.description) {
+      descriptionParts.push(artifact.description);
+    }
+    let description = descriptionParts.join(' — ');
+    if (element.isRecommended) {
+      description = `${description} ★`.trim();
+    }
+    item.description = description || undefined;
     item.tooltip = `Kind: ${artifact.kind}\nSource: ${element.source.id}\nPackage: ${element.pkg.id}${
       artifact.description ? `\nDescription: ${artifact.description}` : ''
     }${installedIn.length > 0 ? `\nInstalled in: ${installedIn.join(', ')}` : ''}`;
@@ -530,15 +540,11 @@ export class AvailableTreeDataProvider
     }
 
     if (element instanceof AvailableArtifactItem) {
-      const artifactPath = element.artifact.path;
-      if (isBrowsableDirectory(artifactPath)) {
-        // Files from local-folder sources are the user's own, editable copy;
-        // everything else (git-*, remote-url) lives in a replaceable local
-        // clone/cache, so it's browsed read-only.
-        const readonly = element.source.type !== 'local-folder';
-        return listArtifactFiles(artifactPath, readonly);
-      }
-      return [];
+      // Files from local-folder sources are the user's own, editable copy;
+      // everything else (git-*, remote-url) lives in a replaceable local
+      // clone/cache, so it's browsed read-only.
+      const readonly = element.source.type !== 'local-folder';
+      return getArtifactRootChildren(element.artifact.path, readonly);
     }
 
     return [];

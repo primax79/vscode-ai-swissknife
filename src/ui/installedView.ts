@@ -267,7 +267,7 @@ export class InstalledTreeDataProvider {
 
       let desc = `${inst.kind} [managed]`;
       if (element.isRecommended) {
-        desc += ' $(star-full)';
+        desc += ' ★';
       }
       let iconName = getKindIconName(inst.kind);
 
