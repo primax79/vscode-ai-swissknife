@@ -153,6 +153,7 @@ export class DashboardPanel {
           case 'promote':
             if (message.observed) {
               await this._provider.doPromoteItem(message.observed as ObservedArtifact);
+              this._refreshCallback();
               await this.update();
             }
             break;
@@ -175,6 +176,7 @@ export class DashboardPanel {
               } else {
                 vscode.window.showInformationMessage(`Promoted ${count} identical item(s) to managed installations.`);
               }
+              this._refreshCallback();
               await this.update();
             }
             break;
@@ -192,6 +194,7 @@ export class DashboardPanel {
                   sourceInstallation: inst,
                 },
                 () => {
+                  this._refreshCallback();
                   this.update();
                   this._provider.refresh();
                 }
@@ -201,12 +204,14 @@ export class DashboardPanel {
           case 'copyItem':
             if (message.item) {
               await this._provider.doSyncItem(message.item);
+              this._refreshCallback();
               await this.update();
             }
             break;
           case 'moveItem':
             if (message.item) {
               await this._provider.doMoveItem(message.item as ManagedInstallation);
+              this._refreshCallback();
               await this.update();
             }
             break;
