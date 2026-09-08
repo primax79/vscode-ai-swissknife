@@ -411,6 +411,31 @@ export function activate(context: vscode.ExtensionContext) {
     sourcesTreeView,
     ...assistantProviders,
 
+    vscode.commands.registerCommand('aiSwissknife.configureEnabledAssistants', async () => {
+      const config = vscode.workspace.getConfiguration('aiSwissknife');
+      const enabledConfig = config.get('enabledAssistants') || {};
+      const currentConfig = typeof enabledConfig === 'object' && enabledConfig !== null ? (enabledConfig as Record<string, boolean>) : {};
+      
+      const picked = await vscode.window.showQuickPick(
+        ALL_ADAPTERS.map((a) => ({
+          label: a.displayName,
+          picked: currentConfig[a.assistant] !== false,
+          assistantId: a.assistant
+        })),
+        {
+          canPickMany: true,
+          placeHolder: 'Select which assistants to enable'
+        }
+      );
+
+      if (picked !== undefined) {
+        const newValue: Record<string, boolean> = {};
+        for (const adapter of ALL_ADAPTERS) {
+          newValue[adapter.assistant] = picked.some((p) => p.assistantId === adapter.assistant);
+        }
+        await config.update('enabledAssistants', newValue, vscode.ConfigurationTarget.Global);
+      }
+    }),
     vscode.commands.registerCommand('aiSwissknife.addSource', () => sourcesProvider.addSource()),
     vscode.commands.registerCommand('aiSwissknife.removeSource', (item?: SourceItem) =>
       sourcesProvider.removeSource(item)
