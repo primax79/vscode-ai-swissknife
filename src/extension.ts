@@ -1,8 +1,5 @@
 import * as vscode from 'vscode';
-import type { AssistantId, Scope, ItemKind, Source } from './domain/types';
-import { readManifest, writeManifest, fromDesiredSource, type DesiredSource } from './domain/registry';
-import type { SourceResolution } from './sources/types';
-import { getSourceResolver } from './sources/registry';
+import type { AssistantId, Scope, ItemKind } from './domain/types';
 import { SourcesTreeDataProvider, SourceItem } from './ui/sourcesView';
 import {
   AvailableTreeDataProvider,
@@ -39,122 +36,12 @@ export {
   type PendingCounts,
 } from './engine/pendingCounts';
 
-async function resolveSourcePackages(source: Source): Promise<SourceResolution> {
-  try {
-    const resolver = getSourceResolver(source.type);
-    return await resolver.resolve(source);
-  } catch {
-    return { packages: [], diagnostics: [] };
-  }
-}
-
-/**
- * Recommending an item requires a sourceId+artifactId that a collaborator
- * cloning the project can actually resolve. This handles the two gaps a
- * plain installed item can have: no source tracked at all (prompts to pick
- * or register one, then pick the matching artifact), or a source that's
- * only registered globally on this machine (offers to also register it at
- * project scope, so it travels with the repo).
- */
-async function ensureRecommendableSource(
-  sourcesProvider: SourcesTreeDataProvider,
-  projectRoot: string,
-  itemName: string,
-  itemKind: ItemKind,
-  existingSourceId?: string,
-  existingArtifactId?: string
-): Promise<{ sourceId: string; artifactId: string } | undefined> {
-  const projectManifest = await readManifest('project', projectRoot);
-  const globalManifest = await readManifest('global');
-
-  if (existingSourceId && existingArtifactId) {
-    const alreadyPortable = projectManifest.sources.some((s) => s.id === existingSourceId);
-    if (alreadyPortable) {
-      return { sourceId: existingSourceId, artifactId: existingArtifactId };
-    }
-
-    const globalSource = globalManifest.sources.find((s) => s.id === existingSourceId);
-    if (!globalSource) {
-      // Unregistered anywhere findable — let the resolution engine report it as broken.
-      return { sourceId: existingSourceId, artifactId: existingArtifactId };
-    }
-
-    const choice = await vscode.window.showInformationMessage(
-      `Source "${existingSourceId}" is only registered globally on this machine. To make this recommendation work for anyone who opens the project, it also needs to be registered as a project source.`,
-      { modal: true },
-      'Add & Continue'
-    );
-    if (choice !== 'Add & Continue') return undefined;
-
-    projectManifest.sources.push({ ...globalSource });
-    await writeManifest('project', projectManifest, projectRoot);
-    sourcesProvider.refresh();
-    return { sourceId: existingSourceId, artifactId: existingArtifactId };
-  }
-
-  // Untracked item: let the user point at the source that actually provides it.
-  const bySourceId = new Map<string, { desired: DesiredSource; scope: Scope }>();
-  for (const s of globalManifest.sources) bySourceId.set(s.id, { desired: s, scope: 'global' });
-  for (const s of projectManifest.sources) bySourceId.set(s.id, { desired: s, scope: 'project' });
-
-  const ADD_NEW = '$(add) Register a new source...';
-  const picked = await vscode.window.showQuickPick(
-    [
-      { label: ADD_NEW },
-      ...Array.from(bySourceId.values()).map((sc) => ({
-        label: sc.desired.name ?? sc.desired.id,
-        description: `${sc.desired.type} (${sc.scope})`,
-        sc,
-      })),
-    ],
-    { placeHolder: `"${itemName}" isn't tracked to a source yet — select the one that provides it` }
-  );
-  if (!picked) return undefined;
-
-  let runtimeSource: Source | undefined;
-  if (picked.label === ADD_NEW) {
-    runtimeSource = await sourcesProvider.addSource('project');
-    if (!runtimeSource) return undefined;
-  } else if ('sc' in picked) {
-    const { desired, scope } = picked.sc;
-    runtimeSource = fromDesiredSource(desired, scope === 'project' ? projectRoot : undefined);
-    if (scope === 'global') {
-      const freshProjectManifest = await readManifest('project', projectRoot);
-      if (!freshProjectManifest.sources.some((s) => s.id === desired.id)) {
-        freshProjectManifest.sources.push({ ...desired });
-        await writeManifest('project', freshProjectManifest, projectRoot);
-        sourcesProvider.refresh();
-      }
-    }
-  } else {
-    return undefined;
-  }
-
-  let resolution: SourceResolution;
-  try {
-    resolution = await resolveSourcePackages(runtimeSource);
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    vscode.window.showErrorMessage(`Failed to resolve source "${runtimeSource.id}": ${msg}`);
-    return undefined;
-  }
-
-  const candidates = resolution.packages.flatMap((pkg) =>
-    pkg.artifacts.filter((a) => a.kind === itemKind).map((artifact) => ({ pkg, artifact }))
-  );
-  if (candidates.length === 0) {
-    vscode.window.showWarningMessage(`No ${itemKind} artifacts found in source "${runtimeSource.id}".`);
-    return undefined;
-  }
-
-  const artifactChoice = await vscode.window.showQuickPick(
-    candidates.map((c) => ({ label: c.artifact.name, description: c.pkg.id, c })),
-    { placeHolder: `Select the artifact matching "${itemName}"` }
-  );
-  if (!artifactChoice) return undefined;
-
-  return { sourceId: runtimeSource.id, artifactId: artifactChoice.c.artifact.id };
-}
+import {
+  recommendAvailableArtifact,
+  recommendInstalledArtifact,
+  unrecommendAvailableArtifact,
+  unrecommendInstalledArtifact,
+} from './ui/recommendations';
 
 export async function handleRecommendForWorkspace(
   item: AvailableArtifactItem | InstalledInstallationItem | undefined,
@@ -167,68 +54,20 @@ export async function handleRecommendForWorkspace(
     return;
   }
 
-  let sourceId: string;
-  let artifactId: string;
-  let assistant: AssistantId;
-
   const projectRoot = await getWorkspaceRoot();
   if (!projectRoot) return;
 
+  let changed = false;
+
   if (item instanceof AvailableArtifactItem) {
-    if (item.source.scope !== 'project') {
-      vscode.window.showWarningMessage(`Cannot recommend global-scope items.`);
-      return;
-    }
-    const assistantPick = await vscode.window.showQuickPick(
-      ALL_ADAPTERS.map(a => a.assistant),
-      {
-        placeHolder: 'Select target AI assistant for recommendation',
-      }
-    );
-    if (!assistantPick) return;
-
-    sourceId = item.source.id;
-    artifactId = item.artifact.id;
-    assistant = assistantPick as AssistantId;
+    changed = await recommendAvailableArtifact(item.source.id, item.source.scope, item.artifact.id, projectRoot);
   } else if (item instanceof InstalledInstallationItem) {
-    const inst = item.installation;
-    const resolved = await ensureRecommendableSource(
-      sourcesProvider,
-      projectRoot,
-      inst.name,
-      inst.kind,
-      inst.sourceId,
-      inst.artifactId
-    );
-    if (!resolved) return;
-
-    sourceId = resolved.sourceId;
-    artifactId = resolved.artifactId;
-    assistant = inst.assistant;
-  } else {
-    return;
+    changed = await recommendInstalledArtifact(item.installation, sourcesProvider, projectRoot);
   }
 
-  try {
-    const manifest = await readManifest('project', projectRoot);
-    const existingIndex = manifest.desiredInstallations.findIndex(
-      (d) => d.sourceId === sourceId && d.artifactId === artifactId && d.assistant === assistant
-    );
-    if (existingIndex === -1) {
-      manifest.desiredInstallations.push({
-        sourceId,
-        artifactId,
-        assistant,
-        scope: 'project',
-      });
-      await writeManifest('project', manifest, projectRoot);
-      availableProvider.refresh();
-      installedProvider.refresh();
-      vscode.window.showInformationMessage(`Item recommended for workspace.`);
-    }
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    vscode.window.showErrorMessage(`Failed to recommend item: ${msg}`);
+  if (changed) {
+    availableProvider.refresh();
+    installedProvider.refresh();
   }
 }
 
@@ -242,63 +81,20 @@ export async function handleUnrecommendForWorkspace(
     return;
   }
 
-  let sourceId: string;
-  let artifactId: string;
-  let assistant: AssistantId;
-
-  if (item instanceof AvailableArtifactItem) {
-    if (item.source.scope !== 'project') {
-      vscode.window.showWarningMessage(`Cannot unrecommend global-scope items.`);
-      return;
-    }
-    // We need the assistant. If invoked from Available view, we don't know which assistant they want to unrecommend for if multiple exist.
-    // Wait, the specification says:
-    // "unrecommendForWorkspace: same read, filter out the matching entry, write back."
-    // Does Available view unrecommend prompt for assistant? The spec doesn't explicitly mention it for unrecommend.
-    // But how can we filter without the assistant? If we prompt, we should do it. Let's see:
-    const assistantPick = await vscode.window.showQuickPick(
-      ALL_ADAPTERS.map(a => a.assistant),
-      {
-        placeHolder: 'Select target AI assistant to remove recommendation',
-      }
-    );
-    if (!assistantPick) return;
-
-    sourceId = item.source.id;
-    artifactId = item.artifact.id;
-    assistant = assistantPick as AssistantId;
-  } else if (item instanceof InstalledInstallationItem) {
-    const inst = item.installation;
-    if (!inst.sourceId || !inst.artifactId) {
-      vscode.window.showWarningMessage("This item isn't tracked to a source and can't be unrecommended.");
-      return;
-    }
-
-    sourceId = inst.sourceId;
-    artifactId = inst.artifactId;
-    assistant = inst.assistant;
-  } else {
-    return;
-  }
-
   const projectRoot = await getWorkspaceRoot();
   if (!projectRoot) return;
 
-  try {
-    const manifest = await readManifest('project', projectRoot);
-    const existingIndex = manifest.desiredInstallations.findIndex(
-      (d) => d.sourceId === sourceId && d.artifactId === artifactId && d.assistant === assistant
-    );
-    if (existingIndex !== -1) {
-      manifest.desiredInstallations.splice(existingIndex, 1);
-      await writeManifest('project', manifest, projectRoot);
-      availableProvider.refresh();
-      installedProvider.refresh();
-      vscode.window.showInformationMessage(`Recommendation removed.`);
-    }
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    vscode.window.showErrorMessage(`Failed to unrecommend item: ${msg}`);
+  let changed = false;
+
+  if (item instanceof AvailableArtifactItem) {
+    changed = await unrecommendAvailableArtifact(item.source.id, item.source.scope, item.artifact.id, projectRoot);
+  } else if (item instanceof InstalledInstallationItem) {
+    changed = await unrecommendInstalledArtifact(item.installation, projectRoot);
+  }
+
+  if (changed) {
+    availableProvider.refresh();
+    installedProvider.refresh();
   }
 }
 
