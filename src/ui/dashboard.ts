@@ -112,6 +112,10 @@ export class DashboardPanel {
               await this._provider.doDiffAgainstOriginal(message.item);
             }
             break;
+
+          case 'createArtifact':
+            vscode.commands.executeCommand('aiSwissknife.createArtifact');
+            break;
           case 'requestDetail':
             if (message.key) {
               await this.handleRequestDetail(message.key);
@@ -320,6 +324,136 @@ export class DashboardPanel {
       updatesAvailable,
       modifiedLocally
     });
+  }
+
+
+  private getOverviewHtml(): string {
+    return `<div class="empty-state">
+      <p>Overview section placeholder</p>
+    </div>`;
+  }
+
+  private getSourcesCatalogHtml(): string {
+    return `<div class="empty-state">
+      <p>Sources & Catalog section placeholder</p>
+    </div>`;
+  }
+
+  private getRecommendationsHtml(): string {
+    return `<div class="empty-state">
+      <p>Recommendations section placeholder</p>
+    </div>`;
+  }
+
+  private getInstalledSectionHtml(
+    sources: Source[],
+    managed: ManagedInstallation[],
+    observed: ObservedArtifact[],
+    reports: DriftReport[],
+    scanning: boolean,
+    totalInstalled: number,
+    totalUnmanaged: number,
+    updatesAvailable: number,
+    modifiedLocally: number,
+    identicalCount: number,
+    environmentPills: string,
+    rowsHtml: string
+  ): string {
+    const escapeHtml = (unsafe: string) => (unsafe || '').toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    
+    return `
+  <div class="stats-ribbon">
+    <div class="stat-chip">
+      <span class="stat-num" id="stat-managed">${totalInstalled}</span>
+      <span class="stat-label">Managed Installations</span>
+    </div>
+    <div class="stat-chip stat-info">
+      <span class="stat-num" id="stat-updates-available">${updatesAvailable}</span>
+      <span class="stat-label">Updates Available</span>
+    </div>
+    <div class="stat-chip stat-warning">
+      <span class="stat-num" id="stat-modified-locally">${modifiedLocally}</span>
+      <span class="stat-label">Modified Locally</span>
+    </div>
+    <div class="stat-chip stat-unmanaged">
+      <span class="stat-num" id="stat-unmanaged">${totalUnmanaged}</span>
+      <span class="stat-label" id="stat-unmanaged-lbl">Unmanaged Discovered (${identicalCount} identical, ${totalUnmanaged - identicalCount} custom)</span>
+    </div>
+  </div>
+  
+  <div class="breadcrumb" id="breadcrumb" style="display: none;">
+    <span class="breadcrumb-text">Active filters:</span>
+    <span id="breadcrumb-chips"></span>
+  </div>
+
+  <div class="toolbar filters-bar">
+    <div class="filter-group">
+      <button class="filter-pill env-pill active" data-env="all" onclick="setEnvFilter('all')">All Env</button>
+      ${environmentPills}
+    </div>
+    <div class="filter-group">
+      <select class="filter-select" id="scopeFilter" onchange="setScopeFilter(this.value)">
+        <option value="all">Scope: All</option>
+        <option value="global">Scope: Global</option>
+        <option value="project">Scope: Project</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <select class="filter-select" id="membershipFilter" onchange="setMembershipFilter(this.value)">
+        <option value="all">Membership: All</option>
+        <option value="managed">Membership: Managed</option>
+        <option value="unmanaged">Membership: Unmanaged</option>
+      </select>
+    </div>
+    <div class="filter-group" style="flex: 1;">
+      <input type="text" class="search-input" id="searchBox" placeholder="Filter by name..." oninput="filterTable()">
+    </div>
+  </div>
+  
+  <div class="toolbar">
+    <div class="tabs">
+      <button class="tab-btn active" onclick="setKindFilter('all', this)">All Kinds</button>
+      <button class="tab-btn" onclick="setKindFilter('skill', this)">Skills</button>
+      <button class="tab-btn" onclick="setKindFilter('agent', this)">Agents</button>
+      <button class="tab-btn" onclick="setKindFilter('command', this)">Commands</button>
+      <button class="tab-btn" onclick="setKindFilter('mcp-server', this)">MCPs</button>
+      <button class="tab-btn" onclick="setKindFilter('hook', this)">Hooks</button>
+      <button class="tab-btn" onclick="setKindFilter('rule', this)">Rules</button>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Kind</th>
+        <th>Name</th>
+        <th>Assistant</th>
+        <th>Scope</th>
+        <th>Drift / Status</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody id="unifiedTable">
+      ${rowsHtml}
+    </tbody>
+  </table>
+
+  <div id="detailPanel">
+    <h3 id="detailTitle">Item Details</h3>
+    <div class="detail-section">
+      <div class="detail-section-title">Origin</div>
+      <div id="detailOrigin"></div>
+    </div>
+    <div class="detail-section" id="diffSection" style="display: none;">
+      <button class="btn btn-sm btn-secondary" onclick="diffItem()">Diff vs. original</button>
+    </div>
+    <div class="detail-section" id="crossFrameworkSection" style="display: none;">
+      <div class="detail-section-title">Installed also in</div>
+      <ul class="cross-framework-list" id="crossFrameworkList"></ul>
+    </div>
+    <div class="detail-actions" id="detailActions"></div>
+  </div>
+`;
   }
 
   public getHtml(
@@ -691,7 +825,19 @@ export class DashboardPanel {
       padding-top: 12px;
       border-top: 1px solid var(--border);
     }
-  </style>
+  
+    .section-tab-btn.active {
+      border-bottom-color: var(--btn-bg) !important;
+      color: var(--btn-bg) !important;
+    }
+    .empty-state {
+      padding: 40px;
+      text-align: center;
+      opacity: 0.6;
+      border: 1px dashed var(--border);
+      border-radius: 6px;
+    }
+</style>
 </head>
 <body>
   <div class="header">
@@ -699,111 +845,55 @@ export class DashboardPanel {
       <h1>AI Swissknife Dashboard</h1>
       <p>Inventory, drift tracking, and unmanaged artifact promotion</p>
     </div>
+    
     <div class="header-actions">
       ${scanning ? '<div class="scan-indicator" id="scan-indicator"><div class="spinner"></div>Scanning for updates…</div>' : ''}
+      <button class="btn btn-primary" onclick="vscode.postMessage({ command: 'createArtifact' })">+ New Artifact</button>
       <button class="btn btn-secondary" onclick="refreshState()">Refresh</button>
       ${identicalCount > 0 ? '<button class="btn btn-primary" onclick="promoteAllIdentical()">Promote ' + identicalCount + ' Identical Source Items</button>' : ''}
     </div>
   </div>
+  <div class="toolbar section-tabs" style="border-bottom: 1px solid var(--border); margin-bottom: 16px; padding-bottom: 0;">
+    <div class="tabs" style="gap: 16px; margin-bottom: -1px;">
+      <button class="tab-btn section-tab-btn" data-section="overview" onclick="switchSection('overview')" style="border: none; border-bottom: 2px solid transparent; border-radius: 0; padding: 8px 12px; font-size: 12px; background: transparent;">Overview</button>
+      <button class="tab-btn section-tab-btn active" data-section="installed" onclick="switchSection('installed')" style="border: none; border-bottom: 2px solid var(--btn-bg); border-radius: 0; padding: 8px 12px; font-size: 12px; background: transparent; color: var(--fg);">Installed</button>
+      <button class="tab-btn section-tab-btn" data-section="catalog" onclick="switchSection('catalog')" style="border: none; border-bottom: 2px solid transparent; border-radius: 0; padding: 8px 12px; font-size: 12px; background: transparent;">Sources &amp; Catalog</button>
+      <button class="tab-btn section-tab-btn" data-section="recommendations" onclick="switchSection('recommendations')" style="border: none; border-bottom: 2px solid transparent; border-radius: 0; padding: 8px 12px; font-size: 12px; background: transparent;">Recommendations</button>
+    </div>
+  </div>
 
-  <div class="stats-ribbon">
-    <div class="stat-chip">
-      <span class="stat-num" id="stat-managed">${totalInstalled}</span>
-      <span class="stat-label">Managed Installations</span>
-    </div>
-    <div class="stat-chip stat-info">
-      <span class="stat-num" id="stat-updates-available">${updatesAvailable}</span>
-      <span class="stat-label">Updates Available</span>
-    </div>
-    <div class="stat-chip stat-warning">
-      <span class="stat-num" id="stat-modified-locally">${modifiedLocally}</span>
-      <span class="stat-label">Modified Locally</span>
-    </div>
-    <div class="stat-chip stat-unmanaged">
-      <span class="stat-num" id="stat-unmanaged">${totalUnmanaged}</span>
-      <span class="stat-label" id="stat-unmanaged-lbl">Unmanaged Discovered (${identicalCount} identical, ${totalUnmanaged - identicalCount} custom)</span>
-    </div>
+  <div id="section-overview" class="dashboard-section" style="display: none;">
+    ${this.getOverviewHtml()}
+  </div>
+  <div id="section-installed" class="dashboard-section" style="display: block;">
+    ${this.getInstalledSectionHtml(sources, managed, observed, reports, scanning, totalInstalled, totalUnmanaged, updatesAvailable, modifiedLocally, identicalCount, environmentPills, rowsHtml)}
+  </div>
+  <div id="section-catalog" class="dashboard-section" style="display: none;">
+    ${this.getSourcesCatalogHtml()}
+  </div>
+  <div id="section-recommendations" class="dashboard-section" style="display: none;">
+    ${this.getRecommendationsHtml()}
   </div>
   
-  <div class="breadcrumb" id="breadcrumb" style="display: none;">
-    <span class="breadcrumb-text">Active filters:</span>
-    <span id="breadcrumb-chips"></span>
-  </div>
-
-  <div class="toolbar filters-bar">
-    <div class="filter-group">
-      <button class="filter-pill env-pill active" data-env="all" onclick="setEnvFilter('all')">All Env</button>
-      ${environmentPills}
-    </div>
-    <div class="filter-group">
-      <select class="filter-select" id="scopeFilter" onchange="setScopeFilter(this.value)">
-        <option value="all">Scope: All</option>
-        <option value="global">Scope: Global</option>
-        <option value="project">Scope: Project</option>
-      </select>
-    </div>
-    <div class="filter-group">
-      <select class="filter-select" id="membershipFilter" onchange="setMembershipFilter(this.value)">
-        <option value="all">Membership: All</option>
-        <option value="managed">Membership: Managed</option>
-        <option value="unmanaged">Membership: Unmanaged</option>
-      </select>
-    </div>
-    <div class="filter-group" style="flex: 1;">
-      <input type="text" class="search-input" id="searchBox" placeholder="Filter by name..." oninput="filterTable()">
-    </div>
-  </div>
-  
-  <div class="toolbar">
-    <div class="tabs">
-      <button class="tab-btn active" onclick="setKindFilter('all', this)">All Kinds</button>
-      <button class="tab-btn" onclick="setKindFilter('skill', this)">Skills</button>
-      <button class="tab-btn" onclick="setKindFilter('agent', this)">Agents</button>
-      <button class="tab-btn" onclick="setKindFilter('command', this)">Commands</button>
-      <button class="tab-btn" onclick="setKindFilter('mcp-server', this)">MCPs</button>
-      <button class="tab-btn" onclick="setKindFilter('hook', this)">Hooks</button>
-      <button class="tab-btn" onclick="setKindFilter('rule', this)">Rules</button>
-    </div>
-  </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th>Kind</th>
-        <th>Name</th>
-        <th>Assistant</th>
-        <th>Scope</th>
-        <th>Drift / Status</th>
-        <th>Action</th>
-      </tr>
-    </thead>
-    <tbody id="unifiedTable">
-      ${rowsHtml}
-    </tbody>
-  </table>
-
-  <div id="detailPanel">
-    <h3 id="detailTitle">Item Details</h3>
-    <div class="detail-section">
-      <div class="detail-section-title">Origin</div>
-      <div id="detailOrigin"></div>
-    </div>
-    <div class="detail-section" id="diffSection" style="display: none;">
-      <button class="btn btn-sm btn-secondary" onclick="diffItem()">Diff vs. original</button>
-    </div>
-    <div class="detail-section" id="crossFrameworkSection" style="display: none;">
-      <div class="detail-section-title">Installed also in</div>
-      <ul class="cross-framework-list" id="crossFrameworkList"></ul>
-    </div>
-    <div class="detail-actions" id="detailActions"></div>
-  </div>
-
   <script type="application/json" id="managedDataJson">${JSON.stringify(managed).replace(/</g, '\\u003c')}</script>
   <script type="application/json" id="observedDataJson">${JSON.stringify(observed).replace(/</g, '\\u003c')}</script>
   <script type="application/json" id="sourceFilterJson">${JSON.stringify(sourceFilter ?? null).replace(/</g, '\\u003c')}</script>
 
   <script>
     const vscode = acquireVsCodeApi();
+    let currentSection = 'installed';
+    function switchSection(sectionId) {
+      currentSection = sectionId;
+      document.querySelectorAll('.dashboard-section').forEach(el => el.style.display = 'none');
+      document.querySelectorAll('.section-tab-btn').forEach(btn => btn.classList.remove('active'));
+      
+      const targetSection = document.getElementById('section-' + sectionId);
+      if (targetSection) targetSection.style.display = 'block';
+      
+      const targetBtn = document.querySelector('.section-tab-btn[data-section="' + sectionId + '"]');
+      if (targetBtn) targetBtn.classList.add('active');
+    }
+
     function escapeHtmlClient(unsafe) {
       return (unsafe || '')
         .toString()
