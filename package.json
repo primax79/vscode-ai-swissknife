@@ -109,6 +109,12 @@
         "category": "AI Swissknife"
       },
       {
+        "command": "aiSwissknife.diffAgainstOriginal",
+        "title": "Diff vs. Original",
+        "icon": "$(diff)",
+        "category": "AI Swissknife"
+      },
+      {
         "command": "aiSwissknife.promoteItem",
         "title": "Promote to Managed",
         "icon": "$(shield)",
@@ -241,6 +247,16 @@
         {
           "command": "aiSwissknife.updateItem",
           "when": "view == aiSwissknife.installed && viewItem =~ /^installedInstallation/",
+          "group": "inline@1"
+        },
+        {
+          "command": "aiSwissknife.diffAgainstOriginal",
+          "when": "view == aiSwissknife.installed && viewItem =~ /^installedInstallation.*:(modified-locally|modified-and-update-available)/",
+          "group": "inline@1"
+        },
+        {
+          "command": "aiSwissknife.diffAgainstOriginal",
+          "when": "view == aiSwissknife.installed && viewItem =~ /^observedArtifactItem.*:different/",
           "group": "inline@1"
         },
         {

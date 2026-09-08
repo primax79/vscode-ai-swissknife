@@ -297,6 +297,12 @@ export function activate(context: vscode.ExtensionContext) {
       installedProvider.promoteItem(item)
     ),
     vscode.commands.registerCommand(
+      'aiSwissknife.diffAgainstOriginal',
+      async (item?: InstalledInstallationItem | ObservedArtifactItem) => {
+        await installedProvider.diffAgainstOriginal(item);
+      }
+    ),
+    vscode.commands.registerCommand(
       'aiSwissknife.syncItem',
       async (item?: InstalledInstallationItem | ObservedArtifactItem) => {
         await installedProvider.syncItem(item);
