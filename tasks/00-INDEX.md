@@ -77,7 +77,7 @@ task breakdown.
 | 23       | 23  | [Cross-framework identity lookup + shared content accessor](23-cross-framework-lookup/plan.md) | ✅ done (23.1/23.2/23.3 merged)        | 13, 14                 | M    |
 | 24       | 24  | [Diff-vs-original + preview-before-install](24-diff-and-preview/plan.md)                 | ✅ done (24.1/24.2 merged)             | 23                     | M    |
 | 25       | 25  | [Move action + Promote disambiguation fix](25-move-and-promote-fix/plan.md)               | ✅ done (25.1/25.2/25.3/25.4/25.5 merged) | 14, 18              | M    |
-| 26       | 26  | [Dashboard rebuild: unified table, filters, detail](26-dashboard-rebuild/plan.md)          | 🚧 in progress (26.1 merged, 26.2 waiting on 24.1) | 16, 23, 24, 25 | L    |
+| 26       | 26  | [Dashboard rebuild: unified table, filters, detail](26-dashboard-rebuild/plan.md)          | ✅ done (26.1/26.2 merged)             | 16, 23, 24, 25         | L    |
 | 27       | 27  | [New Dashboard entry points](27-dashboard-entry-points/plan.md)                            | ✅ done (27.1/27.2 merged)             | 22, 26                 | S    |
 
 ## Specs
