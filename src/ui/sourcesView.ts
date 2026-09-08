@@ -25,6 +25,7 @@ import {
   CONFIG_TRANSFER_SCHEMA_VERSION,
   type ExportedConfigFile,
 } from '../engine/configTransfer';
+import { getSourceResolver } from '../sources/registry';
 
 export type SourceTreeItem =
   | ScopeGroupItem
@@ -51,20 +52,7 @@ export class SourceItem {
 }
 
 function getSourceTypeIcon(type: Source['type']): vscode.ThemeIcon {
-  switch (type) {
-    case 'local-folder':
-      return new vscode.ThemeIcon('folder');
-    case 'git-custom':
-      return new vscode.ThemeIcon('repo');
-    case 'git-marketplace':
-      return new vscode.ThemeIcon('extensions');
-    case 'git-single-item':
-      return new vscode.ThemeIcon('git-commit');
-    case 'remote-url':
-      return new vscode.ThemeIcon('link');
-    default:
-      return new vscode.ThemeIcon('source-control');
-  }
+  return new vscode.ThemeIcon(getSourceResolver(type).iconThemeId);
 }
 
 export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTreeItem> {
