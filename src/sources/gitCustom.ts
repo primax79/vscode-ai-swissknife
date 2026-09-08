@@ -10,7 +10,7 @@ import type {
   CanonicalHook,
   CanonicalRule,
 } from '../adapters/types';
-import type { SourceResolution } from './types';
+import type { SourceResolution, SourceResolver } from './types';
 import { readSkill } from '../adapters/codec';
 import { parseClaudeAgentMarkdown, parseClaudeCommandMarkdown } from '../adapters/claude';
 import {
@@ -508,3 +508,12 @@ export async function resolveArtifactContent(
     throw new Error(`Unsupported artifact kind: "${artifact.kind}"`);
   });
 }
+
+export const gitCustomResolver: SourceResolver = {
+  type: 'git-custom',
+  displayName: 'Git (custom)',
+  iconThemeId: 'repo',
+  resolve: resolveGitCustom,
+  resolveArtifactContent,
+};
+

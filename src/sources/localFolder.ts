@@ -9,7 +9,7 @@ import type {
   CanonicalHook,
   CanonicalRule,
 } from '../adapters/types';
-import type { SourceResolution } from './types';
+import type { SourceResolution, SourceResolver } from './types';
 import { readSkill } from '../adapters/codec';
 import { parseClaudeAgentMarkdown, parseClaudeCommandMarkdown } from '../adapters/claude';
 import {
@@ -397,3 +397,12 @@ export async function resolveArtifactContent(
 
   throw new Error(`Unsupported artifact kind: "${artifact.kind}"`);
 }
+
+export const localFolderResolver: SourceResolver = {
+  type: 'local-folder',
+  displayName: 'Local folder',
+  iconThemeId: 'folder',
+  resolve: resolveLocalFolder,
+  resolveArtifactContent,
+};
+

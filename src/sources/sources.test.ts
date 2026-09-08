@@ -6,8 +6,16 @@ import * as os from 'os';
 import * as path from 'path';
 import type { Source, ResolvedArtifact } from '../domain/types';
 import type { CanonicalSkill } from '../adapters/types';
-import { resolveGitSingleItem, resolveArtifactContent as resolveSingleItemContent } from './gitSingleItem';
-import { resolveRemoteUrl } from './remoteUrl';
+import {
+  resolveGitSingleItem,
+  resolveArtifactContent as resolveSingleItemContent,
+  gitSingleItemResolver,
+} from './gitSingleItem';
+import {
+  resolveRemoteUrl,
+  resolveArtifactContent as resolveRemoteUrlContent,
+  remoteUrlResolver,
+} from './remoteUrl';
 
 function runGitSync(args: string[], cwd: string): string {
   return child_process
@@ -97,5 +105,21 @@ describe('git-single-item & remote-url resolvers', () => {
     const pkg = resolution.packages[0];
     assert.strictEqual(pkg.artifacts[0].name, 'remote-agent');
     assert.strictEqual(pkg.artifacts[0].kind, 'agent');
+  });
+
+  it('exposes gitSingleItemResolver conforming to SourceResolver', () => {
+    assert.strictEqual(gitSingleItemResolver.type, 'git-single-item');
+    assert.strictEqual(gitSingleItemResolver.displayName, 'Git (single item)');
+    assert.strictEqual(gitSingleItemResolver.iconThemeId, 'git-commit');
+    assert.strictEqual(gitSingleItemResolver.resolve, resolveGitSingleItem);
+    assert.strictEqual(gitSingleItemResolver.resolveArtifactContent, resolveSingleItemContent);
+  });
+
+  it('exposes remoteUrlResolver conforming to SourceResolver', () => {
+    assert.strictEqual(remoteUrlResolver.type, 'remote-url');
+    assert.strictEqual(remoteUrlResolver.displayName, 'Remote URL');
+    assert.strictEqual(remoteUrlResolver.iconThemeId, 'link');
+    assert.strictEqual(remoteUrlResolver.resolve, resolveRemoteUrl);
+    assert.strictEqual(remoteUrlResolver.resolveArtifactContent, resolveRemoteUrlContent);
   });
 });

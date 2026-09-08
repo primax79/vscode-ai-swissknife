@@ -6,7 +6,7 @@ import * as os from 'os';
 import * as path from 'path';
 import type { Source, ResolvedArtifact } from '../domain/types';
 import type { CanonicalSkill, CanonicalAgent, CanonicalCommand, CanonicalMcpServer } from '../adapters/types';
-import { resolveGitMarketplace, resolveArtifactContent } from './gitMarketplace';
+import { resolveGitMarketplace, resolveArtifactContent, gitMarketplaceResolver } from './gitMarketplace';
 
 function runGitSync(args: string[], cwd: string): string {
   return child_process
@@ -189,4 +189,13 @@ describe('gitMarketplace — resolveGitMarketplace', () => {
     assert.strictEqual(mcpContent.content.id, 'db-service');
     assert.strictEqual(mcpContent.content.command, 'uvx');
   });
+
+  it('exposes gitMarketplaceResolver conforming to SourceResolver', () => {
+    assert.strictEqual(gitMarketplaceResolver.type, 'git-marketplace');
+    assert.strictEqual(gitMarketplaceResolver.displayName, 'Git marketplace');
+    assert.strictEqual(gitMarketplaceResolver.iconThemeId, 'extensions');
+    assert.strictEqual(gitMarketplaceResolver.resolve, resolveGitMarketplace);
+    assert.strictEqual(gitMarketplaceResolver.resolveArtifactContent, resolveArtifactContent);
+  });
 });
+

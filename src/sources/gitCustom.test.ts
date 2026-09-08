@@ -7,7 +7,7 @@ import * as path from 'path';
 import type { Source, ResolvedArtifact } from '../domain/types';
 import type { CanonicalSkill, CanonicalAgent, CanonicalCommand } from '../adapters/types';
 import type { SourceResolution } from './types';
-import { resolveGitCustom, resolveArtifactContent, gitCustomMutex } from './gitCustom';
+import { resolveGitCustom, resolveArtifactContent, gitCustomMutex, gitCustomResolver } from './gitCustom';
 
 function runGitSync(args: string[], cwd: string): string {
   return child_process
@@ -374,4 +374,13 @@ describe('gitCustom — resolveGitCustom with committed fixtures in dynamic repo
       /source\.url is required/
     );
   });
+
+  it('exposes gitCustomResolver conforming to SourceResolver', () => {
+    assert.strictEqual(gitCustomResolver.type, 'git-custom');
+    assert.strictEqual(gitCustomResolver.displayName, 'Git (custom)');
+    assert.strictEqual(gitCustomResolver.iconThemeId, 'repo');
+    assert.strictEqual(gitCustomResolver.resolve, resolveGitCustom);
+    assert.strictEqual(gitCustomResolver.resolveArtifactContent, resolveArtifactContent);
+  });
 });
+

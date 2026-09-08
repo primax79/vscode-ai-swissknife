@@ -10,7 +10,7 @@ import type {
   CanonicalHook,
   CanonicalRule,
 } from '../adapters/types';
-import type { SourceResolution, DetectionDiagnostic } from './types';
+import type { SourceResolution, SourceResolver, DetectionDiagnostic } from './types';
 import { readSkill } from '../adapters/codec';
 import { parseClaudeAgentMarkdown, parseClaudeCommandMarkdown } from '../adapters/claude';
 import {
@@ -596,3 +596,12 @@ export async function resolveArtifactContent(
     throw new Error(`Unsupported artifact kind: "${artifact.kind}"`);
   });
 }
+
+export const gitMarketplaceResolver: SourceResolver = {
+  type: 'git-marketplace',
+  displayName: 'Git marketplace',
+  iconThemeId: 'extensions',
+  resolve: resolveGitMarketplace,
+  resolveArtifactContent,
+};
+
