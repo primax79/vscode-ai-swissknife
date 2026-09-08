@@ -38,3 +38,22 @@ export function getAdapterWithHomeRoot(id: AssistantId, homeRoot: string): Adapt
       throw new Error(`Unsupported assistant: ${id}`);
   }
 }
+
+export function getEnabledAdapters(): Adapter[] {
+  let vscode: any;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    vscode = require('vscode');
+  } catch {
+    return [...ALL_ADAPTERS];
+  }
+
+  const config = vscode.workspace.getConfiguration('aiSwissknife');
+  const enabledIds = config.get('enabledAssistants');
+
+  if (!enabledIds || !Array.isArray(enabledIds) || enabledIds.length === 0) {
+    return [...ALL_ADAPTERS];
+  }
+
+  return ALL_ADAPTERS.filter((a) => enabledIds.includes(a.assistant));
+}

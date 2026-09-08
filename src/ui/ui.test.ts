@@ -54,6 +54,8 @@ Module.prototype.require = function (id: string, ...rest: unknown[]) {
         get workspaceFolders() {
           return (globalThis as any).mockWorkspaceFolders || [];
         },
+        getConfiguration: () => ({ get: () => undefined }),
+        onDidChangeConfiguration: () => ({ dispose: () => {} }),
         createFileSystemWatcher: () => ({
           onDidChange: () => ({ dispose: () => {} }),
           onDidCreate: () => ({ dispose: () => {} }),
