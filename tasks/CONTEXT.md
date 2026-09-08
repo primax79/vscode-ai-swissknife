@@ -223,6 +223,38 @@ review, `_inbox/analyzed/codex-analysis-2.md` — don't let it drift again).
   would; matches VS Code's own user/workspace setting scopes. This was the
   first `contributes.configuration` this extension ever declared. See
   `specs/adapter-and-source-registries.md`.
+- **`aiSwissknife.enabledAssistants` is an object with one boolean
+  property per assistant id (all default `true`), not an array of
+  enabled ids** (revised 2026-09-08, post-testing). *Why:* an
+  array-of-enum-strings VS Code setting renders as a removable list + an
+  "add item" dropdown — it never shows all 5 assistants with a checkbox
+  each. An object-of-booleans renders as a fixed checklist, which is what
+  was actually wanted. `getEnabledAdapters()` (`src/adapters/registry.ts`)
+  treats a missing/non-`false` property as enabled.
+- **Any `showQuickPick` that lets the user pick a TARGET assistant (for
+  install/move/sync/recommend/create/anything else offering "which
+  assistant") must build its option list from `getEnabledAdapters()`, not
+  `ALL_ADAPTERS`.** *Why:* found as a real bug by live testing 2026-09-08 —
+  the sidebar correctly hid disabled assistants' sections, but every
+  target-assistant picker still listed all 5 regardless of the setting.
+  Only a closed set of sites are the deliberate exception and must keep
+  iterating `ALL_ADAPTERS` unfiltered: the per-assistant
+  `registerTreeDataProvider` loop and the `aiSwissknife.enabled.<id>`
+  context-key-setting loop in `extension.ts` (both must always
+  register/set a key for every adapter, enabled or not — visibility is
+  controlled by the `package.json` view's own `when` clause, not by
+  skipping registration), the `aiSwissknife.configureEnabledAssistants`
+  command's own picker (it must always offer all 5, or a disabled one
+  could never be re-enabled from it), `discovery.ts`'s installed-artifact
+  scan loop (an item already installed for a since-disabled assistant must
+  stay tracked, not silently dropped from state), and `registry.ts`'s own
+  internals. **This bit a concurrent initiative once already**: task 31.3
+  relocated `extension.ts`'s recommend/unrecommend `showQuickPick` logic
+  into `src/ui/recommendations.ts` while a fix for this exact bug was
+  in flight elsewhere, reintroducing the unfiltered picker at its new
+  location — any future code that moves or adds a target-assistant picker
+  must re-apply this rule at the new site, it does not travel
+  automatically with a copy-paste/relocation.
 
 ## Conventions
 
