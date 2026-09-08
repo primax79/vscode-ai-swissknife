@@ -10,7 +10,7 @@ import type {
   CanonicalHook,
   CanonicalRule,
 } from '../adapters/types';
-import type { SourceResolution } from './types';
+import type { SourceResolution, SourceResolver } from './types';
 import { parseClaudeAgentMarkdown, parseClaudeCommandMarkdown } from '../adapters/claude';
 import { extractSkillFrontmatter } from './detect';
 
@@ -160,3 +160,12 @@ export async function resolveArtifactContent(
 
   throw new Error(`Unsupported artifact kind for remote-url: ${artifact.kind}`);
 }
+
+export const remoteUrlResolver: SourceResolver = {
+  type: 'remote-url',
+  displayName: 'Remote URL',
+  iconThemeId: 'link',
+  resolve: resolveRemoteUrl,
+  resolveArtifactContent,
+};
+

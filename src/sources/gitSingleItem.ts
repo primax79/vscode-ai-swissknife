@@ -10,7 +10,7 @@ import type {
   CanonicalHook,
   CanonicalRule,
 } from '../adapters/types';
-import type { SourceResolution } from './types';
+import type { SourceResolution, SourceResolver } from './types';
 import { readSkill } from '../adapters/codec';
 import { parseClaudeAgentMarkdown, parseClaudeCommandMarkdown } from '../adapters/claude';
 import { extractSkillFrontmatter } from './detect';
@@ -202,3 +202,12 @@ export async function resolveArtifactContent(
     throw new Error(`Unsupported artifact kind: ${artifact.kind}`);
   });
 }
+
+export const gitSingleItemResolver: SourceResolver = {
+  type: 'git-single-item',
+  displayName: 'Git (single item)',
+  iconThemeId: 'git-commit',
+  resolve: resolveGitSingleItem,
+  resolveArtifactContent,
+};
+

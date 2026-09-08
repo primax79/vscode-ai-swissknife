@@ -6,7 +6,7 @@ import * as path from 'path';
 import type { Source, ResolvedArtifact } from '../domain/types';
 import type { CanonicalSkill, CanonicalCommand, CanonicalMcpServer } from '../adapters/types';
 import type { SourceResolution } from './types';
-import { resolveLocalFolder, resolveArtifactContent } from './localFolder';
+import { resolveLocalFolder, resolveArtifactContent, localFolderResolver } from './localFolder';
 
 function getFixturesRoot(): string {
   const candidateOut = path.join(__dirname, '__fixtures__');
@@ -195,4 +195,13 @@ describe('localFolder — resolveLocalFolder with committed fixtures', () => {
     assert.strictEqual(resolved.content.files.length, 1);
     assert.strictEqual(resolved.content.files[0].path, 'scripts/helper.sh');
   });
+
+  it('exposes localFolderResolver conforming to SourceResolver', () => {
+    assert.strictEqual(localFolderResolver.type, 'local-folder');
+    assert.strictEqual(localFolderResolver.displayName, 'Local folder');
+    assert.strictEqual(localFolderResolver.iconThemeId, 'folder');
+    assert.strictEqual(localFolderResolver.resolve, resolveLocalFolder);
+    assert.strictEqual(localFolderResolver.resolveArtifactContent, resolveArtifactContent);
+  });
 });
+
