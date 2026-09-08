@@ -123,6 +123,21 @@ export class DashboardPanel {
             }
             break;
           }
+          case 'installArtifact':
+            await this._availableProvider.doInstallArtifact(message.sourceId, message.scope, message.artifactId);
+            this._refreshCallback();
+            await this.update();
+            break;
+          case 'installFolder':
+            await this._availableProvider.doInstallFolder(message.sourceId, message.scope, message.folderPath);
+            this._refreshCallback();
+            await this.update();
+            break;
+          case 'installSourceGroup':
+            await this._availableProvider.doInstallSourceGroup(message.sourceId, message.scope);
+            this._refreshCallback();
+            await this.update();
+            break;
           case 'refresh':
             await this.update();
             break;
@@ -524,10 +539,15 @@ export class DashboardPanel {
         const folderId = `folder-${Math.random().toString(36).substr(2, 9)}`;
         html += `
           <div class="catalog-folder">
-            <div class="catalog-item folder-row" style="padding: 4px 8px; cursor: pointer; display: flex; align-items: center; gap: 6px;" onclick="toggleFolder('${folderId}', this)">
-              <span class="folder-icon" style="transition: transform 0.2s; font-size: 10px; opacity: 0.8;">▶</span>
-              <span class="folder-icon-img" style="font-size: 12px;">📁</span>
-              <span><strong>${this.escapeHtml(item.label)}</strong></span>
+            <div class="catalog-item folder-row" style="padding: 4px 8px; cursor: pointer; display: flex; align-items: center; justify-content: space-between;" onclick="toggleFolder('${folderId}', this)">
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span class="folder-icon" style="transition: transform 0.2s; font-size: 10px; opacity: 0.8;">▶</span>
+                <span class="folder-icon-img" style="font-size: 12px;">📁</span>
+                <span><strong>${this.escapeHtml(item.label)}</strong></span>
+              </div>
+              <div style="display: flex; gap: 4px;" onclick="event.stopPropagation()">
+                <button class="btn btn-sm btn-primary" onclick="vscode.postMessage({ command: 'installFolder', sourceId: '${this.escapeHtml(item.source.id)}', scope: '${this.escapeHtml(item.source.scope)}', folderPath: '${this.escapeHtml(item.folderPath)}' })">Install</button>
+              </div>
             </div>
             <div id="${folderId}" style="display: none; padding-left: 16px; border-left: 1px solid var(--border); margin-left: 5px;">
               ${this.renderCatalogLevel(item.items, level + 1)}
@@ -545,6 +565,7 @@ export class DashboardPanel {
             </div>
             <div style="display: flex; gap: 4px;">
               <button class="btn btn-sm btn-secondary" onclick="vscode.postMessage({ command: 'previewArtifact', sourceId: '${this.escapeHtml(item.source.id)}', scope: '${this.escapeHtml(item.source.scope)}', artifactId: '${this.escapeHtml(item.artifact.id)}' })">Preview</button>
+              <button class="btn btn-sm btn-primary" onclick="vscode.postMessage({ command: 'installArtifact', sourceId: '${this.escapeHtml(item.source.id)}', scope: '${this.escapeHtml(item.source.scope)}', artifactId: '${this.escapeHtml(item.artifact.id)}' })">Install</button>
             </div>
           </div>
         `;
@@ -576,6 +597,7 @@ export class DashboardPanel {
             ${s.localPath ? `<span style="opacity: 0.7; font-size: 11px;">${this.escapeHtml(s.localPath)}</span>` : ''}
           </div>
           <div class="source-actions" style="display: flex; gap: 8px;" onclick="event.stopPropagation()">
+            <button class="btn btn-sm btn-primary" onclick="vscode.postMessage({ command: 'installSourceGroup', sourceId: '${this.escapeHtml(s.id)}', scope: '${this.escapeHtml(s.scope)}' })">Install</button>
             <button class="btn btn-sm btn-secondary" onclick="vscode.postMessage({ command: 'exportSource', sourceId: '${this.escapeHtml(s.id)}', scope: '${this.escapeHtml(s.scope)}' })">Export</button>
             <button class="btn btn-sm btn-secondary" style="color: var(--badge-error); border-color: rgba(207, 34, 46, 0.3);" onclick="vscode.postMessage({ command: 'removeSource', sourceId: '${this.escapeHtml(s.id)}', scope: '${this.escapeHtml(s.scope)}' })">Remove</button>
           </div>
