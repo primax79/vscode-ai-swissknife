@@ -86,11 +86,30 @@ existing visual style — while leaving the sidebar itself untouched. Narrows
 further the "Sidebar = action, Dashboard = state/detail" decision locked in
 `specs/phase-6-spec.md` §3 and narrowed by `specs/phase-7-spec.md`: the
 *split of responsibility* stands, the *split of availability* does not.
-Independent of Phase 8 (29-30) — different files, no shared dependency.
 Multi-engine review (Codex + Kilo/gemini-3.7-flash) complete and
 incorporated — accepted for task breakdown. Initiative 31 (provider
 action-layer decoupling) is a hard prerequisite for 33 and 34 — do not
-start either until 31 lands.
+start either until 31 lands. **Revised at task-breakdown time**: despite
+the spec's own initial "independent of Phase 8" framing, 29/30's
+`AssistantId → Adapter`/`Source.type → resolver` call-site migration
+touches the exact same lines Initiative 31 decouples — see
+`specs/phase-9-spec.md` §7.1 — so all four initiatives were sequenced
+after Phase 8's full merge, not run in parallel with it.
+
+**2026-09-09 — Phase 9 complete**: all four initiatives (31-34) merged.
+31 (provider action-layer decoupling), 32 (Dashboard structural skeleton:
+section tabs, provider wiring, incremental postMessage updates), 33
+(Sources & Catalog section: browse/add/remove/export/import sources,
+lazy catalog browsing with diagnostics, preview, install single/folder/
+source, installed-in badges), 34 (Recommendations section with install-
+one/install-all/unrecommend, Uninstall/Update-to-latest in the detail
+panel with server-side re-resolution by stable identity, cross-refresh
+audit). Full `typecheck && lint && test && build` gate green throughout;
+several real bugs found and fixed along the way (two pre-existing test-
+isolation issues unrelated to this phase, multiple send-but-never-
+consume `postMessage` field bugs, missing cross-refresh calls on
+Initiative-26-era Dashboard actions) — see the individual merge commits
+for detail.
 
 ## Initiatives
 
@@ -132,7 +151,7 @@ start either until 31 lands.
 | 31       | 31  | [Dashboard: provider action-layer decoupling](31-dashboard-action-decoupling/plan.md)      | ✅ done (31.1-31.4 merged)             | 28, 29, 30             | M    |
 | 32       | 32  | [Dashboard: structural skeleton](32-dashboard-skeleton/plan.md)                            | ✅ done (32.1-32.3 merged)             | 28, 29                 | M    |
 | 33       | 33  | [Dashboard: Sources & Catalog section](33-dashboard-sources-catalog/plan.md)                | ✅ done (33.1-33.5 merged)             | 31, 32                 | L    |
-| 34       | 34  | [Dashboard: Recommendations + Installed action parity](34-dashboard-recommendations-parity/plan.md) | 📋 planned                   | 31, 32                 | M    |
+| 34       | 34  | [Dashboard: Recommendations + Installed action parity](34-dashboard-recommendations-parity/plan.md) | ✅ done (34.1-34.3 merged)   | 31, 32                 | M    |
 
 ## Specs
 
