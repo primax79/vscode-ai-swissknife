@@ -121,6 +121,12 @@
         "category": "AI Swissknife"
       },
       {
+        "command": "aiSwissknife.moveItem",
+        "title": "Move to Another Assistant / Scope...",
+        "icon": "$(arrow-right)",
+        "category": "AI Swissknife"
+      },
+      {
         "command": "aiSwissknife.createArtifact",
         "title": "Create New Artifact",
         "icon": "$(new-file)",
@@ -233,6 +239,11 @@
         },
         {
           "command": "aiSwissknife.syncItem",
+          "when": "view == aiSwissknife.installed && viewItem =~ /^installedInstallation/",
+          "group": "inline@2"
+        },
+        {
+          "command": "aiSwissknife.moveItem",
           "when": "view == aiSwissknife.installed && viewItem =~ /^installedInstallation/",
           "group": "inline@2"
         },
