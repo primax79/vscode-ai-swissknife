@@ -6,17 +6,22 @@ import * as assert from 'node:assert';
 const Module = require('module');
 const originalRequire = Module.prototype.require;
 
+
+const mockVscode = {
+  window: {
+    showWarningMessage: async () => undefined,
+    showErrorMessage: async () => undefined,
+    showInformationMessage: async () => undefined,
+    showQuickPick: async () => undefined,
+  },
+  ProgressLocation: { Notification: 1 }
+};
+
 Module.prototype.require = function (id: string, ...rest: unknown[]) {
   if (id === 'vscode') {
-    return {
-      window: {
-        showWarningMessage: async () => undefined,
-        showErrorMessage: async () => undefined,
-        showInformationMessage: async () => undefined,
-      },
-      ProgressLocation: { Notification: 1 }
-    };
+    return mockVscode;
   }
+
   return originalRequire.apply(this, [id, ...rest]);
 };
 
@@ -108,5 +113,143 @@ describe('installResolvedArtifacts', () => {
 
     planMock.mock.restore();
     applyMock.mock.restore();
+  });
+});
+
+import {
+  recommendAvailableArtifact,
+  recommendInstalledArtifact,
+  unrecommendAvailableArtifact,
+  unrecommendInstalledArtifact
+} from './recommendations';
+import * as registryModule from '../domain/registry';
+import type { ManagedInstallation } from '../domain/types';
+
+describe('Identifier-based recommendations', () => {
+  it('recommendAvailableArtifact writes to manifest', async () => {
+    // We mock vscode window quickPick
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const showQuickPick = mock.method(require('vscode').window, 'showQuickPick', async () => 'claude-code');
+    
+    let writtenManifest: any;
+    const readMock = mock.method(registryModule, 'readManifest', async () => ({
+      sources: [],
+      desiredInstallations: []
+    }));
+    const writeMock = mock.method(registryModule, 'writeManifest', async (scope: any, manifest: any) => {
+      writtenManifest = manifest;
+    });
+
+    const result = await recommendAvailableArtifact('s1', 'project', 'a1', '/tmp');
+    
+    if (!result) console.log('ERROR:', writtenManifest); assert.strictEqual(result, true);
+    assert.ok(writtenManifest);
+    assert.strictEqual(writtenManifest.desiredInstallations.length, 1);
+    assert.strictEqual(writtenManifest.desiredInstallations[0].sourceId, 's1');
+    assert.strictEqual(writtenManifest.desiredInstallations[0].artifactId, 'a1');
+    assert.strictEqual(writtenManifest.desiredInstallations[0].assistant, 'claude-code');
+
+    showQuickPick.mock.restore();
+    readMock.mock.restore();
+    writeMock.mock.restore();
+  });
+
+  it('recommendInstalledArtifact writes to manifest', async () => {
+    const inst: ManagedInstallation = {
+      assistant: 'kilo-code',
+      scope: 'project',
+      projectPath: '/tmp',
+      kind: 'skill',
+      name: 's1',
+      sourceId: 'src1',
+      artifactId: 'art1',
+      path: '/tmp/s1',
+      installedAt: new Date().toISOString(),
+      
+    };
+
+    let writtenManifest: any;
+    const readMock = mock.method(registryModule, 'readManifest', async () => ({
+      sources: [{ id: 'src1' }],
+      desiredInstallations: []
+    }));
+    const writeMock = mock.method(registryModule, 'writeManifest', async (scope: any, manifest: any) => {
+      writtenManifest = manifest;
+    });
+
+    const sourcesProviderMock = { refresh: () => {} } as any;
+
+    const result = await recommendInstalledArtifact(inst, sourcesProviderMock, '/tmp');
+    
+    if (!result) console.log('ERROR:', writtenManifest); assert.strictEqual(result, true);
+    assert.ok(writtenManifest);
+    assert.strictEqual(writtenManifest.desiredInstallations.length, 1);
+    assert.strictEqual(writtenManifest.desiredInstallations[0].sourceId, 'src1');
+    assert.strictEqual(writtenManifest.desiredInstallations[0].artifactId, 'art1');
+    assert.strictEqual(writtenManifest.desiredInstallations[0].assistant, 'kilo-code');
+
+    readMock.mock.restore();
+    writeMock.mock.restore();
+  });
+
+  it('unrecommendAvailableArtifact removes from manifest', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const showQuickPick = mock.method(require('vscode').window, 'showQuickPick', async () => 'claude-code');
+    
+    let writtenManifest: any;
+    const readMock = mock.method(registryModule, 'readManifest', async () => ({
+      sources: [],
+      desiredInstallations: [
+        { sourceId: 's1', artifactId: 'a1', assistant: 'claude-code', scope: 'project' }
+      ]
+    }));
+    const writeMock = mock.method(registryModule, 'writeManifest', async (scope: any, manifest: any) => {
+      writtenManifest = manifest;
+    });
+
+    const result = await unrecommendAvailableArtifact('s1', 'project', 'a1', '/tmp');
+    
+    if (!result) console.log('ERROR:', writtenManifest); assert.strictEqual(result, true);
+    assert.ok(writtenManifest);
+    assert.strictEqual(writtenManifest.desiredInstallations.length, 0);
+
+    showQuickPick.mock.restore();
+    readMock.mock.restore();
+    writeMock.mock.restore();
+  });
+
+  it('unrecommendInstalledArtifact removes from manifest', async () => {
+    const inst: ManagedInstallation = {
+      assistant: 'kilo-code',
+      scope: 'project',
+      projectPath: '/tmp',
+      kind: 'skill',
+      name: 's1',
+      sourceId: 'src1',
+      artifactId: 'art1',
+      path: '/tmp/s1',
+      installedAt: new Date().toISOString(),
+      
+    };
+    
+    let writtenManifest: any;
+    const readMock = mock.method(registryModule, 'readManifest', async () => ({
+      sources: [],
+      desiredInstallations: [
+        { sourceId: 'src1', artifactId: 'art1', assistant: 'kilo-code', scope: 'project' }
+      ]
+    }));
+    const writeMock = mock.method(registryModule, 'writeManifest', async (scope: any, manifest: any) => {
+      writtenManifest = manifest;
+    });
+
+    const result = await unrecommendInstalledArtifact(inst, '/tmp');
+    
+    if (!result) console.log('ERROR:', writtenManifest); assert.strictEqual(result, true);
+    assert.ok(writtenManifest);
+    assert.strictEqual(writtenManifest.desiredInstallations.length, 0);
+
+    readMock.mock.restore();
+    writeMock.mock.restore();
   });
 });
