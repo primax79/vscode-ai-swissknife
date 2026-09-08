@@ -224,6 +224,55 @@ export class DashboardPanel {
               await this.handleRequestDetail(message.key);
             }
             break;
+          case 'uninstallItem': {
+            if (message.key) {
+              const allManaged: ManagedInstallation[] = [];
+              try {
+                const gInv = await scanInstalledInventory('global');
+                allManaged.push(...gInv.managed);
+              } catch { /* ignore */ }
+              const folders = vscode.workspace.workspaceFolders;
+              if (folders && folders.length > 0) {
+                const projectRoot = folders[0].uri.fsPath;
+                try {
+                  const pInv = await scanInstalledInventory('project', projectRoot);
+                  allManaged.push(...pInv.managed);
+                } catch { /* ignore */ }
+              }
+              const inst = allManaged.find(m => getIdentityKey(m) === message.key);
+              if (inst) {
+                await this._provider.doUninstallItem(inst);
+                this._refreshCallback();
+                await this.update();
+                this._panel.webview.postMessage({ command: 'clearDetail' });
+              }
+            }
+            break;
+          }
+          case 'updateItem': {
+            if (message.key) {
+              const allManaged: ManagedInstallation[] = [];
+              try {
+                const gInv = await scanInstalledInventory('global');
+                allManaged.push(...gInv.managed);
+              } catch { /* ignore */ }
+              const folders = vscode.workspace.workspaceFolders;
+              if (folders && folders.length > 0) {
+                const projectRoot = folders[0].uri.fsPath;
+                try {
+                  const pInv = await scanInstalledInventory('project', projectRoot);
+                  allManaged.push(...pInv.managed);
+                } catch { /* ignore */ }
+              }
+              const inst = allManaged.find(m => getIdentityKey(m) === message.key);
+              if (inst) {
+                await this._provider.doUpdateInstallation(inst);
+                this._refreshCallback();
+                await this.update();
+              }
+            }
+            break;
+          }
           case 'installRecommended':
             await handleInstallRecommended(() => {
               this._availableProvider.refreshCatalog();
@@ -373,7 +422,8 @@ export class DashboardPanel {
         crossFramework,
         candidates: [],
         item: inst,
-        membership: 'managed'
+        membership: 'managed',
+        status: report ? report.status : 'up-to-date'
       });
       return;
     }
@@ -1418,6 +1468,18 @@ export class DashboardPanel {
       }
     }
 
+    function detailUninstallItem() {
+      if (selectedItemKey) {
+        vscode.postMessage({ command: 'uninstallItem', key: selectedItemKey });
+      }
+    }
+
+    function detailUpdateItem() {
+      if (selectedItemKey) {
+        vscode.postMessage({ command: 'updateItem', key: selectedItemKey });
+      }
+    }
+
     function refreshState() {
       vscode.postMessage({ command: 'refresh' });
     }
@@ -1666,8 +1728,16 @@ export class DashboardPanel {
             actions.push('<button class="btn btn-sm btn-secondary" onclick="detailMoveItem()">Move to...</button>');
           }
           actions.push('<button class="btn btn-sm btn-secondary" onclick="detailEditItem()">Edit</button>');
+          if (msg.status === 'update-available' || msg.status === 'modified-and-update-available') {
+            actions.push('<button class="btn btn-sm btn-primary" onclick="detailUpdateItem()">Update to latest</button>');
+          }
+          actions.push('<button class="btn btn-sm btn-secondary" style="color: var(--badge-error); border-color: rgba(207, 34, 46, 0.3);" onclick="detailUninstallItem()">Uninstall</button>');
         }
         document.getElementById('detailActions').innerHTML = actions.join('');
+      } else if (msg.command === 'clearDetail') {
+        document.getElementById('detailPanel').style.display = 'none';
+        selectedItemKey = null;
+        detailItemData = null;
       }
     });
   </script>
