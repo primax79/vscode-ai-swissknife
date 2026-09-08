@@ -17,6 +17,14 @@ import {
   RecommendedBrokenItem,
   type AvailableTreeItem,
 } from './availableView';
+import {
+  buildScopeExport,
+  buildSourceExport,
+  parseExportedConfigFile,
+  mergeScopeConfig,
+  CONFIG_TRANSFER_SCHEMA_VERSION,
+  type ExportedConfigFile,
+} from '../engine/configTransfer';
 
 export type SourceTreeItem =
   | ScopeGroupItem
@@ -326,6 +334,181 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       vscode.window.showErrorMessage(`Failed to remove source: ${msg}`);
+    }
+  }
+
+  async exportConfig(): Promise<void> {
+    const choice = await vscode.window.showQuickPick(
+      [
+        { label: 'Global sources', value: 'global' as const },
+        { label: 'Project sources', value: 'project' as const },
+        { label: 'Both (combined file)', value: 'both' as const },
+      ],
+      { placeHolder: 'Which configuration do you want to export?' }
+    );
+    if (!choice) return;
+
+    let projectRoot: string | undefined;
+    if (choice.value !== 'global') {
+      projectRoot = await getWorkspaceRoot();
+      if (!projectRoot && choice.value === 'project') return;
+    }
+
+    const payload: ExportedConfigFile = {
+      schemaVersion: CONFIG_TRANSFER_SCHEMA_VERSION,
+      kind: 'ai-swissknife-config',
+      exportedAt: new Date().toISOString(),
+    };
+
+    try {
+      if (choice.value === 'global' || choice.value === 'both') {
+        payload.global = await buildScopeExport('global');
+      }
+      if ((choice.value === 'project' || choice.value === 'both') && projectRoot) {
+        payload.project = await buildScopeExport('project', projectRoot);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      vscode.window.showErrorMessage(`Failed to build export: ${msg}`);
+      return;
+    }
+
+    const uri = await vscode.window.showSaveDialog({
+      filters: { 'AI Swissknife Configuration': ['json'] },
+      defaultUri: vscode.Uri.file(`ai-swissknife-config-${choice.value}.json`),
+    });
+    if (!uri) return;
+
+    try {
+      await vscode.workspace.fs.writeFile(uri, Buffer.from(JSON.stringify(payload, null, 2), 'utf-8'));
+      vscode.window.showInformationMessage(`Configuration exported to ${uri.fsPath}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      vscode.window.showErrorMessage(`Failed to write export file: ${msg}`);
+    }
+  }
+
+  async exportSource(sourceItem?: SourceItem): Promise<void> {
+    if (!sourceItem) {
+      vscode.window.showWarningMessage('Please select a source to export.');
+      return;
+    }
+
+    let payload: ExportedConfigFile;
+    try {
+      const desired = toDesiredSource(sourceItem.source, sourceItem.source.projectPath);
+      payload = buildSourceExport(desired);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      vscode.window.showErrorMessage(`Failed to export source: ${msg}`);
+      return;
+    }
+
+    const uri = await vscode.window.showSaveDialog({
+      filters: { 'AI Swissknife Source': ['json'] },
+      defaultUri: vscode.Uri.file(`ai-swissknife-source-${sourceItem.source.id}.json`),
+    });
+    if (!uri) return;
+
+    try {
+      await vscode.workspace.fs.writeFile(uri, Buffer.from(JSON.stringify(payload, null, 2), 'utf-8'));
+      vscode.window.showInformationMessage(`Source "${sourceItem.source.id}" exported to ${uri.fsPath}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      vscode.window.showErrorMessage(`Failed to write export file: ${msg}`);
+    }
+  }
+
+  async importConfig(): Promise<void> {
+    const uris = await vscode.window.showOpenDialog({
+      filters: { 'AI Swissknife Configuration': ['json'] },
+      canSelectMany: false,
+    });
+    if (!uris || uris.length === 0) return;
+
+    let payload: ExportedConfigFile;
+    try {
+      const raw = await vscode.workspace.fs.readFile(uris[0]);
+      payload = parseExportedConfigFile(Buffer.from(raw).toString('utf-8'));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      vscode.window.showErrorMessage(`Failed to read configuration file: ${msg}`);
+      return;
+    }
+
+    try {
+      if (payload.kind === 'ai-swissknife-source' && payload.source) {
+        const localFolderNote =
+          payload.source.type === 'local-folder'
+            ? ' Note: this is a local-folder source — verify its path resolves correctly here.'
+            : '';
+        const scopePick = await vscode.window.showQuickPick(['project', 'global'], {
+          placeHolder: `Import source "${payload.source.id}" into which scope?${localFolderNote}`,
+        });
+        if (!scopePick) return;
+        const scope = scopePick as Scope;
+
+        let projectRoot: string | undefined;
+        if (scope === 'project') {
+          projectRoot = await getWorkspaceRoot();
+          if (!projectRoot) return;
+        }
+
+        const result = await mergeScopeConfig(scope, { sources: [payload.source], desiredInstallations: [] }, projectRoot);
+        await this.availableProvider.refreshCatalog();
+        this.refresh();
+        vscode.window.showInformationMessage(
+          `Source "${payload.source.id}" ${result.sourcesAdded > 0 ? 'added' : 'updated'} in ${scope} scope.`
+        );
+        return;
+      }
+
+      if (payload.kind === 'ai-swissknife-config') {
+        let totalAdded = 0;
+        let totalUpdated = 0;
+        let totalDesired = 0;
+
+        if (payload.global) {
+          const confirmGlobal = await vscode.window.showInformationMessage(
+            `This file contains ${payload.global.sources.length} global source(s). Merge into Global scope?`,
+            { modal: true },
+            'Import'
+          );
+          if (confirmGlobal === 'Import') {
+            const r = await mergeScopeConfig('global', payload.global);
+            totalAdded += r.sourcesAdded;
+            totalUpdated += r.sourcesUpdated;
+            totalDesired += r.desiredInstallationsAdded;
+          }
+        }
+
+        if (payload.project) {
+          // getWorkspaceRoot() already warns if no workspace is open.
+          const projectRoot = await getWorkspaceRoot();
+          if (projectRoot) {
+            const confirmProject = await vscode.window.showInformationMessage(
+              `This file contains ${payload.project.sources.length} project source(s). Merge into the current workspace?`,
+              { modal: true },
+              'Import'
+            );
+            if (confirmProject === 'Import') {
+              const r = await mergeScopeConfig('project', payload.project, projectRoot);
+              totalAdded += r.sourcesAdded;
+              totalUpdated += r.sourcesUpdated;
+              totalDesired += r.desiredInstallationsAdded;
+            }
+          }
+        }
+
+        await this.availableProvider.refreshCatalog();
+        this.refresh();
+        vscode.window.showInformationMessage(
+          `Import complete: ${totalAdded} source(s) added, ${totalUpdated} updated, ${totalDesired} recommendation(s) added.`
+        );
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      vscode.window.showErrorMessage(`Failed to import configuration: ${msg}`);
     }
   }
 }

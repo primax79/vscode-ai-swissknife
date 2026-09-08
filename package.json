@@ -100,6 +100,24 @@
         "category": "AI Swissknife"
       },
       {
+        "command": "aiSwissknife.exportConfig",
+        "title": "Export Configuration...",
+        "icon": "$(export)",
+        "category": "AI Swissknife"
+      },
+      {
+        "command": "aiSwissknife.importConfig",
+        "title": "Import Configuration...",
+        "icon": "$(desktop-download)",
+        "category": "AI Swissknife"
+      },
+      {
+        "command": "aiSwissknife.exportSource",
+        "title": "Export Source...",
+        "icon": "$(export)",
+        "category": "AI Swissknife"
+      },
+      {
         "command": "aiSwissknife.refreshCatalog",
         "title": "Refresh Available Catalog",
         "icon": "$(refresh)",
@@ -241,6 +259,16 @@
           "group": "navigation@4"
         },
         {
+          "command": "aiSwissknife.exportConfig",
+          "when": "view == aiSwissknife.sources",
+          "group": "navigation@5"
+        },
+        {
+          "command": "aiSwissknife.importConfig",
+          "when": "view == aiSwissknife.sources",
+          "group": "navigation@6"
+        },
+        {
           "command": "aiSwissknife.createArtifact",
           "when": "view == aiSwissknife.installed",
           "group": "navigation@1"
@@ -351,6 +379,11 @@
           "command": "aiSwissknife.openInDashboard",
           "when": "view == aiSwissknife.sources && viewItem == sourceItem",
           "group": "inline@3"
+        },
+        {
+          "command": "aiSwissknife.exportSource",
+          "when": "view == aiSwissknife.sources && viewItem == sourceItem",
+          "group": "inline@4"
         }
       ]
     }

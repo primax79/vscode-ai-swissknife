@@ -18,3 +18,13 @@ export {
   formatStatusBarTooltip,
   type PendingCounts,
 } from './pendingCounts';
+export {
+  buildScopeExport,
+  buildSourceExport,
+  parseExportedConfigFile,
+  mergeScopeConfig,
+  CONFIG_TRANSFER_SCHEMA_VERSION,
+  type ScopeConfigPayload,
+  type ExportedConfigFile,
+  type MergeResult,
+} from './configTransfer';

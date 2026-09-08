@@ -387,6 +387,11 @@ export function activate(context: vscode.ExtensionContext) {
       sourcesProvider.removeSource(item)
     ),
     vscode.commands.registerCommand('aiSwissknife.reloadRegistry', () => sourcesProvider.refresh()),
+    vscode.commands.registerCommand('aiSwissknife.exportConfig', () => sourcesProvider.exportConfig()),
+    vscode.commands.registerCommand('aiSwissknife.importConfig', () => sourcesProvider.importConfig()),
+    vscode.commands.registerCommand('aiSwissknife.exportSource', (item?: SourceItem) =>
+      sourcesProvider.exportSource(item)
+    ),
     vscode.commands.registerCommand('aiSwissknife.refreshCatalog', () => availableProvider.refreshCatalog()),
     vscode.commands.registerCommand('aiSwissknife.installArtifact', (item?: AvailableArtifactItem) =>
       availableProvider.installArtifact(item)
