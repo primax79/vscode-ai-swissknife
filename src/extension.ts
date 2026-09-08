@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import type { AssistantId, Scope, ItemKind } from './domain/types';
 import { SourcesTreeDataProvider, SourceItem } from './ui/sourcesView';
 import {
   AvailableTreeDataProvider,

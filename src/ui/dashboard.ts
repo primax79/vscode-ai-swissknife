@@ -359,8 +359,6 @@ export class DashboardPanel {
     environmentPills: string,
     rowsHtml: string
   ): string {
-    const escapeHtml = (unsafe: string) => (unsafe || '').toString().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-    
     return `
   <div class="stats-ribbon">
     <div class="stat-chip">
