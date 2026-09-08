@@ -397,6 +397,12 @@ export function activate(context: vscode.ExtensionContext) {
       })
     ),
     vscode.commands.registerCommand('aiSwissknife.openDashboard', () => DashboardPanel.render(context.extensionUri)),
+    vscode.commands.registerCommand('aiSwissknife.openInDashboard', (item?: SourceItem) => {
+      const panel = DashboardPanel.render(context.extensionUri);
+      if (item) {
+        panel.setSourceFilter(item.source.id, item.source.scope);
+      }
+    }),
     vscode.commands.registerCommand('aiSwissknife.refreshInstalled', () => {
       installedProvider.refresh();
       updateStatusBar().catch(() => {});
