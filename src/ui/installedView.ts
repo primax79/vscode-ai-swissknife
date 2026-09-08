@@ -22,6 +22,7 @@ import { getAssistantIconPath } from './assistantIcons';
 export type InstalledTreeItem =
   | InstalledGroupItem
   | UnmanagedGroupItem
+  | KindGroupItem
   | InstalledInstallationItem
   | ObservedArtifactItem;
 
@@ -42,6 +43,14 @@ export class UnmanagedGroupItem {
   ) {}
 }
 
+export class KindGroupItem {
+  constructor(
+    public readonly kind: ItemKind,
+    public readonly label: string,
+    public readonly items: (InstalledInstallationItem | ObservedArtifactItem)[]
+  ) {}
+}
+
 export class InstalledInstallationItem {
   constructor(
     public readonly installation: ManagedInstallation,
@@ -52,6 +61,56 @@ export class InstalledInstallationItem {
 
 export class ObservedArtifactItem {
   constructor(public readonly observed: ObservedArtifact) {}
+}
+
+const KIND_ORDER: ItemKind[] = ['skill', 'agent', 'command', 'mcp-server', 'hook', 'rule'];
+
+const KIND_LABELS: Record<ItemKind, string> = {
+  skill: 'Skills',
+  agent: 'Agents',
+  command: 'Commands',
+  'mcp-server': 'MCP Servers',
+  hook: 'Hooks',
+  rule: 'Rules',
+};
+
+function getKindIconName(kind: ItemKind): string {
+  switch (kind) {
+    case 'agent':
+      return 'robot';
+    case 'command':
+      return 'terminal';
+    case 'mcp-server':
+      return 'plug';
+    case 'hook':
+      return 'zap';
+    case 'rule':
+      return 'book';
+    default:
+      return 'check';
+  }
+}
+
+function groupByKind<T extends InstalledInstallationItem | ObservedArtifactItem>(
+  items: T[],
+  getKind: (item: T) => ItemKind
+): KindGroupItem[] {
+  const buckets = new Map<ItemKind, T[]>();
+  for (const item of items) {
+    const kind = getKind(item);
+    const list = buckets.get(kind) ?? [];
+    list.push(item);
+    buckets.set(kind, list);
+  }
+
+  const result: KindGroupItem[] = [];
+  for (const kind of KIND_ORDER) {
+    const list = buckets.get(kind);
+    if (list && list.length > 0) {
+      result.push(new KindGroupItem(kind, `${KIND_LABELS[kind]} (${list.length})`, list));
+    }
+  }
+  return result;
 }
 
 export class InstalledTreeDataProvider
@@ -100,6 +159,16 @@ export class InstalledTreeDataProvider
       return item;
     }
 
+    if (element instanceof KindGroupItem) {
+      const item = new vscode.TreeItem(
+        element.label,
+        vscode.TreeItemCollapsibleState.Collapsed
+      );
+      item.iconPath = new vscode.ThemeIcon(getKindIconName(element.kind));
+      item.contextValue = 'kindGroup';
+      return item;
+    }
+
     if (element instanceof ObservedArtifactItem) {
       const obs = element.observed;
       let desc = `${obs.kind} [unmanaged]`;
@@ -125,7 +194,12 @@ export class InstalledTreeDataProvider
         obs.match?.details ? `\nFeedback: ${obs.match.details}` : ''
       }`;
       item.iconPath = new vscode.ThemeIcon(iconName);
-      
+      item.command = {
+        command: 'vscode.open',
+        title: 'Open File',
+        arguments: [vscode.Uri.file(obs.path)],
+      };
+
       let candidateContext = 'observedArtifactItem:none';
       if (obs.candidates && obs.candidates.length === 1) {
         candidateContext = 'observedArtifactItem:one';
@@ -147,18 +221,7 @@ export class InstalledTreeDataProvider
     if (element.isRecommended) {
       desc += ' ★';
     }
-    let iconName =
-      inst.kind === 'agent'
-        ? 'robot'
-        : inst.kind === 'command'
-        ? 'terminal'
-        : inst.kind === 'mcp-server'
-        ? 'plug'
-        : inst.kind === 'hook'
-        ? 'zap'
-        : inst.kind === 'rule'
-        ? 'book'
-        : 'check';
+    let iconName = getKindIconName(inst.kind);
 
     if (report) {
       if (report.status === 'modified-locally') {
@@ -185,6 +248,11 @@ export class InstalledTreeDataProvider
       report?.details ? `\nStatus: ${report.details}` : ''
     }${inst.sourceRevision?.commit ? `\nCommit: ${inst.sourceRevision.commit}` : ''}`;
     item.iconPath = new vscode.ThemeIcon(iconName);
+    item.command = {
+      command: 'vscode.open',
+      title: 'Open File',
+      arguments: [vscode.Uri.file(inst.path)],
+    };
     const baseContext = element.isRecommended ? 'installedInstallation:recommended' : 'installedInstallation';
     item.contextValue = report ? `${baseContext}:${report.status}` : baseContext;
     return item;
@@ -259,7 +327,7 @@ export class InstalledTreeDataProvider
         // ignore
       }
 
-      return element.installations.map((inst) => {
+      const items = element.installations.map((inst) => {
         const report = this.driftReports.get(this.getInstallKey(inst));
         const isRecommended =
           inst.scope === 'project' &&
@@ -268,10 +336,16 @@ export class InstalledTreeDataProvider
           recommendedSet.has(`${inst.sourceId}:${inst.artifactId}:${inst.assistant}`);
         return new InstalledInstallationItem(inst, report, !!isRecommended);
       });
+      return groupByKind(items, (item) => item.installation.kind);
     }
 
     if (element instanceof UnmanagedGroupItem) {
-      return element.observed.map((obs) => new ObservedArtifactItem(obs));
+      const items = element.observed.map((obs) => new ObservedArtifactItem(obs));
+      return groupByKind(items, (item) => item.observed.kind);
+    }
+
+    if (element instanceof KindGroupItem) {
+      return element.items;
     }
 
     return [];

@@ -92,13 +92,6 @@ export async function findSkillDirs(rootDir: string): Promise<SkillDetectionResu
         const frontmatter = extractSkillFrontmatter(content);
         if (frontmatter.name) {
           name = frontmatter.name;
-        } else {
-          diagnostics.push({
-            severity: 'warning',
-            path: dir,
-            message: 'Missing name in frontmatter, falling back to directory name',
-            code: 'invalid-frontmatter',
-          });
         }
         description = frontmatter.description;
       } catch {
@@ -183,13 +176,6 @@ export async function findAgentFiles(
             const frontmatter = extractSkillFrontmatter(content);
             if (frontmatter.name) {
               name = frontmatter.name;
-            } else {
-              diagnostics.push({
-                severity: 'warning',
-                path: fullPath,
-                message: 'Missing name in agent frontmatter, falling back to file name',
-                code: 'invalid-frontmatter',
-              });
             }
             description = frontmatter.description;
           } catch {

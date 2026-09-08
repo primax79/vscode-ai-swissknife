@@ -19,6 +19,7 @@ import type { PreparedInstall } from '../engine/types';
 import { getWorkspaceRoot } from './workspacePicker';
 import { getAssistantIconPath } from './assistantIcons';
 import { previewProvider } from './previewProvider';
+import type { SourceItem } from './sourcesView';
 
 import { resolveRecommendations, SourceResolutionAttempt, BrokenReason } from '../engine/recommendations';
 import type { DesiredInstallation } from '../domain/registry';
@@ -30,10 +31,7 @@ export type AvailableTreeItem =
   | AvailableArtifactItem
   | DiagnosticTreeItem
   | RecommendedGroupItem
-  | RecommendedBrokenItem
-  | AvailablePlaceholderItem;
-
-export class AvailablePlaceholderItem {}
+  | RecommendedBrokenItem;
 
 export class RecommendedGroupItem {
   constructor(
@@ -176,7 +174,10 @@ export function buildHierarchy(
 export class AvailableTreeDataProvider
   implements vscode.TreeDataProvider<AvailableTreeItem>
 {
-  constructor(private readonly extensionUri: vscode.Uri) {}
+  constructor(
+    private readonly extensionUri: vscode.Uri,
+    private readonly homeRoot?: string
+  ) {}
 
   private _onDidChangeTreeData = new vscode.EventEmitter<
     AvailableTreeItem | undefined | null | void
@@ -193,12 +194,6 @@ export class AvailableTreeDataProvider
   private codexAdapter = new CodexAdapter();
   private geminiAdapter = new GeminiAdapter();
   private onInstalledRefreshCallback?: () => void;
-  private filterSource?: { id: string; scope: Scope };
-
-  setFilterSource(filter: { id: string; scope: Scope } | undefined): void {
-    this.filterSource = filter;
-    this.refresh();
-  }
 
   setInstalledRefreshCallback(cb: () => void) {
     this.onInstalledRefreshCallback = cb;
@@ -206,6 +201,20 @@ export class AvailableTreeDataProvider
 
   refresh(): void {
     this._onDidChangeTreeData.fire();
+  }
+
+  getCachedSourceGroups(): AvailableSourceGroupItem[] {
+    return this.cachedSourceGroups;
+  }
+
+  getCachedRecommendedGroup(): RecommendedGroupItem | undefined {
+    return this.cachedRecommendedGroup;
+  }
+
+  async ensureCatalogLoaded(): Promise<void> {
+    if (this.cachedSourceGroups.length === 0 && !this.cachedRecommendedGroup) {
+      await this.refreshCatalog();
+    }
   }
 
   async refreshCatalog(): Promise<void> {
@@ -217,7 +226,7 @@ export class AvailableTreeDataProvider
 
     // Load global sources
     try {
-      const globalManifest = await readManifest('global');
+      const globalManifest = await readManifest('global', undefined, this.homeRoot);
       for (const d of globalManifest.sources) {
         sources.push(fromDesiredSource(d));
       }
@@ -329,10 +338,6 @@ export class AvailableTreeDataProvider
       return item;
     }
 
-    if (element instanceof AvailablePlaceholderItem) {
-      return new vscode.TreeItem('Select a source in the Sources view to see its available items', vscode.TreeItemCollapsibleState.None);
-    }
-
     if (element instanceof AvailableSourceGroupItem) {
       const source = element.source;
       const count = element.resolution.packages.length;
@@ -404,25 +409,12 @@ export class AvailableTreeDataProvider
 
   async getChildren(element?: AvailableTreeItem): Promise<AvailableTreeItem[]> {
     if (!element) {
-      if (this.cachedSourceGroups.length === 0 && !this.cachedRecommendedGroup) {
-        await this.refreshCatalog();
-      }
+      await this.ensureCatalogLoaded();
       const children: AvailableTreeItem[] = [];
       if (this.cachedRecommendedGroup) {
         children.push(this.cachedRecommendedGroup);
       }
-
-      if (this.filterSource) {
-        const match = this.cachedSourceGroups.find(
-          (g) => g.source.id === this.filterSource!.id && g.source.scope === this.filterSource!.scope
-        );
-        if (match) {
-          const matchChildren = await this.getChildren(match);
-          children.push(...matchChildren);
-        }
-      } else {
-        children.push(new AvailablePlaceholderItem());
-      }
+      children.push(...this.cachedSourceGroups);
       return children;
     }
 
@@ -616,18 +608,26 @@ export class AvailableTreeDataProvider
     await this.installBatch(artifacts, `folder "${folderItem.label}"`);
   }
 
-  async installSourceGroup(groupItem?: AvailableSourceGroupItem): Promise<void> {
-    if (!groupItem) {
+  async installSourceGroup(sourceItem?: SourceItem): Promise<void> {
+    if (!sourceItem) {
       vscode.window.showWarningMessage('Please select a source to install.');
       return;
     }
+    await this.ensureCatalogLoaded();
+    const group = this.cachedSourceGroups.find(
+      (g) => g.source.id === sourceItem.source.id && g.source.scope === sourceItem.source.scope
+    );
+    if (!group) {
+      vscode.window.showWarningMessage(`No available items found for source "${sourceItem.source.id}".`);
+      return;
+    }
     const artifacts: AvailableArtifactItem[] = [];
-    for (const pkg of groupItem.resolution.packages) {
+    for (const pkg of group.resolution.packages) {
       for (const art of pkg.artifacts) {
-        artifacts.push(new AvailableArtifactItem(groupItem.source, pkg, art));
+        artifacts.push(new AvailableArtifactItem(group.source, pkg, art));
       }
     }
-    await this.installBatch(artifacts, `source "${groupItem.source.name ?? groupItem.source.id}"`);
+    await this.installBatch(artifacts, `source "${group.source.name ?? group.source.id}"`);
   }
 
   private async installBatch(

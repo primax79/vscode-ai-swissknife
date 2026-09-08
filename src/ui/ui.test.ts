@@ -123,9 +123,9 @@ import {
   writeState,
   SCHEMA_VERSION,
 } from '../domain/registry';
-import { SourcesTreeDataProvider, ScopeGroupItem } from './sourcesView';
-import { AvailableTreeDataProvider, AvailableFolderItem, AvailableArtifactItem, buildHierarchy, AvailablePlaceholderItem, AvailableSourceGroupItem } from './availableView';
-import { InstalledTreeDataProvider, InstalledGroupItem, InstalledInstallationItem } from './installedView';
+import { SourcesTreeDataProvider, ScopeGroupItem, SourceItem } from './sourcesView';
+import { AvailableTreeDataProvider, AvailableFolderItem, AvailableArtifactItem, buildHierarchy, AvailableSourceGroupItem } from './availableView';
+import { InstalledTreeDataProvider, InstalledGroupItem, InstalledInstallationItem, KindGroupItem } from './installedView';
 import { getAssistantIconPath } from './assistantIcons';
 import { setupFileWatchers } from './watchers';
 import { DashboardPanel } from './dashboard';
@@ -159,7 +159,9 @@ describe('UI TreeDataProviders', () => {
 
   describe('SourcesTreeDataProvider', () => {
     it('returns Global and Project scope group items at top level', async () => {
-      const provider = new SourcesTreeDataProvider();
+      const provider = new SourcesTreeDataProvider(
+        new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir)
+      );
       const topLevel = await provider.getChildren();
       assert.strictEqual(topLevel.length, 2);
       assert.ok(topLevel[0] instanceof ScopeGroupItem);
@@ -194,7 +196,9 @@ describe('UI TreeDataProviders', () => {
         testHomeDir
       );
 
-      const provider = new SourcesTreeDataProvider();
+      const provider = new SourcesTreeDataProvider(
+        new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir)
+      );
       const globalGroup = new ScopeGroupItem('global', 'Global Sources');
       const items = await provider.getChildren(globalGroup);
       assert.ok(Array.isArray(items));
@@ -344,52 +348,78 @@ describe('UI TreeDataProviders', () => {
       assert.strictEqual(treeBroken.command, undefined, 'broken items must be non-actionable (no command)');
     });
 
-    it('filters children based on selected source and retains Recommended group', async () => {
-      const provider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any);
+    it('root children include the Recommended group when non-empty', async () => {
+      const provider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+      const source1: Source = { id: 's1', type: 'git-custom', scope: 'project' };
+      const artifact1: Artifact = { id: 'a1', packageId: 'p1', kind: 'skill', name: 'art1', nativeFormat: 'md' };
+      const pkg1: Package = { id: 'p1', sourceId: 's1', nativeFormat: 'raw', artifacts: [artifact1] };
+      const desiredSat: DesiredInstallation = { sourceId: 's1', artifactId: 'a1', assistant: 'claude-code', scope: 'project' };
+      const pending = [{ desired: desiredSat, artifact: artifact1, pkg: pkg1, source: source1 }];
+
+      provider['cachedSourceGroups'] = [
+        new AvailableSourceGroupItem(source1, { packages: [pkg1], diagnostics: [] }),
+      ];
+      provider['cachedRecommendedGroup'] = new RecommendedGroupItem(pending, []);
+
+      const children = await provider.getChildren();
+      assert.strictEqual(children.length, 2);
+      assert.ok(children[0] instanceof RecommendedGroupItem);
+      assert.ok(children[1] instanceof AvailableSourceGroupItem);
+    });
+  });
+
+  describe('SourcesTreeDataProvider merged with Available content', () => {
+    it("resolves a SourceItem's children from the injected AvailableTreeDataProvider's cache, disambiguating same id + different scope", async () => {
+      const availableProvider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+      const sourcesProvider = new SourcesTreeDataProvider(availableProvider);
+
       const source1: Source = { id: 's1', type: 'git-custom', scope: 'project' };
       const source2: Source = { id: 's1', type: 'git-custom', scope: 'global' }; // same id, different scope
       const artifact1: Artifact = { id: 'a1', packageId: 'p1', kind: 'skill', name: 'art1', nativeFormat: 'md' };
       const artifact2: Artifact = { id: 'a2', packageId: 'p2', kind: 'skill', name: 'art2', nativeFormat: 'md' };
       const pkg1: Package = { id: 'p1', sourceId: 's1', nativeFormat: 'raw', artifacts: [artifact1] };
       const pkg2: Package = { id: 'p2', sourceId: 's1', nativeFormat: 'raw', artifacts: [artifact2] };
-      
-      const desiredSat: DesiredInstallation = { sourceId: 's1', artifactId: 'a1', assistant: 'claude-code', scope: 'project' };
-      const pending = [{ desired: desiredSat, artifact: artifact1, pkg: pkg1, source: source1 }];
-      
-      provider['cachedSourceGroups'] = [
+
+      availableProvider['cachedSourceGroups'] = [
         new AvailableSourceGroupItem(source1, { packages: [pkg1], diagnostics: [] }),
-        new AvailableSourceGroupItem(source2, { packages: [pkg2], diagnostics: [] })
+        new AvailableSourceGroupItem(source2, { packages: [pkg2], diagnostics: [] }),
       ];
-      provider['cachedRecommendedGroup'] = new RecommendedGroupItem(pending, []);
 
-      // Test placeholder state (no filter)
-      let children = await provider.getChildren();
-      assert.strictEqual(children.length, 2);
-      assert.ok(children[0] instanceof RecommendedGroupItem);
-      assert.ok(children[1] instanceof AvailablePlaceholderItem);
+      const sourceItem1 = new SourceItem(source1, 's1');
+      const children1 = await sourcesProvider.getChildren(sourceItem1);
+      assert.strictEqual(children1.length, 1);
+      assert.ok(children1[0] instanceof AvailableArtifactItem);
+      assert.strictEqual((children1[0] as AvailableArtifactItem).artifact.name, 'art1');
 
-      // Test filtered state (match s1 project)
-      provider.setFilterSource({ id: 's1', scope: 'project' });
-      children = await provider.getChildren();
-      assert.strictEqual(children.length, 2);
-      assert.ok(children[0] instanceof RecommendedGroupItem);
-      assert.ok(children[1] instanceof AvailableArtifactItem);
-      assert.strictEqual((children[1] as AvailableArtifactItem).artifact.name, 'art1');
+      const sourceItem2 = new SourceItem(source2, 's1');
+      const children2 = await sourcesProvider.getChildren(sourceItem2);
+      assert.strictEqual(children2.length, 1);
+      assert.ok(children2[0] instanceof AvailableArtifactItem);
+      assert.strictEqual((children2[0] as AvailableArtifactItem).artifact.name, 'art2');
+    });
 
-      // Test filtered state (match s1 global, same id different scope)
-      provider.setFilterSource({ id: 's1', scope: 'global' });
-      children = await provider.getChildren();
-      assert.strictEqual(children.length, 2);
-      assert.ok(children[0] instanceof RecommendedGroupItem);
-      assert.ok(children[1] instanceof AvailableArtifactItem);
-      assert.strictEqual((children[1] as AvailableArtifactItem).artifact.name, 'art2');
+    it('root children include the Recommended group ahead of the two scope groups', async () => {
+      const availableProvider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+      const sourcesProvider = new SourcesTreeDataProvider(availableProvider);
 
-      // Test clear filter
-      provider.setFilterSource(undefined);
-      children = await provider.getChildren();
-      assert.strictEqual(children.length, 2);
+      const source1: Source = { id: 's1', type: 'git-custom', scope: 'project' };
+      const artifact1: Artifact = { id: 'a1', packageId: 'p1', kind: 'skill', name: 'art1', nativeFormat: 'md' };
+      const pkg1: Package = { id: 'p1', sourceId: 's1', nativeFormat: 'raw', artifacts: [artifact1] };
+      const desiredSat: DesiredInstallation = { sourceId: 's1', artifactId: 'a1', assistant: 'claude-code', scope: 'project' };
+
+      availableProvider['cachedSourceGroups'] = [
+        new AvailableSourceGroupItem(source1, { packages: [pkg1], diagnostics: [] }),
+      ];
+      availableProvider['cachedRecommendedGroup'] = new RecommendedGroupItem(
+        [{ desired: desiredSat, artifact: artifact1, pkg: pkg1, source: source1 }],
+        []
+      );
+
+      const children = await sourcesProvider.getChildren();
+      assert.strictEqual(children.length, 3);
       assert.ok(children[0] instanceof RecommendedGroupItem);
-      assert.ok(children[1] instanceof AvailablePlaceholderItem);
+      assert.ok(children[1] instanceof ScopeGroupItem);
+      assert.ok(children[2] instanceof ScopeGroupItem);
     });
   });
 
@@ -462,6 +492,50 @@ describe('UI TreeDataProviders', () => {
       assert.ok(iconPath);
       assert.strictEqual(iconPath.light.fsPath, '/test/ext/resources/claude.svg');
       assert.strictEqual(iconPath.dark.fsPath, '/test/ext/resources/claude.svg');
+    });
+
+    it('groups an InstalledGroupItem\'s children into one KindGroupItem per kind present, in stable order, none for absent kinds', async () => {
+      const skillA: ManagedInstallation = {
+        assistant: 'kilo-code', scope: 'global', kind: 'skill', name: 'skill-a',
+        path: '/tmp/skill-a', installedAt: '2026-08-19T12:00:00.000Z',
+      };
+      const skillB: ManagedInstallation = {
+        assistant: 'kilo-code', scope: 'global', kind: 'skill', name: 'skill-b',
+        path: '/tmp/skill-b', installedAt: '2026-08-19T12:01:00.000Z',
+      };
+      const agentA: ManagedInstallation = {
+        assistant: 'kilo-code', scope: 'global', kind: 'agent', name: 'agent-a',
+        path: '/tmp/agent-a', installedAt: '2026-08-19T12:02:00.000Z',
+      };
+      const mcpA: ManagedInstallation = {
+        assistant: 'kilo-code', scope: 'global', kind: 'mcp-server', name: 'mcp-a',
+        path: '/tmp/mcp-a', installedAt: '2026-08-19T12:03:00.000Z',
+      };
+
+      const provider = new InstalledTreeDataProvider({ fsPath: '/test/ext' } as any);
+      const groupItem = new InstalledGroupItem(
+        'kilo-code (global)', 'Kilo Code (global)', [skillA, skillB, agentA, mcpA], 'kilo-code'
+      );
+
+      const kindGroups = await provider.getChildren(groupItem);
+      assert.strictEqual(kindGroups.length, 3);
+      assert.ok(kindGroups.every((g) => g instanceof KindGroupItem));
+      const [skillsGroup, agentsGroup, mcpGroup] = kindGroups as KindGroupItem[];
+      // Stable order: skill, agent, command, mcp-server, hook, rule — commands/hooks/rules absent, skipped.
+      assert.strictEqual(skillsGroup.kind, 'skill');
+      assert.strictEqual(skillsGroup.items.length, 2);
+      assert.strictEqual(agentsGroup.kind, 'agent');
+      assert.strictEqual(agentsGroup.items.length, 1);
+      assert.strictEqual(mcpGroup.kind, 'mcp-server');
+      assert.strictEqual(mcpGroup.items.length, 1);
+
+      const skillsTreeItem = provider.getTreeItem(skillsGroup);
+      assert.strictEqual(skillsTreeItem.label, 'Skills (2)');
+      assert.strictEqual((skillsTreeItem.iconPath as { id: string }).id, 'check');
+
+      const resolvedSkillItems = await provider.getChildren(skillsGroup);
+      assert.strictEqual(resolvedSkillItems.length, 2);
+      assert.ok(resolvedSkillItems[0] instanceof InstalledInstallationItem);
     });
   });
 
@@ -579,8 +653,9 @@ describe('UI TreeDataProviders', () => {
 
   describe('Recommend and Unrecommend Commands', () => {
     it('manages desiredInstallations in manifest accurately', async () => {
-      const availableProvider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any);
+      const availableProvider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
       const installedProvider = new InstalledTreeDataProvider({ fsPath: '/test/ext' } as any);
+      const sourcesProvider = new SourcesTreeDataProvider(availableProvider);
 
       const source: Source = { id: 'src-1', type: 'local-folder', scope: 'project' };
       const pkg: Package = { id: 'src-1:pkg', sourceId: 'src-1', nativeFormat: 'raw', artifacts: [] };
@@ -594,7 +669,7 @@ describe('UI TreeDataProviders', () => {
 
       // Recommend an item from Available
       mockQuickPickResult = 'claude-code';
-      await handleRecommendForWorkspace(availableItem, availableProvider, installedProvider);
+      await handleRecommendForWorkspace(availableItem, availableProvider, installedProvider, sourcesProvider);
 
       let manifest = await readManifest('project', testTempDir);
       assert.strictEqual(manifest.desiredInstallations.length, 1);
@@ -603,7 +678,7 @@ describe('UI TreeDataProviders', () => {
       assert.strictEqual(manifest.desiredInstallations[0].assistant, 'claude-code');
 
       // Call recommend again on the same item/assistant
-      await handleRecommendForWorkspace(availableItem, availableProvider, installedProvider);
+      await handleRecommendForWorkspace(availableItem, availableProvider, installedProvider, sourcesProvider);
       manifest = await readManifest('project', testTempDir);
       assert.strictEqual(manifest.desiredInstallations.length, 1); // still exactly one entry
 
@@ -622,15 +697,17 @@ describe('UI TreeDataProviders', () => {
         nativeFormat: 'raw',
       });
       mockLastWarningMessage = undefined;
-      await handleRecommendForWorkspace(globalAvailableItem, availableProvider, installedProvider);
+      await handleRecommendForWorkspace(globalAvailableItem, availableProvider, installedProvider, sourcesProvider);
       manifest = await readManifest('project', testTempDir);
       assert.strictEqual(manifest.desiredInstallations.length, 0); // no manifest change
       assert.ok((mockLastWarningMessage as any)?.includes('Cannot recommend global-scope items'));
 
-      // Recommend on an installed item with no sourceId/artifactId
+      // Recommend on an installed item with no sourceId/artifactId: the user is
+      // prompted to pick/register the source that provides it. Simulate cancelling
+      // that prompt -> no manifest change, no crash.
       const unmanagedInstallation: ManagedInstallation = {
         assistant: 'claude-code',
-        scope: 'project',
+        scope: 'global',
         kind: 'skill',
         name: 'test-skill',
         path: '/tmp/skill',
@@ -639,10 +716,10 @@ describe('UI TreeDataProviders', () => {
       };
       const installedItem = new InstalledInstallationItem(unmanagedInstallation);
       mockLastWarningMessage = undefined;
-      await handleRecommendForWorkspace(installedItem, availableProvider, installedProvider);
+      mockQuickPickResult = undefined;
+      await handleRecommendForWorkspace(installedItem, availableProvider, installedProvider, sourcesProvider);
       manifest = await readManifest('project', testTempDir);
-      assert.strictEqual(manifest.desiredInstallations.length, 0); // no manifest change
-      assert.ok((mockLastWarningMessage as any)?.includes("This item isn't tracked to a source"));
+      assert.strictEqual(manifest.desiredInstallations.length, 0); // cancelled -> no manifest change
     });
   });
 

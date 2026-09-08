@@ -38,10 +38,6 @@
           "name": "Sources"
         },
         {
-          "id": "aiSwissknife.available",
-          "name": "Available"
-        },
-        {
           "id": "aiSwissknife.installed",
           "name": "Installed"
         }
@@ -184,11 +180,6 @@
         },
         {
           "command": "aiSwissknife.openDashboard",
-          "when": "view == aiSwissknife.available",
-          "group": "navigation@0"
-        },
-        {
-          "command": "aiSwissknife.openDashboard",
           "when": "view == aiSwissknife.installed",
           "group": "navigation@0"
         },
@@ -209,8 +200,8 @@
         },
         {
           "command": "aiSwissknife.refreshCatalog",
-          "when": "view == aiSwissknife.available",
-          "group": "navigation@1"
+          "when": "view == aiSwissknife.sources",
+          "group": "navigation@4"
         },
         {
           "command": "aiSwissknife.createArtifact",
@@ -231,17 +222,12 @@
       "view/item/context": [
         {
           "command": "aiSwissknife.installArtifact",
-          "when": "view == aiSwissknife.available && viewItem =~ /^availableArtifact/",
+          "when": "view == aiSwissknife.sources && viewItem =~ /^availableArtifact/",
           "group": "inline@1"
         },
         {
           "command": "aiSwissknife.installFolder",
-          "when": "view == aiSwissknife.available && viewItem == availableFolder",
-          "group": "inline@1"
-        },
-        {
-          "command": "aiSwissknife.installSourceGroup",
-          "when": "view == aiSwissknife.available && viewItem == availableSourceGroup",
+          "when": "view == aiSwissknife.sources && viewItem == availableFolder",
           "group": "inline@1"
         },
         {
@@ -286,12 +272,12 @@
         },
         {
           "command": "aiSwissknife.recommendForWorkspace",
-          "when": "view == aiSwissknife.available && viewItem =~ /^availableArtifact/ && viewItem != availableArtifact:recommended",
+          "when": "view == aiSwissknife.sources && viewItem =~ /^availableArtifact/ && viewItem != availableArtifact:recommended",
           "group": "inline@4"
         },
         {
           "command": "aiSwissknife.unrecommendForWorkspace",
-          "when": "view == aiSwissknife.available && viewItem == availableArtifact:recommended",
+          "when": "view == aiSwissknife.sources && viewItem == availableArtifact:recommended",
           "group": "inline@4"
         },
         {
@@ -315,14 +301,19 @@
           "group": "inline@1"
         },
         {
-          "command": "aiSwissknife.removeSource",
+          "command": "aiSwissknife.installSourceGroup",
           "when": "view == aiSwissknife.sources && viewItem == sourceItem",
           "group": "inline@1"
         },
         {
-          "command": "aiSwissknife.openInDashboard",
+          "command": "aiSwissknife.removeSource",
           "when": "view == aiSwissknife.sources && viewItem == sourceItem",
           "group": "inline@2"
+        },
+        {
+          "command": "aiSwissknife.openInDashboard",
+          "when": "view == aiSwissknife.sources && viewItem == sourceItem",
+          "group": "inline@3"
         }
       ]
     }

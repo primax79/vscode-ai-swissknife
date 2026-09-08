@@ -165,14 +165,22 @@ review, `_inbox/analyzed/codex-analysis-2.md` — don't let it drift again).
   the existing schema instead of inventing a parallel one avoids a second,
   driftable "intent" list — see `specs/project-recommendations.md`.
 - **Sidebar = action, Dashboard = state/detail/cross-reference** (locked
-  2026-09-07). The three `TreeView`s (Sources/Available/Installed) stay
-  focused on browsing/adding/installing/promoting; anything requiring rich
-  per-item detail, diff-vs-original, or cross-assistant "installed also in"
-  lookup renders in the `DashboardPanel` webview instead of being crammed
-  into `TreeItem` tooltips. *Why:* an earlier idea to nest a richer
-  Assistant→Scope hierarchy directly in the sidebar was found to conflate
-  two different jobs — "navigate to act" vs. "fully understand one item's
-  state" — see `specs/phase-6-spec.md` §3.
+  2026-09-07). The sidebar tree(s) stay focused on browsing/adding/
+  installing/promoting; anything requiring rich per-item detail,
+  diff-vs-original, or cross-assistant "installed also in" lookup renders
+  in the `DashboardPanel` webview instead of being crammed into `TreeItem`
+  tooltips. *Why:* an earlier idea to nest a richer Assistant→Scope
+  hierarchy directly in the sidebar was found to conflate two different
+  jobs — "navigate to act" vs. "fully understand one item's state" — see
+  `specs/phase-6-spec.md` §3. **Narrowed 2026-09-08** (`specs/phase-7-spec.md`):
+  hands-on `.vsix` testing showed two of the sidebar's own *navigation*
+  frictions (not detail/state gaps) needed fixing within this same split —
+  `Sources` and `Available` merged into one tree (no more hidden
+  select-a-source-to-filter coupling between two separate views), and
+  `Installed` gained a per-kind grouping level. Both are still "navigate to
+  act," so the split itself stands; only the sidebar's own tree count
+  (three views → two: `Sources`, `Installed`) and `Installed`'s hierarchy
+  depth changed.
 
 ## Conventions
 

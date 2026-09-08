@@ -45,6 +45,15 @@ item, per-source filtered jump). See
 (Codex + Kilo/Gemini, both rounds) complete and incorporated — accepted for
 task breakdown.
 
+**2026-09-08 — Phase 7 opened**:
+Initiative 28 unifies sidebar navigation based on hands-on `.vsix` testing
+feedback: `Sources` and `Available` merge into one tree (expanding a
+source shows its content directly, no more hidden select-to-filter
+coupling), and `Installed` gains a per-kind grouping level under each
+assistant/scope group. Narrowly revisits (does not reverse) Phase 6's
+sidebar/Dashboard split — see [`specs/phase-7-spec.md`](specs/phase-7-spec.md)
+§0 for why. Implemented directly, no delegated tasks.
+
 ## Initiatives
 
 `#` is the stable id (folder/task prefix); it is NOT reading order —
@@ -79,6 +88,7 @@ task breakdown.
 | 25       | 25  | [Move action + Promote disambiguation fix](25-move-and-promote-fix/plan.md)               | ✅ done (25.1/25.2/25.3/25.4/25.5 merged) | 14, 18              | M    |
 | 26       | 26  | [Dashboard rebuild: unified table, filters, detail](26-dashboard-rebuild/plan.md)          | ✅ done (26.1/26.2 merged)             | 16, 23, 24, 25         | L    |
 | 27       | 27  | [New Dashboard entry points](27-dashboard-entry-points/plan.md)                            | ✅ done (27.1/27.2 merged)             | 22, 26                 | S    |
+| 28       | 28  | [Sidebar navigation unification](28-sidebar-unification/plan.md)                           | ✅ done (28.1/28.2)                    | 16, 22                 | M    |
 
 ## Specs
 
@@ -90,6 +100,7 @@ task breakdown.
 | [phase-4-spec](specs/phase-4-spec.md)                        | 17, 18, 19, 20, 21         |
 | [project-recommendations](specs/project-recommendations.md)  | 22                         |
 | [phase-6-spec](specs/phase-6-spec.md)                        | 23, 24, 25, 26, 27         |
+| [phase-7-spec](specs/phase-7-spec.md)                        | 28                         |
 
 ## Dependency graph
 
@@ -114,6 +125,9 @@ Phase 6 (sidebar/Dashboard usability overhaul):
 14, 18 ────────────────────► 25 (Move action + Promote disambiguation fix)
 16, 23, 24, 25 ─────────────► 26 (Dashboard rebuild)
 22, 26 ─────────────────────► 27 (New Dashboard entry points)
+
+Phase 7 (sidebar navigation unification):
+16, 22 ──────────────────────► 28 (Sources+Available merge, Installed kind-grouping)
 ```
 
 ---

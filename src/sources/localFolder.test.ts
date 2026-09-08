@@ -67,7 +67,7 @@ describe('localFolder — resolveLocalFolder with committed fixtures', () => {
     }
   });
 
-  it('resolves mixed fixture delivering packages and diagnostics together', async () => {
+  it('resolves mixed fixture including a skill with no explicit name in frontmatter', async () => {
     const source: Source = {
       id: 'src-mixed',
       type: 'local-folder',
@@ -77,8 +77,9 @@ describe('localFolder — resolveLocalFolder with committed fixtures', () => {
 
     const resolution = await resolveLocalFolder(source);
     assert.strictEqual(resolution.packages.length, 2);
-    assert.strictEqual(resolution.diagnostics.length, 1);
-    assert.strictEqual(resolution.diagnostics[0].code, 'invalid-frontmatter');
+    // The mixed fixture's "malformed-skill" only omits `name` in frontmatter,
+    // which falls back to the directory name — not diagnostic-worthy.
+    assert.strictEqual(resolution.diagnostics.length, 0);
   });
 
   it('resolves fixtures root containing skills, agents, and commands', async () => {

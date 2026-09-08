@@ -8,8 +8,24 @@ import {
   toDesiredSource,
 } from '../domain/registry';
 import { getWorkspaceRoot } from './workspacePicker';
+import {
+  AvailableTreeDataProvider,
+  AvailableFolderItem,
+  AvailableArtifactItem,
+  DiagnosticTreeItem,
+  RecommendedGroupItem,
+  RecommendedBrokenItem,
+  type AvailableTreeItem,
+} from './availableView';
 
-export type SourceTreeItem = ScopeGroupItem | SourceItem;
+export type SourceTreeItem =
+  | ScopeGroupItem
+  | SourceItem
+  | AvailableFolderItem
+  | AvailableArtifactItem
+  | DiagnosticTreeItem
+  | RecommendedGroupItem
+  | RecommendedBrokenItem;
 
 export class ScopeGroupItem {
   constructor(
@@ -26,7 +42,31 @@ export class SourceItem {
   ) {}
 }
 
+function getSourceTypeIcon(type: Source['type']): vscode.ThemeIcon {
+  switch (type) {
+    case 'local-folder':
+      return new vscode.ThemeIcon('folder');
+    case 'git-custom':
+      return new vscode.ThemeIcon('repo');
+    case 'git-marketplace':
+      return new vscode.ThemeIcon('extensions');
+    case 'git-single-item':
+      return new vscode.ThemeIcon('git-commit');
+    case 'remote-url':
+      return new vscode.ThemeIcon('link');
+    default:
+      return new vscode.ThemeIcon('source-control');
+  }
+}
+
 export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTreeItem> {
+  constructor(private readonly availableProvider: AvailableTreeDataProvider) {
+    // Available's content (folders/artifacts/diagnostics/recommended group) is
+    // now rendered as part of this tree, so any change there must re-render
+    // this tree too — this is the only registered TreeDataProvider now.
+    this.availableProvider.onDidChangeTreeData(() => this.refresh());
+  }
+
   private _onDidChangeTreeData = new vscode.EventEmitter<SourceTreeItem | undefined | null | void>();
   readonly onDidChangeTreeData: vscode.Event<SourceTreeItem | undefined | null | void> =
     this._onDidChangeTreeData.event;
@@ -45,26 +85,38 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
       return item;
     }
 
-    const source = element.source;
-    const item = new vscode.TreeItem(
-      element.label,
-      vscode.TreeItemCollapsibleState.None
-    );
-    item.description = element.description;
-    item.contextValue = 'sourceItem';
-    item.tooltip = `ID: ${source.id}\nType: ${source.type}\nScope: ${source.scope}${
-      source.url ? `\nURL: ${source.url}` : ''
-    }${source.localPath ? `\nPath: ${source.localPath}` : ''}`;
+    if (element instanceof SourceItem) {
+      const source = element.source;
+      const item = new vscode.TreeItem(
+        element.label,
+        vscode.TreeItemCollapsibleState.Collapsed
+      );
+      item.description = element.description;
+      item.contextValue = 'sourceItem';
+      item.iconPath = getSourceTypeIcon(source.type);
+      item.tooltip = `ID: ${source.id}\nType: ${source.type}\nScope: ${source.scope}${
+        source.url ? `\nURL: ${source.url}` : ''
+      }${source.localPath ? `\nPath: ${source.localPath}` : ''}`;
 
-    return item;
+      return item;
+    }
+
+    return this.availableProvider.getTreeItem(element as AvailableTreeItem);
   }
 
   async getChildren(element?: SourceTreeItem): Promise<SourceTreeItem[]> {
     if (!element) {
-      return [
+      await this.availableProvider.ensureCatalogLoaded();
+      const children: SourceTreeItem[] = [];
+      const recommended = this.availableProvider.getCachedRecommendedGroup();
+      if (recommended) {
+        children.push(recommended);
+      }
+      children.push(
         new ScopeGroupItem('global', 'Global Sources'),
-        new ScopeGroupItem('project', 'Project Sources'),
-      ];
+        new ScopeGroupItem('project', 'Project Sources')
+      );
+      return children;
     }
 
     if (element instanceof ScopeGroupItem) {
@@ -105,17 +157,34 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
           return [];
         }
       }
+      return [];
     }
 
-    return [];
+    if (element instanceof SourceItem) {
+      await this.availableProvider.ensureCatalogLoaded();
+      const group = this.availableProvider
+        .getCachedSourceGroups()
+        .find((g) => g.source.id === element.source.id && g.source.scope === element.source.scope);
+      if (!group) return [];
+      // A source group's children are always diagnostics/folders/artifacts,
+      // never another AvailableSourceGroupItem (which this union excludes).
+      return this.availableProvider.getChildren(group) as unknown as SourceTreeItem[];
+    }
+
+    return this.availableProvider.getChildren(element as AvailableTreeItem) as unknown as SourceTreeItem[];
   }
 
-  async addSource(): Promise<void> {
-    const scopePick = await vscode.window.showQuickPick(['project', 'global'], {
-      placeHolder: 'Select source scope (project or global)',
-    });
-    if (!scopePick) return;
-    const scope = scopePick as Scope;
+  async addSource(forceScope?: Scope): Promise<Source | undefined> {
+    let scope: Scope;
+    if (forceScope) {
+      scope = forceScope;
+    } else {
+      const scopePick = await vscode.window.showQuickPick(['project', 'global'], {
+        placeHolder: 'Select source scope (project or global)',
+      });
+      if (!scopePick) return undefined;
+      scope = scopePick as Scope;
+    }
 
     let projectRoot: string | undefined;
     if (scope === 'project') {
@@ -203,11 +272,14 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
       manifest.sources = manifest.sources.filter((s) => s.id !== desired.id);
       manifest.sources.push(desired);
       await writeManifest(scope, manifest, projectRoot);
+      await this.availableProvider.refreshCatalog();
       this.refresh();
       vscode.window.showInformationMessage(`Source "${desired.id}" added successfully.`);
+      return runtimeSource;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       vscode.window.showErrorMessage(`Failed to add source: ${msg}`);
+      return undefined;
     }
   }
 
@@ -248,6 +320,7 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
       manifest.desiredInstallations = manifest.desiredInstallations.filter((d) => d.sourceId !== source.id);
       await writeManifest(source.scope, manifest, projectRoot);
 
+      await this.availableProvider.refreshCatalog();
       this.refresh();
       vscode.window.showInformationMessage(`Source "${source.id}" removed from manifest.`);
     } catch (err: unknown) {

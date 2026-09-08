@@ -169,7 +169,7 @@ describe('gitCustom — resolveGitCustom with committed fixtures in dynamic repo
     });
   });
 
-  it('resolves branch pin carrying both valid packages and detection diagnostics', async () => {
+  it('resolves branch pin carrying valid packages including a skill with no explicit name', async () => {
     const source: Source = {
       id: 'src-test-branch-feature',
       type: 'git-custom',
@@ -181,8 +181,9 @@ describe('gitCustom — resolveGitCustom with committed fixtures in dynamic repo
     const resolution = await resolveGitCustom(source, { cacheDir: cacheBaseDir });
     // 5 from main + 2 from mixed = 7
     assert.strictEqual(resolution.packages.length, 7);
-    assert.strictEqual(resolution.diagnostics.length, 1);
-    assert.strictEqual(resolution.diagnostics[0].code, 'invalid-frontmatter');
+    // The mixed fixture's "malformed-skill" only omits `name` in frontmatter,
+    // which falls back to the directory name — not diagnostic-worthy.
+    assert.strictEqual(resolution.diagnostics.length, 0);
     assert.strictEqual(resolution.packages[0].version?.requestedRef, 'feature-skills');
   });
 

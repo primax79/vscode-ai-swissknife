@@ -83,10 +83,9 @@ describe('detect — findSkillDirs with committed fixtures', () => {
     const malformed = skills.find((s) => s.name === 'malformed-skill');
     assert.ok(malformed);
 
-    assert.strictEqual(diagnostics.length, 1);
-    assert.strictEqual(diagnostics[0].code, 'invalid-frontmatter');
-    assert.strictEqual(diagnostics[0].severity, 'warning');
-    assert.ok(diagnostics[0].path.includes('malformed-skill'));
+    // Missing `name` in frontmatter is a common, expected pattern (name falls
+    // back to the directory name) — not a diagnostic-worthy problem.
+    assert.strictEqual(diagnostics.length, 0);
   });
 
   it('throws ENOENT for non-existent directory', async () => {
