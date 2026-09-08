@@ -763,7 +763,7 @@ describe('UI TreeDataProviders', () => {
 
   describe('DashboardPanel', () => {
     it('renders dashboard HTML with metrics and item rows in normal (non-scanning) mode', () => {
-      const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any, {} as any);
+      const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any, {} as any, {} as any, {} as any, () => {});
       assert.ok(panel);
 
       const html = panel.getHtml(
@@ -794,7 +794,7 @@ describe('UI TreeDataProviders', () => {
     });
 
     it('renders dashboard HTML in scanning mode with pending status and indicator', () => {
-      const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any, {} as any);
+      const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any, {} as any, {} as any, {} as any, () => {});
       assert.ok(panel);
 
       const html = panel.getHtml(

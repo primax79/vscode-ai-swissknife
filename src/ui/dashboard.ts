@@ -7,6 +7,8 @@ import type { DriftReport } from '../engine/types';
 import { FormEditorPanel } from './formEditor';
 import { getAssistantIconPath } from './assistantIcons';
 import { InstalledTreeDataProvider, getIdentityKey } from './installedView';
+import { SourcesTreeDataProvider } from './sourcesView';
+import { AvailableTreeDataProvider } from './availableView';
 import { findRelatedInstallations } from '../engine/crossFrameworkLookup';
 
 export class DashboardPanel {
@@ -14,14 +16,27 @@ export class DashboardPanel {
   private readonly _panel: vscode.WebviewPanel;
   private readonly _extensionUri: vscode.Uri;
   private readonly _provider: InstalledTreeDataProvider;
+  private readonly _sourcesProvider: SourcesTreeDataProvider;
+  private readonly _availableProvider: AvailableTreeDataProvider;
+  private readonly _refreshCallback: () => void;
   private _disposables: vscode.Disposable[] = [];
 
   private _sourceFilter?: { id: string; scope: Scope };
 
-  private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, provider: InstalledTreeDataProvider) {
+  private constructor(
+    panel: vscode.WebviewPanel,
+    extensionUri: vscode.Uri,
+    provider: InstalledTreeDataProvider,
+    sourcesProvider: SourcesTreeDataProvider,
+    availableProvider: AvailableTreeDataProvider,
+    refreshCallback: () => void
+  ) {
     this._panel = panel;
     this._extensionUri = extensionUri;
     this._provider = provider;
+    this._sourcesProvider = sourcesProvider;
+    this._availableProvider = availableProvider;
+    this._refreshCallback = refreshCallback;
     this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
     this._panel.webview.onDidReceiveMessage(
       async (message) => {
@@ -111,7 +126,13 @@ export class DashboardPanel {
     this.update();
   }
 
-  public static render(extensionUri: vscode.Uri, provider: InstalledTreeDataProvider): DashboardPanel {
+  public static render(
+    extensionUri: vscode.Uri,
+    provider: InstalledTreeDataProvider,
+    sourcesProvider: SourcesTreeDataProvider,
+    availableProvider: AvailableTreeDataProvider,
+    refreshCallback: () => void
+  ): DashboardPanel {
     if (DashboardPanel.currentPanel) {
       DashboardPanel.currentPanel._panel.reveal(vscode.ViewColumn.One);
       DashboardPanel.currentPanel.update();
@@ -129,7 +150,7 @@ export class DashboardPanel {
       }
     );
 
-    DashboardPanel.currentPanel = new DashboardPanel(panel, extensionUri, provider);
+    DashboardPanel.currentPanel = new DashboardPanel(panel, extensionUri, provider, sourcesProvider, availableProvider, refreshCallback);
     return DashboardPanel.currentPanel;
   }
 

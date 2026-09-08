@@ -161,6 +161,13 @@ export function activate(context: vscode.ExtensionContext) {
     }
   };
 
+  const refreshDashboardState = () => {
+    sourcesProvider.refresh();
+    availableProvider.refreshCatalog();
+    installedProvider.refresh();
+    updateStatusBar().catch(() => {});
+  };
+
   let hasCheckedRecommendations = false;
   const checkRecommendations = async () => {
     const projectRoot = await getWorkspaceRoot();
@@ -383,9 +390,9 @@ export function activate(context: vscode.ExtensionContext) {
         updateStatusBar().catch(() => {});
       })
     ),
-    vscode.commands.registerCommand('aiSwissknife.openDashboard', () => DashboardPanel.render(context.extensionUri, installedProvider)),
+    vscode.commands.registerCommand('aiSwissknife.openDashboard', () => DashboardPanel.render(context.extensionUri, installedProvider, sourcesProvider, availableProvider, refreshDashboardState)),
     vscode.commands.registerCommand('aiSwissknife.openInDashboard', (item?: SourceItem) => {
-      const panel = DashboardPanel.render(context.extensionUri, installedProvider);
+      const panel = DashboardPanel.render(context.extensionUri, installedProvider, sourcesProvider, availableProvider, refreshDashboardState);
       if (item) {
         panel.setSourceFilter(item.source.id, item.source.scope);
       }
