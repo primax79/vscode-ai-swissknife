@@ -17,6 +17,8 @@ import { parseClaudeCommandMarkdown, serializeClaudeCommandMarkdown } from './cl
 
 export class CodexAdapter implements Adapter {
   readonly assistant: AssistantId = 'codex-cli';
+  readonly displayName: string = 'Codex CLI';
+  readonly iconId: string = 'ai-swissknife-codex-cli';
 
   constructor(private readonly getHomedir: () => string = os.homedir) {}
 
