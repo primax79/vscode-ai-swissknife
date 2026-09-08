@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import type { ItemKind } from '../domain/types';
 
 /**
  * One node in the raw file browser nested under an artifact (installed,
@@ -105,6 +106,33 @@ class ReadonlyFileContentProvider implements vscode.TextDocumentContentProvider 
 
 export const readonlyFileContentProvider = new ReadonlyFileContentProvider();
 export { ReadonlyFileContentProvider };
+
+/**
+ * Resolves the single file to open when previewing an artifact directly
+ * (not via the file-browser expansion). Most kinds already point at one
+ * file; a skill resolves to a directory, so this picks its SKILL.md as the
+ * representative file. Returns undefined when there is nothing sensible to
+ * open (e.g. no `path` was recorded, or a skill directory has no SKILL.md).
+ */
+export function resolveArtifactPreviewPath(
+  artifactPath: string | undefined,
+  kind: ItemKind
+): string | undefined {
+  if (!artifactPath) return undefined;
+  if (isBrowsableDirectory(artifactPath)) {
+    if (kind === 'skill') {
+      const skillMd = path.join(artifactPath, 'SKILL.md');
+      return fs.existsSync(skillMd) ? skillMd : undefined;
+    }
+    return undefined;
+  }
+  return fs.existsSync(artifactPath) ? artifactPath : undefined;
+}
+
+export async function openArtifactFile(fsPath: string, readonly: boolean): Promise<void> {
+  const uri = readonly ? readonlyFileContentProvider.open(fsPath) : vscode.Uri.file(fsPath);
+  await vscode.commands.executeCommand('vscode.open', uri);
+}
 
 export function getArtifactFileTreeItem(element: ArtifactFileItem): vscode.TreeItem {
   const item = new vscode.TreeItem(

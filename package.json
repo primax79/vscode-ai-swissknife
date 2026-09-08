@@ -146,6 +146,12 @@
         "category": "AI Swissknife"
       },
       {
+        "command": "aiSwissknife.previewAvailableArtifact",
+        "title": "Preview File",
+        "icon": "$(eye)",
+        "category": "AI Swissknife"
+      },
+      {
         "command": "aiSwissknife.installFolder",
         "title": "Install All in Folder",
         "icon": "$(cloud-download)",
@@ -305,6 +311,11 @@
           "command": "aiSwissknife.installArtifact",
           "when": "view == aiSwissknife.sources && viewItem =~ /^availableArtifact/",
           "group": "inline@1"
+        },
+        {
+          "command": "aiSwissknife.previewAvailableArtifact",
+          "when": "view == aiSwissknife.sources && viewItem =~ /^availableArtifact/",
+          "group": "inline@2"
         },
         {
           "command": "aiSwissknife.installFolder",

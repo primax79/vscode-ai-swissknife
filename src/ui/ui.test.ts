@@ -371,6 +371,45 @@ describe('UI TreeDataProviders', () => {
       }
     });
 
+    it('previewArtifact resolves a skill directory to its SKILL.md and a single-file kind to itself', async () => {
+      const skillDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ai-swissknife-preview-skill-'));
+      const agentFile = path.join(await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ai-swissknife-preview-agent-')), 'my-agent.md');
+      try {
+        await fs.promises.writeFile(path.join(skillDir, 'SKILL.md'), '# skill');
+        await fs.promises.writeFile(agentFile, '# agent');
+
+        const provider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any);
+        const source: Source = { id: 'src-1', type: 'git-marketplace', scope: 'project', url: 'https://example.invalid/repo.git' };
+        const pkg: Package = { id: 'src-1:pkg', sourceId: 'src-1', nativeFormat: 'claude-skill', artifacts: [] };
+
+        const skillItem = new AvailableArtifactItem(source, pkg, {
+          id: 'art-skill', packageId: 'src-1:pkg', kind: 'skill', name: 'a-skill',
+          nativeFormat: 'claude-skill', path: skillDir,
+        });
+        await provider.previewArtifact(skillItem);
+
+        const agentItem = new AvailableArtifactItem(source, pkg, {
+          id: 'art-agent', packageId: 'src-1:pkg', kind: 'agent', name: 'an-agent',
+          nativeFormat: 'claude-agent', path: agentFile,
+        });
+        await provider.previewArtifact(agentItem);
+
+        const noPathItem = new AvailableArtifactItem(source, pkg, {
+          id: 'art-nopath', packageId: 'src-1:pkg', kind: 'agent', name: 'no-path-agent',
+          nativeFormat: 'claude-agent',
+        });
+        await provider.previewArtifact(noPathItem);
+        assert.ok(mockLastWarningMessage?.includes('No local file to preview'));
+
+        mockLastWarningMessage = undefined as string | undefined;
+        await provider.previewArtifact(undefined);
+        assert.ok((mockLastWarningMessage as string | undefined)?.includes('Please select an available item'));
+      } finally {
+        await fs.promises.rm(skillDir, { recursive: true, force: true });
+        await fs.promises.rm(path.dirname(agentFile), { recursive: true, force: true });
+      }
+    });
+
     it('prefixes an installed artifact\'s label with the inline icon of every assistant it is installed in', () => {
       const provider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any);
       const source: Source = { id: 'src-1', type: 'local-folder', scope: 'project' };

@@ -410,6 +410,9 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('aiSwissknife.installArtifact', (item?: AvailableArtifactItem) =>
       availableProvider.installArtifact(item)
     ),
+    vscode.commands.registerCommand('aiSwissknife.previewAvailableArtifact', (item?: AvailableArtifactItem) =>
+      availableProvider.previewArtifact(item)
+    ),
     vscode.commands.registerCommand('aiSwissknife.installFolder', (item?: AvailableFolderItem) =>
       availableProvider.installFolder(item)
     ),

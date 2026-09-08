@@ -27,6 +27,8 @@ import {
   getArtifactFileTreeItem,
   isBrowsableDirectory,
   listArtifactFiles,
+  openArtifactFile,
+  resolveArtifactPreviewPath,
 } from './artifactFileTree';
 
 import { resolveRecommendations, SourceResolutionAttempt, BrokenReason } from '../engine/recommendations';
@@ -460,8 +462,8 @@ export class AvailableTreeDataProvider
     item.contextValue = element.isRecommended ? 'availableArtifact:recommended' : 'availableArtifact';
     item.iconPath = new vscode.ThemeIcon(getKindIconName(artifact.kind));
     item.command = {
-      command: 'aiSwissknife.installArtifact',
-      title: `Install ${artifact.kind}`,
+      command: 'aiSwissknife.previewAvailableArtifact',
+      title: `Preview ${artifact.kind}`,
       arguments: [element],
     };
     return item;
@@ -540,6 +542,22 @@ export class AvailableTreeDataProvider
     }
 
     return [];
+  }
+
+  async previewArtifact(item?: AvailableArtifactItem): Promise<void> {
+    if (!item) {
+      vscode.window.showWarningMessage('Please select an available item to preview.');
+      return;
+    }
+
+    const previewPath = resolveArtifactPreviewPath(item.artifact.path, item.artifact.kind);
+    if (!previewPath) {
+      vscode.window.showWarningMessage(`No local file to preview for "${item.artifact.name}".`);
+      return;
+    }
+
+    const readonly = item.source.type !== 'local-folder';
+    await openArtifactFile(previewPath, readonly);
   }
 
   async installArtifact(item?: AvailableArtifactItem): Promise<void> {
