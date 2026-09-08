@@ -18,6 +18,11 @@ export class PreviewProvider implements vscode.TextDocumentContentProvider {
     return this.contentMap.get(uri.path) || 'No preview content found.';
   }
 
+  public setDiffContent(id: string, contentStr: string, ext: string = '.md'): vscode.Uri {
+    this.contentMap.set(id, contentStr);
+    return vscode.Uri.parse(`${PreviewProvider.scheme}:${id}${ext}`);
+  }
+
   public setPreviewContent(id: string, prepared: PreparedInstall): vscode.Uri {
     if (!prepared.supported) {
       this.contentMap.set(id, 'Installation not supported.');

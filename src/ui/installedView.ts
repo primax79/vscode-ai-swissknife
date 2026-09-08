@@ -1,5 +1,8 @@
 import * as vscode from 'vscode';
-import type { ManagedInstallation, ObservedArtifact, Source, AssistantId, Scope } from '../domain/types';
+import * as path from 'path';
+import * as fs from 'fs';
+import * as crypto from 'crypto';
+import type { ManagedInstallation, ObservedArtifact, Source, AssistantId, Scope, ItemKind } from '../domain/types';
 import { readState, writeState, readManifest, fromDesiredSource } from '../domain/registry';
 import { analyzeLocalDrift, checkForUpstreamUpdate } from '../engine/drift';
 import { scanInstalledInventory, promoteObservedArtifact } from '../engine/discovery';
@@ -129,6 +132,9 @@ export class InstalledTreeDataProvider
       } else if (obs.candidates && obs.candidates.length > 1) {
         candidateContext = 'observedArtifactItem:many';
       }
+      if (obs.match?.status) {
+        candidateContext += `:${obs.match.status}`;
+      }
       item.contextValue = candidateContext;
       
       return item;
@@ -179,7 +185,8 @@ export class InstalledTreeDataProvider
       report?.details ? `\nStatus: ${report.details}` : ''
     }${inst.sourceRevision?.commit ? `\nCommit: ${inst.sourceRevision.commit}` : ''}`;
     item.iconPath = new vscode.ThemeIcon(iconName);
-    item.contextValue = element.isRecommended ? 'installedInstallation:recommended' : 'installedInstallation';
+    const baseContext = element.isRecommended ? 'installedInstallation:recommended' : 'installedInstallation';
+    item.contextValue = report ? `${baseContext}:${report.status}` : baseContext;
     return item;
   }
 
@@ -654,6 +661,238 @@ export class InstalledTreeDataProvider
     } else {
       vscode.window.showErrorMessage(`Move failed: ${outcome.reason}`);
     }
+  }
+
+  async diffAgainstOriginal(item?: InstalledInstallationItem | ObservedArtifactItem): Promise<void> {
+    if (!item) {
+      vscode.window.showWarningMessage('Please select an item to diff.');
+      return;
+    }
+
+    let sourceId: string | undefined;
+    let artifactId: string | undefined;
+    let assistant: AssistantId;
+    let scope: Scope;
+    let projectRoot: string | undefined;
+    let kind: ItemKind;
+    let name: string;
+    let localDiskPath: string;
+
+    if (item instanceof InstalledInstallationItem) {
+      const inst = item.installation;
+      sourceId = inst.sourceId;
+      artifactId = inst.artifactId;
+      assistant = inst.assistant;
+      scope = inst.scope;
+      projectRoot = inst.projectPath;
+      kind = inst.kind;
+      name = inst.name;
+      localDiskPath = inst.path;
+    } else {
+      const obs = item.observed;
+      if (obs.match?.status === 'different') {
+        sourceId = obs.match.sourceId;
+        artifactId = obs.match.artifactId;
+      }
+      assistant = obs.assistant;
+      scope = obs.scope;
+      projectRoot = obs.projectPath;
+      kind = obs.kind;
+      name = obs.name;
+      localDiskPath = obs.path;
+    }
+
+    if (!sourceId) {
+      vscode.window.showWarningMessage('No known source to diff against.');
+      return;
+    }
+
+    let source: Source | undefined;
+    if (scope === 'project') {
+      const pRoot = projectRoot ?? await getWorkspaceRoot();
+      if (pRoot) {
+        try {
+          const pManifest = await readManifest('project', pRoot);
+          const desired = pManifest.sources.find((s) => s.id === sourceId);
+          if (desired) source = fromDesiredSource(desired, pRoot);
+        } catch { /* ignore */ }
+      }
+    }
+    if (!source) {
+      try {
+        const gManifest = await readManifest('global');
+        const desired = gManifest.sources.find((s) => s.id === sourceId);
+        if (desired) source = fromDesiredSource(desired);
+      } catch { /* ignore */ }
+    }
+
+    if (!source) {
+      vscode.window.showErrorMessage(`Source "${sourceId}" not found in manifest.`);
+      return;
+    }
+
+    let resolution;
+    try {
+      const { resolveLocalFolder } = await import('../sources/localFolder');
+      const { resolveGitCustom } = await import('../sources/gitCustom');
+      const { resolveGitMarketplace } = await import('../sources/gitMarketplace');
+      const { resolveGitSingleItem } = await import('../sources/gitSingleItem');
+      const { resolveRemoteUrl } = await import('../sources/remoteUrl');
+      
+      if (source.type === 'local-folder') {
+        resolution = await resolveLocalFolder(source);
+      } else if (source.type === 'git-custom') {
+        resolution = await resolveGitCustom(source);
+      } else if (source.type === 'git-marketplace') {
+        resolution = await resolveGitMarketplace(source);
+      } else if (source.type === 'git-single-item') {
+        resolution = await resolveGitSingleItem(source);
+      } else if (source.type === 'remote-url') {
+        resolution = await resolveRemoteUrl(source);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      vscode.window.showErrorMessage(`Failed to resolve source: ${msg}`);
+      return;
+    }
+
+    if (!resolution) return;
+
+    let foundPkg;
+    let foundArt;
+    for (const pkg of resolution.packages) {
+      for (const art of pkg.artifacts) {
+        if (
+          (artifactId && art.id === artifactId) ||
+          (!artifactId && art.kind === kind && art.name === name)
+        ) {
+          foundPkg = pkg;
+          foundArt = art;
+          break;
+        }
+      }
+      if (foundArt) break;
+    }
+
+    if (!foundPkg || !foundArt) {
+      vscode.window.showErrorMessage(`Artifact not found in source "${sourceId}".`);
+      return;
+    }
+
+    let translated;
+    try {
+      const { resolveAndTranslate } = await import('../engine/plan');
+      const result = await resolveAndTranslate(source, foundPkg, foundArt, assistant);
+      translated = result.translated;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      vscode.window.showErrorMessage(`Failed to translate original content: ${msg}`);
+      return;
+    }
+
+    let originalContentStr = '';
+    let localUri: vscode.Uri | undefined;
+    const title = `${name} (Original ↔ Local)`;
+    const id = `${assistant}-${kind}-${name}-diff-${Date.now()}`;
+    
+    if (kind === 'skill') {
+      const skill = translated as import('../adapters/types').CanonicalSkill;
+      const { serializeSkillMarkdown } = await import('../adapters/claude');
+      originalContentStr = serializeSkillMarkdown(skill);
+      localUri = vscode.Uri.file(path.join(localDiskPath, 'SKILL.md'));
+      
+      const { readSkill } = await import('../adapters/codec');
+      try {
+        const localSkill = await readSkill(localDiskPath);
+        const originalResourceHashes = new Map(skill.files.map(f => [f.path, crypto.createHash('sha256').update(f.content).digest('hex')]));
+        const diffFiles: string[] = [];
+        for (const lf of localSkill.files) {
+          const lHash = crypto.createHash('sha256').update(lf.content).digest('hex');
+          if (originalResourceHashes.get(lf.path) !== lHash) {
+             diffFiles.push(lf.path);
+          }
+        }
+        for (const of of skill.files) {
+          if (!localSkill.files.find(f => f.path === of.path)) diffFiles.push(of.path);
+        }
+        if (diffFiles.length > 0) {
+          vscode.window.showInformationMessage(`Note: Resource files also differ (${diffFiles.join(', ')})`);
+        }
+      } catch { /* ignore */ }
+
+    } else if (kind === 'agent') {
+      const agent = translated as import('../adapters/types').CanonicalAgent;
+      const { serializeKiloAgentMarkdown } = await import('../adapters/kilo');
+      const { serializeClaudeAgentMarkdown } = await import('../adapters/claude');
+      originalContentStr = assistant === 'kilo-code' ? serializeKiloAgentMarkdown(agent) : serializeClaudeAgentMarkdown(agent);
+      localUri = vscode.Uri.file(localDiskPath);
+    } else if (kind === 'command') {
+      const cmd = translated as import('../adapters/types').CanonicalCommand;
+      const { serializeKiloCommandMarkdown } = await import('../adapters/kilo');
+      const { serializeClaudeCommandMarkdown } = await import('../adapters/claude');
+      originalContentStr = assistant === 'kilo-code' ? serializeKiloCommandMarkdown(cmd) : serializeClaudeCommandMarkdown(cmd);
+      localUri = vscode.Uri.file(localDiskPath);
+    } else if (kind === 'rule') {
+      const rule = translated as import('../adapters/types').CanonicalRule;
+      const markerStart = `<!-- ai-swissknife:managed:${sourceId} -->`;
+      const markerEnd = '<!-- /ai-swissknife:managed -->';
+      originalContentStr = `${markerStart}\n${rule.content.trim()}\n${markerEnd}\n`;
+      
+      try {
+         const localFullContent = fs.readFileSync(localDiskPath, 'utf-8');
+         const markerRegex = new RegExp(`${markerStart}[\\s\\S]*?${markerEnd}`);
+         const match = localFullContent.match(markerRegex);
+         const localBlockContentStr = match ? match[0] + '\n' : '';
+         const { previewProvider } = await import('./previewProvider');
+         const localId = `local-${id}`;
+         localUri = previewProvider.setDiffContent(localId, localBlockContentStr, '.md');
+      } catch {
+         localUri = vscode.Uri.file(localDiskPath);
+      }
+    } else if (kind === 'mcp-server') {
+       const mcp = translated as import('../adapters/types').CanonicalMcpServer;
+       originalContentStr = JSON.stringify(mcp, null, 2);
+       try {
+         let adapter;
+         if (assistant === 'claude-code') adapter = (await import('../adapters/claude')).claudeAdapter;
+         else if (assistant === 'kilo-code') adapter = (await import('../adapters/kilo')).kiloAdapter;
+         else if (assistant === 'github-copilot') adapter = (await import('../adapters/copilot')).copilotAdapter;
+         else if (assistant === 'codex-cli') adapter = (await import('../adapters/codex')).codexAdapter;
+         else if (assistant === 'gemini-cli') adapter = (await import('../adapters/gemini')).geminiAdapter;
+         
+         if (adapter && adapter.readMcpServer) {
+           const localMcp = await adapter.readMcpServer(name, { scope, projectRoot });
+           const localMcpStr = localMcp ? JSON.stringify(localMcp, null, 2) : '';
+           const { previewProvider } = await import('./previewProvider');
+           const localId = `local-${id}`;
+           localUri = previewProvider.setDiffContent(localId, localMcpStr, '.json');
+         } else {
+           localUri = vscode.Uri.file(localDiskPath);
+         }
+       } catch {
+          localUri = vscode.Uri.file(localDiskPath);
+       }
+    } else if (kind === 'hook') {
+      const hook = translated as import('../adapters/types').CanonicalHook;
+      const payload = {
+        event: hook.event,
+        command: hook.command,
+        ...(hook.timeout ? { timeout: hook.timeout } : {}),
+        ...hook.extraFields,
+      };
+      originalContentStr = JSON.stringify(payload, null, 2) + '\n';
+      localUri = vscode.Uri.file(localDiskPath);
+    } else {
+      originalContentStr = 'Unknown kind.';
+      localUri = vscode.Uri.file(localDiskPath);
+    }
+
+    const { previewProvider } = await import('./previewProvider');
+    const ext = (kind === 'mcp-server' || kind === 'hook') ? '.json' : '.md';
+    const originalUri = previewProvider.setDiffContent(`orig-${id}`, originalContentStr, ext);
+
+    if (!localUri) return;
+    await vscode.commands.executeCommand('vscode.diff', originalUri, localUri, title);
   }
 
   private getInstallKey(inst: ManagedInstallation): string {
