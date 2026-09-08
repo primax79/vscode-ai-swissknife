@@ -7,11 +7,28 @@ import type { DriftReport } from '../engine/types';
 import { FormEditorPanel } from './formEditor';
 import { getAssistantIconPath } from './assistantIcons';
 import { InstalledTreeDataProvider, getIdentityKey } from './installedView';
-import { SourcesTreeDataProvider } from './sourcesView';
+import { SourcesTreeDataProvider, SourceItem } from './sourcesView';
 import { AvailableTreeDataProvider } from './availableView';
 import { findRelatedInstallations } from '../engine/crossFrameworkLookup';
 
 export class DashboardPanel {
+  private async getAllSources(): Promise<Source[]> {
+    const allSources: Source[] = [];
+    try {
+      const gManifest = await readManifest('global');
+      allSources.push(...gManifest.sources.map((d) => fromDesiredSource(d)));
+    } catch { /* ignore */ }
+    const folders = vscode.workspace.workspaceFolders;
+    if (folders && folders.length > 0) {
+      const projectRoot = folders[0].uri.fsPath;
+      try {
+        const pManifest = await readManifest('project', projectRoot);
+        allSources.push(...pManifest.sources.map((d) => fromDesiredSource(d, projectRoot)));
+      } catch { /* ignore */ }
+    }
+    return allSources;
+  }
+
   public static currentPanel: DashboardPanel | undefined;
   private readonly _panel: vscode.WebviewPanel;
   private readonly _extensionUri: vscode.Uri;
@@ -23,6 +40,16 @@ export class DashboardPanel {
   private _htmlInitialized: boolean = false;
 
   private _sourceFilter?: { id: string; scope: Scope };
+
+  private escapeHtml(unsafe: string): string {
+    return (unsafe || '')
+      .toString()
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
 
   private constructor(
     panel: vscode.WebviewPanel,
@@ -42,6 +69,37 @@ export class DashboardPanel {
     this._panel.webview.onDidReceiveMessage(
       async (message) => {
         switch (message.command) {
+          case 'addSource':
+            await this._sourcesProvider.addSource(message.scope);
+            this._refreshCallback();
+            await this.update();
+            break;
+          case 'removeSource': {
+            const sources = await this.getAllSources();
+            const source = sources.find(s => s.id === message.sourceId && s.scope === message.scope);
+            if (source) {
+              await this._sourcesProvider.removeSource(new SourceItem(source, source.name ?? source.id));
+              this._refreshCallback();
+              await this.update();
+            }
+            break;
+          }
+          case 'exportConfig':
+            await this._sourcesProvider.exportConfig();
+            break;
+          case 'exportSource': {
+            const sources = await this.getAllSources();
+            const source = sources.find(s => s.id === message.sourceId && s.scope === message.scope);
+            if (source) {
+              await this._sourcesProvider.exportSource(new SourceItem(source, source.name ?? source.id));
+            }
+            break;
+          }
+          case 'importConfig':
+            await this._sourcesProvider.importConfig();
+            this._refreshCallback();
+            await this.update();
+            break;
           case 'refresh':
             await this.update();
             break;
@@ -298,15 +356,6 @@ export class DashboardPanel {
       this._panel.webview.html = this.getHtml(allSources, allManaged, allObserved, [], true, this._sourceFilter);
       this._htmlInitialized = true;
     } else {
-      const escapeHtml = (unsafe: string) => {
-        return (unsafe || '')
-          .toString()
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")
-          .replace(/"/g, "&quot;")
-          .replace(/'/g, "&#039;");
-      };
 
       const totalInstalled = allManaged.length;
       const totalUnmanaged = allObserved.length;
@@ -316,9 +365,9 @@ export class DashboardPanel {
       const environmentPills = presentAssistants.map(a => {
         const iconUris = getAssistantIconPath(a, this._extensionUri);
         const iconSrc = this._panel.webview.asWebviewUri(iconUris.light);
-        return `<button class="filter-pill env-pill" data-env="${escapeHtml(a)}" onclick="setEnvFilter('${escapeHtml(a)}')">
+        return `<button class="filter-pill env-pill" data-env="${this.escapeHtml(a)}" onclick="setEnvFilter('${this.escapeHtml(a)}')">
           <img src="${iconSrc}" class="assistant-icon" width="14" height="14" />
-          ${escapeHtml(a)}
+          ${this.escapeHtml(a)}
         </button>`;
       }).join('\n');
 
@@ -332,12 +381,12 @@ export class DashboardPanel {
         const badgeClass = 'badge-pending';
         const badgeText = '● Managed · checking…';
         rowsHtml += `
-          <tr class="item-row" data-kind="${escapeHtml(inst.kind)}" data-name="${escapeHtml(inst.name.toLowerCase())}" data-assistant="${escapeHtml(inst.assistant)}" data-scope="${escapeHtml(inst.scope)}" data-membership="managed" data-status="${escapeHtml(status)}" data-source-id="${escapeHtml(sourceId)}" data-source-scope="${escapeHtml(sourceScope)}" data-key="${escapeHtml(key)}" onclick="selectRow(this, '${escapeHtml(key)}')">
-            <td><span class="kind-pill kind-${escapeHtml(inst.kind)}">${escapeHtml(inst.kind)}</span></td>
-            <td><strong>${escapeHtml(inst.name)}</strong></td>
-            <td>${escapeHtml(inst.assistant)}</td>
-            <td><span class="scope-pill scope-${escapeHtml(inst.scope)}">${escapeHtml(inst.scope)}</span></td>
-            <td data-drift-key="${escapeHtml(key)}"><span class="badge ${badgeClass}">${escapeHtml(badgeText)}</span></td>
+          <tr class="item-row" data-kind="${this.escapeHtml(inst.kind)}" data-name="${this.escapeHtml(inst.name.toLowerCase())}" data-assistant="${this.escapeHtml(inst.assistant)}" data-scope="${this.escapeHtml(inst.scope)}" data-membership="managed" data-status="${this.escapeHtml(status)}" data-source-id="${this.escapeHtml(sourceId)}" data-source-scope="${this.escapeHtml(sourceScope)}" data-key="${this.escapeHtml(key)}" onclick="selectRow(this, '${this.escapeHtml(key)}')">
+            <td><span class="kind-pill kind-${this.escapeHtml(inst.kind)}">${this.escapeHtml(inst.kind)}</span></td>
+            <td><strong>${this.escapeHtml(inst.name)}</strong></td>
+            <td>${this.escapeHtml(inst.assistant)}</td>
+            <td><span class="scope-pill scope-${this.escapeHtml(inst.scope)}">${this.escapeHtml(inst.scope)}</span></td>
+            <td data-drift-key="${this.escapeHtml(key)}"><span class="badge ${badgeClass}">${this.escapeHtml(badgeText)}</span></td>
             <td>
               <button class="btn btn-sm btn-secondary" onclick="editItem(${idx})">Edit</button>
             </td>
@@ -355,11 +404,11 @@ export class DashboardPanel {
         if (obs.match?.status === 'identical') {
           badgeClass = 'badge-success';
           badgeText = `◌ Unmanaged · identical to ${obs.match.sourceId}`;
-          tooltip = ` title="${escapeHtml(obs.match.details || '')}"`;
+          tooltip = ` title="${this.escapeHtml(obs.match.details || '')}"`;
         } else if (obs.match?.status === 'different') {
           badgeClass = 'badge-warning';
           badgeText = `◌ Unmanaged · differs from ${obs.match.sourceId}`;
-          tooltip = ` title="${escapeHtml(obs.match.details || '')}"`;
+          tooltip = ` title="${this.escapeHtml(obs.match.details || '')}"`;
         }
         let actionBtn = '';
         if ((obs.candidates?.length ?? 0) > 0) {
@@ -367,12 +416,12 @@ export class DashboardPanel {
         }
         const key = getIdentityKey(obs);
         rowsHtml += `
-          <tr class="item-row" data-kind="${escapeHtml(obs.kind)}" data-name="${escapeHtml(obs.name.toLowerCase())}" data-assistant="${escapeHtml(obs.assistant)}" data-scope="${escapeHtml(obs.scope)}" data-membership="unmanaged" data-status="unmanaged" data-source-id="${escapeHtml(sourceId)}" data-source-scope="${escapeHtml(sourceScope)}" data-key="${escapeHtml(key)}" onclick="selectRow(this, '${escapeHtml(key)}')">
-            <td><span class="kind-pill kind-${escapeHtml(obs.kind)}">${escapeHtml(obs.kind)}</span></td>
-            <td><strong>${escapeHtml(obs.name)}</strong></td>
-            <td>${escapeHtml(obs.assistant)}</td>
-            <td><span class="scope-pill scope-${escapeHtml(obs.scope)}">${escapeHtml(obs.scope)}</span></td>
-            <td><span class="badge ${badgeClass}"${tooltip}>${escapeHtml(badgeText)}</span></td>
+          <tr class="item-row" data-kind="${this.escapeHtml(obs.kind)}" data-name="${this.escapeHtml(obs.name.toLowerCase())}" data-assistant="${this.escapeHtml(obs.assistant)}" data-scope="${this.escapeHtml(obs.scope)}" data-membership="unmanaged" data-status="unmanaged" data-source-id="${this.escapeHtml(sourceId)}" data-source-scope="${this.escapeHtml(sourceScope)}" data-key="${this.escapeHtml(key)}" onclick="selectRow(this, '${this.escapeHtml(key)}')">
+            <td><span class="kind-pill kind-${this.escapeHtml(obs.kind)}">${this.escapeHtml(obs.kind)}</span></td>
+            <td><strong>${this.escapeHtml(obs.name)}</strong></td>
+            <td>${this.escapeHtml(obs.assistant)}</td>
+            <td><span class="scope-pill scope-${this.escapeHtml(obs.scope)}">${this.escapeHtml(obs.scope)}</span></td>
+            <td><span class="badge ${badgeClass}"${tooltip}>${this.escapeHtml(badgeText)}</span></td>
             <td>
               ${actionBtn}
             </td>
@@ -392,7 +441,8 @@ export class DashboardPanel {
         totalUnmanaged,
         identicalCount,
         environmentPills,
-        scanning: true
+        scanning: true,
+        sourcesHtml: this.getSourcesCatalogHtml(allSources)
       });
     }
 
@@ -434,10 +484,54 @@ export class DashboardPanel {
     </div>`;
   }
 
-  private getSourcesCatalogHtml(): string {
-    return `<div class="empty-state">
-      <p>Sources & Catalog section placeholder</p>
+  private getSourcesCatalogHtml(sources: Source[]): string {
+    const globalSources = sources.filter(s => s.scope === 'global');
+    const projectSources = sources.filter(s => s.scope === 'project');
+
+    let html = `
+      <div class="toolbar" style="margin-bottom: 16px;">
+        <button class="btn btn-primary" onclick="vscode.postMessage({ command: 'addSource' })">+ Add Source</button>
+        <button class="btn btn-secondary" onclick="vscode.postMessage({ command: 'importConfig' })">Import</button>
+        <button class="btn btn-secondary" onclick="vscode.postMessage({ command: 'exportConfig' })">Export All</button>
+      </div>
+    `;
+
+    const renderSourceRow = (s: Source) => `
+      <div class="item-row" style="display: flex; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid var(--border);">
+        <div class="source-info" style="display: flex; align-items: center; gap: 10px;">
+          <strong>${this.escapeHtml(s.name ?? s.id)}</strong>
+          <span class="kind-pill" style="background: rgba(255, 255, 255, 0.1); color: var(--fg);">${this.escapeHtml(s.type)}</span>
+          ${s.url ? `<span style="opacity: 0.7; font-size: 11px;">${this.escapeHtml(s.url)}</span>` : ''}
+          ${s.localPath ? `<span style="opacity: 0.7; font-size: 11px;">${this.escapeHtml(s.localPath)}</span>` : ''}
+        </div>
+        <div class="source-actions" style="display: flex; gap: 8px;">
+          <button class="btn btn-sm btn-secondary" onclick="vscode.postMessage({ command: 'exportSource', sourceId: '${this.escapeHtml(s.id)}', scope: '${this.escapeHtml(s.scope)}' })">Export</button>
+          <button class="btn btn-sm btn-secondary" style="color: var(--badge-error); border-color: rgba(207, 34, 46, 0.3);" onclick="vscode.postMessage({ command: 'removeSource', sourceId: '${this.escapeHtml(s.id)}', scope: '${this.escapeHtml(s.scope)}' })">Remove</button>
+        </div>
+      </div>
+    `;
+
+    html += `<div class="scope-group">
+      <div class="scope-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 8px;">
+        <h3 style="margin: 0; font-size: 13px;">Global Sources</h3>
+        <button class="btn btn-sm btn-secondary" onclick="vscode.postMessage({ command: 'addSource', scope: 'global' })">+ Add</button>
+      </div>
+      <div class="source-list">
+        ${globalSources.length > 0 ? globalSources.map(renderSourceRow).join('') : '<div class="empty-state" style="padding: 20px;">No global sources</div>'}
+      </div>
     </div>`;
+
+    html += `<div class="scope-group" style="margin-top: 24px;">
+      <div class="scope-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 8px;">
+        <h3 style="margin: 0; font-size: 13px;">Project Sources</h3>
+        <button class="btn btn-sm btn-secondary" onclick="vscode.postMessage({ command: 'addSource', scope: 'project' })">+ Add</button>
+      </div>
+      <div class="source-list">
+        ${projectSources.length > 0 ? projectSources.map(renderSourceRow).join('') : '<div class="empty-state" style="padding: 20px;">No project sources</div>'}
+      </div>
+    </div>`;
+
+    return html;
   }
 
   private getRecommendationsHtml(): string {
@@ -563,15 +657,7 @@ export class DashboardPanel {
     scanning: boolean = false,
     sourceFilter?: { id: string; scope: Scope }
   ): string {
-    const escapeHtml = (unsafe: string) => {
-      return (unsafe || '')
-        .toString()
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-    };
+    
 
     const totalInstalled = managed.length;
     const totalUnmanaged = observed.length;
@@ -589,9 +675,9 @@ export class DashboardPanel {
     const environmentPills = presentAssistants.map(a => {
       const iconUris = getAssistantIconPath(a as AssistantId, this._extensionUri);
       const iconSrc = this._panel.webview.asWebviewUri(iconUris.light);
-      return `<button class="filter-pill env-pill" data-env="${escapeHtml(a)}" onclick="setEnvFilter('${escapeHtml(a)}')">
+      return `<button class="filter-pill env-pill" data-env="${this.escapeHtml(a)}" onclick="setEnvFilter('${this.escapeHtml(a)}')">
         <img src="${iconSrc}" class="assistant-icon" width="14" height="14" />
-        ${escapeHtml(a)}
+        ${this.escapeHtml(a)}
       </button>`;
     }).join('\n');
 
@@ -616,12 +702,12 @@ export class DashboardPanel {
       }
 
       rowsHtml += `
-        <tr class="item-row" data-kind="${escapeHtml(inst.kind)}" data-name="${escapeHtml(inst.name.toLowerCase())}" data-assistant="${escapeHtml(inst.assistant)}" data-scope="${escapeHtml(inst.scope)}" data-membership="managed" data-status="${escapeHtml(status)}" data-source-id="${escapeHtml(sourceId)}" data-source-scope="${escapeHtml(sourceScope)}" data-key="${escapeHtml(key)}" onclick="selectRow(this, '${escapeHtml(key)}')">
-          <td><span class="kind-pill kind-${escapeHtml(inst.kind)}">${escapeHtml(inst.kind)}</span></td>
-          <td><strong>${escapeHtml(inst.name)}</strong></td>
-          <td>${escapeHtml(inst.assistant)}</td>
-          <td><span class="scope-pill scope-${escapeHtml(inst.scope)}">${escapeHtml(inst.scope)}</span></td>
-          <td data-drift-key="${escapeHtml(key)}"><span class="badge ${badgeClass}">${escapeHtml(badgeText)}</span></td>
+        <tr class="item-row" data-kind="${this.escapeHtml(inst.kind)}" data-name="${this.escapeHtml(inst.name.toLowerCase())}" data-assistant="${this.escapeHtml(inst.assistant)}" data-scope="${this.escapeHtml(inst.scope)}" data-membership="managed" data-status="${this.escapeHtml(status)}" data-source-id="${this.escapeHtml(sourceId)}" data-source-scope="${this.escapeHtml(sourceScope)}" data-key="${this.escapeHtml(key)}" onclick="selectRow(this, '${this.escapeHtml(key)}')">
+          <td><span class="kind-pill kind-${this.escapeHtml(inst.kind)}">${this.escapeHtml(inst.kind)}</span></td>
+          <td><strong>${this.escapeHtml(inst.name)}</strong></td>
+          <td>${this.escapeHtml(inst.assistant)}</td>
+          <td><span class="scope-pill scope-${this.escapeHtml(inst.scope)}">${this.escapeHtml(inst.scope)}</span></td>
+          <td data-drift-key="${this.escapeHtml(key)}"><span class="badge ${badgeClass}">${this.escapeHtml(badgeText)}</span></td>
           <td>
             <button class="btn btn-sm btn-secondary" onclick="editItem(${idx})">Edit</button>
           </td>
@@ -640,11 +726,11 @@ export class DashboardPanel {
       if (obs.match?.status === 'identical') {
         badgeClass = 'badge-success';
         badgeText = `◌ Unmanaged · identical to ${obs.match.sourceId}`;
-        tooltip = ` title="${escapeHtml(obs.match.details || '')}"`;
+        tooltip = ` title="${this.escapeHtml(obs.match.details || '')}"`;
       } else if (obs.match?.status === 'different') {
         badgeClass = 'badge-warning';
         badgeText = `◌ Unmanaged · differs from ${obs.match.sourceId}`;
-        tooltip = ` title="${escapeHtml(obs.match.details || '')}"`;
+        tooltip = ` title="${this.escapeHtml(obs.match.details || '')}"`;
       }
 
       let actionBtn = '';
@@ -654,12 +740,12 @@ export class DashboardPanel {
 
       const key = getIdentityKey(obs);
       rowsHtml += `
-        <tr class="item-row" data-kind="${escapeHtml(obs.kind)}" data-name="${escapeHtml(obs.name.toLowerCase())}" data-assistant="${escapeHtml(obs.assistant)}" data-scope="${escapeHtml(obs.scope)}" data-membership="unmanaged" data-status="unmanaged" data-source-id="${escapeHtml(sourceId)}" data-source-scope="${escapeHtml(sourceScope)}" data-key="${escapeHtml(key)}" onclick="selectRow(this, '${escapeHtml(key)}')">
-          <td><span class="kind-pill kind-${escapeHtml(obs.kind)}">${escapeHtml(obs.kind)}</span></td>
-          <td><strong>${escapeHtml(obs.name)}</strong></td>
-          <td>${escapeHtml(obs.assistant)}</td>
-          <td><span class="scope-pill scope-${escapeHtml(obs.scope)}">${escapeHtml(obs.scope)}</span></td>
-          <td><span class="badge ${badgeClass}"${tooltip}>${escapeHtml(badgeText)}</span></td>
+        <tr class="item-row" data-kind="${this.escapeHtml(obs.kind)}" data-name="${this.escapeHtml(obs.name.toLowerCase())}" data-assistant="${this.escapeHtml(obs.assistant)}" data-scope="${this.escapeHtml(obs.scope)}" data-membership="unmanaged" data-status="unmanaged" data-source-id="${this.escapeHtml(sourceId)}" data-source-scope="${this.escapeHtml(sourceScope)}" data-key="${this.escapeHtml(key)}" onclick="selectRow(this, '${this.escapeHtml(key)}')">
+          <td><span class="kind-pill kind-${this.escapeHtml(obs.kind)}">${this.escapeHtml(obs.kind)}</span></td>
+          <td><strong>${this.escapeHtml(obs.name)}</strong></td>
+          <td>${this.escapeHtml(obs.assistant)}</td>
+          <td><span class="scope-pill scope-${this.escapeHtml(obs.scope)}">${this.escapeHtml(obs.scope)}</span></td>
+          <td><span class="badge ${badgeClass}"${tooltip}>${this.escapeHtml(badgeText)}</span></td>
           <td>
             ${actionBtn}
           </td>
@@ -968,7 +1054,7 @@ export class DashboardPanel {
     ${this.getInstalledSectionHtml(sources, managed, observed, reports, scanning, totalInstalled, totalUnmanaged, updatesAvailable, modifiedLocally, identicalCount, environmentPills, rowsHtml)}
   </div>
   <div id="section-catalog" class="dashboard-section" style="display: none;">
-    ${this.getSourcesCatalogHtml()}
+    ${this.getSourcesCatalogHtml(sources)}
   </div>
   <div id="section-recommendations" class="dashboard-section" style="display: none;">
     ${this.getRecommendationsHtml()}
@@ -1216,6 +1302,11 @@ export class DashboardPanel {
             const pill = filterGroup.querySelector('.env-pill[data-env="' + currentEnv + '"]');
             if (pill) pill.classList.add('active');
           }
+        }
+
+        if (typeof msg.sourcesHtml === 'string') {
+          const catalogSection = document.getElementById('section-catalog');
+          if (catalogSection) catalogSection.innerHTML = msg.sourcesHtml;
         }
 
         let indicator = document.getElementById('scan-indicator');
