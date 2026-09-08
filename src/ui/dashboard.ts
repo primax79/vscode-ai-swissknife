@@ -6,18 +6,22 @@ import { analyzeLocalDrift, checkForUpstreamUpdate } from '../engine/drift';
 import type { DriftReport } from '../engine/types';
 import { FormEditorPanel } from './formEditor';
 import { getAssistantIconPath } from './assistantIcons';
+import type { InstalledTreeDataProvider } from './installedView';
+import { findRelatedInstallations } from '../engine/crossFrameworkLookup';
 
 export class DashboardPanel {
   public static currentPanel: DashboardPanel | undefined;
   private readonly _panel: vscode.WebviewPanel;
   private readonly _extensionUri: vscode.Uri;
+  private readonly _provider: InstalledTreeDataProvider;
   private _disposables: vscode.Disposable[] = [];
 
   private _sourceFilter?: { id: string; scope: Scope };
 
-  private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
+  private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, provider: InstalledTreeDataProvider) {
     this._panel = panel;
     this._extensionUri = extensionUri;
+    this._provider = provider;
     this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
     this._panel.webview.onDidReceiveMessage(
       async (message) => {
@@ -30,50 +34,8 @@ export class DashboardPanel {
             break;
           case 'promote':
             if (message.observed) {
-              const obs = message.observed as ObservedArtifact;
-              const candidates = obs.candidates ?? [];
-              if (candidates.length === 0) {
-                vscode.window.showErrorMessage(`Cannot promote "${obs.name}": no known source candidates.`);
-                break;
-              }
-
-              let chosenCandidate = candidates.length === 1 ? candidates[0] : undefined;
-
-              if (candidates.length > 1) {
-                const picks = candidates.map(c => ({
-                  label: c.sourceId ?? 'Unknown',
-                  description: c.status,
-                  candidate: c
-                }));
-                const picked = await vscode.window.showQuickPick(picks, {
-                  placeHolder: `Select source provenance for ${obs.kind} "${obs.name}"`
-                });
-                if (!picked) break;
-                chosenCandidate = picked.candidate;
-              } else {
-                let confirmPrompt = `Promote unmanaged ${obs.kind} "${obs.name}" (${obs.assistant}, ${obs.scope}) to managed installation?`;
-                if (chosenCandidate?.status === 'identical') {
-                  confirmPrompt = `Observed ${obs.kind} "${obs.name}" is identical to registered source "${chosenCandidate.sourceId}". Promote to managed installation and attach source provenance?`;
-                } else if (chosenCandidate?.status === 'different') {
-                  confirmPrompt = `Observed ${obs.kind} "${obs.name}" differs from registered source "${chosenCandidate.sourceId}". Promote local copy to managed installation?`;
-                }
-
-                const confirm = await vscode.window.showInformationMessage(
-                  confirmPrompt,
-                  { modal: true },
-                  'Promote'
-                );
-                if (confirm !== 'Promote') break;
-              }
-
-              try {
-                await promoteObservedArtifact(obs, chosenCandidate!);
-                vscode.window.showInformationMessage(`Promoted "${obs.name}" to managed.`);
-                await this.update();
-              } catch (err: unknown) {
-                const msg = err instanceof Error ? err.message : String(err);
-                vscode.window.showErrorMessage(`Failed to promote "${obs.name}": ${msg}`);
-              }
+              await this._provider.doPromoteItem(message.observed as ObservedArtifact);
+              await this.update();
             }
             break;
           case 'promoteAllIdentical':
@@ -113,8 +75,31 @@ export class DashboardPanel {
                 },
                 () => {
                   this.update();
+                  this._provider.refresh();
                 }
               );
+            }
+            break;
+          case 'copyItem':
+            if (message.item) {
+              await this._provider.doSyncItem(message.item);
+              await this.update();
+            }
+            break;
+          case 'moveItem':
+            if (message.item) {
+              await this._provider.doMoveItem(message.item as ManagedInstallation);
+              await this.update();
+            }
+            break;
+          case 'diffItem':
+            if (message.item) {
+              await this._provider.doDiffAgainstOriginal(message.item);
+            }
+            break;
+          case 'requestDetail':
+            if (message.key) {
+              await this.handleRequestDetail(message.key);
             }
             break;
         }
@@ -126,7 +111,7 @@ export class DashboardPanel {
     this.update();
   }
 
-  public static render(extensionUri: vscode.Uri): DashboardPanel {
+  public static render(extensionUri: vscode.Uri, provider: InstalledTreeDataProvider): DashboardPanel {
     if (DashboardPanel.currentPanel) {
       DashboardPanel.currentPanel._panel.reveal(vscode.ViewColumn.One);
       DashboardPanel.currentPanel.update();
@@ -144,13 +129,101 @@ export class DashboardPanel {
       }
     );
 
-    DashboardPanel.currentPanel = new DashboardPanel(panel, extensionUri);
+    DashboardPanel.currentPanel = new DashboardPanel(panel, extensionUri, provider);
     return DashboardPanel.currentPanel;
   }
 
   public setSourceFilter(id: string, scope: Scope) {
     this._sourceFilter = { id, scope };
     this.update();
+  }
+
+  private async handleRequestDetail(key: string) {
+    const allManaged: ManagedInstallation[] = [];
+    const allObserved: ObservedArtifact[] = [];
+    
+    try {
+      const gInv = await scanInstalledInventory('global');
+      allManaged.push(...gInv.managed);
+      allObserved.push(...gInv.observed);
+    } catch {
+        // ignore
+      }
+
+    const folders = vscode.workspace.workspaceFolders;
+    if (folders && folders.length > 0) {
+      const projectRoot = folders[0].uri.fsPath;
+      try {
+        const pInv = await scanInstalledInventory('project', projectRoot);
+        allManaged.push(...pInv.managed);
+        allObserved.push(...pInv.observed);
+      } catch {
+        // ignore
+      }
+    }
+
+    const inst = allManaged.find(m => `${m.assistant}:${m.scope}:${m.name}` === key);
+    if (inst) {
+      let diffAvailable = false;
+      const allSources: Source[] = [];
+      try {
+        const gManifest = await readManifest('global');
+        allSources.push(...gManifest.sources.map((d) => fromDesiredSource(d)));
+        if (folders && folders.length > 0) {
+          const pManifest = await readManifest('project', folders[0].uri.fsPath);
+          allSources.push(...pManifest.sources.map((d) => fromDesiredSource(d, folders[0].uri.fsPath)));
+        }
+      } catch {
+        // ignore
+      }
+
+      const matchingSource = allSources.find((s) => s.id === inst.sourceId);
+      let report: DriftReport;
+      if (matchingSource) {
+        report = await checkForUpstreamUpdate(inst, matchingSource);
+      } else {
+        report = await analyzeLocalDrift(inst);
+      }
+      
+      if (report.status === 'modified-locally' || report.status === 'modified-and-update-available') {
+        diffAvailable = true;
+      }
+
+      const crossFramework = findRelatedInstallations(inst, allManaged).map(r => ({
+        assistant: r.installation.assistant,
+        scope: r.installation.scope,
+        strategy: r.strategy
+      }));
+
+      const origin = inst.sourceId ? `${inst.sourceId}${inst.sourceRevision?.commit ? '@' + inst.sourceRevision.commit : ''}` : 'local, no known origin';
+
+      this._panel.webview.postMessage({
+        command: 'itemDetail',
+        key,
+        origin,
+        diffAvailable,
+        crossFramework,
+        candidates: [],
+        item: inst,
+        membership: 'managed'
+      });
+      return;
+    }
+
+    const obs = allObserved.find(o => `${o.assistant}:${o.scope}:${o.name}` === key);
+    if (obs) {
+      this._panel.webview.postMessage({
+        command: 'itemDetail',
+        key,
+        origin: 'local, no known origin',
+        diffAvailable: obs.match?.status === 'different',
+        crossFramework: [],
+        candidates: obs.candidates ?? [],
+        item: obs,
+        membership: 'unmanaged'
+      });
+      return;
+    }
   }
 
   public dispose() {
@@ -289,7 +362,7 @@ export class DashboardPanel {
       }
 
       rowsHtml += `
-        <tr class="item-row" data-kind="${escapeHtml(inst.kind)}" data-name="${escapeHtml(inst.name.toLowerCase())}" data-assistant="${escapeHtml(inst.assistant)}" data-scope="${escapeHtml(inst.scope)}" data-membership="managed" data-status="${escapeHtml(status)}" data-source-id="${escapeHtml(sourceId)}" data-source-scope="${escapeHtml(sourceScope)}">
+        <tr class="item-row" data-kind="${escapeHtml(inst.kind)}" data-name="${escapeHtml(inst.name.toLowerCase())}" data-assistant="${escapeHtml(inst.assistant)}" data-scope="${escapeHtml(inst.scope)}" data-membership="managed" data-status="${escapeHtml(status)}" data-source-id="${escapeHtml(sourceId)}" data-source-scope="${escapeHtml(sourceScope)}" data-key="${escapeHtml(key)}" onclick="selectRow(this, '${escapeHtml(key)}')">
           <td><span class="kind-pill kind-${escapeHtml(inst.kind)}">${escapeHtml(inst.kind)}</span></td>
           <td><strong>${escapeHtml(inst.name)}</strong></td>
           <td>${escapeHtml(inst.assistant)}</td>
@@ -325,8 +398,9 @@ export class DashboardPanel {
         actionBtn = `<button class="btn btn-sm btn-primary" onclick="promoteItem(${idx})">Promote</button>`;
       }
 
+      const key = `${obs.assistant}:${obs.scope}:${obs.name}`;
       rowsHtml += `
-        <tr class="item-row" data-kind="${escapeHtml(obs.kind)}" data-name="${escapeHtml(obs.name.toLowerCase())}" data-assistant="${escapeHtml(obs.assistant)}" data-scope="${escapeHtml(obs.scope)}" data-membership="unmanaged" data-status="unmanaged" data-source-id="${escapeHtml(sourceId)}" data-source-scope="${escapeHtml(sourceScope)}">
+        <tr class="item-row" data-kind="${escapeHtml(obs.kind)}" data-name="${escapeHtml(obs.name.toLowerCase())}" data-assistant="${escapeHtml(obs.assistant)}" data-scope="${escapeHtml(obs.scope)}" data-membership="unmanaged" data-status="unmanaged" data-source-id="${escapeHtml(sourceId)}" data-source-scope="${escapeHtml(sourceScope)}" data-key="${escapeHtml(key)}" onclick="selectRow(this, '${escapeHtml(key)}')">
           <td><span class="kind-pill kind-${escapeHtml(obs.kind)}">${escapeHtml(obs.kind)}</span></td>
           <td><strong>${escapeHtml(obs.name)}</strong></td>
           <td>${escapeHtml(obs.assistant)}</td>
@@ -541,6 +615,61 @@ export class DashboardPanel {
     .scan-indicator { font-size: 11px; opacity: 0.8; display: flex; align-items: center; gap: 6px; }
     .spinner { border: 2px solid rgba(136, 136, 136, 0.2); border-top-color: #888; border-radius: 50%; width: 10px; height: 10px; animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    
+    .item-row { cursor: pointer; }
+    .item-row:hover { background-color: rgba(255, 255, 255, 0.05); }
+    .item-row.selected { background-color: rgba(255, 255, 255, 0.1); }
+    
+    #detailPanel {
+      margin-top: 16px;
+      padding: 16px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      display: none;
+    }
+    #detailPanel h3 {
+      margin: 0 0 12px 0;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .detail-section {
+      margin-bottom: 12px;
+      font-size: 12px;
+    }
+    .detail-section-title {
+      font-weight: 600;
+      margin-bottom: 4px;
+      opacity: 0.8;
+      font-size: 11px;
+      text-transform: uppercase;
+    }
+    .cross-framework-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .cross-framework-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .cross-framework-item.fallback {
+      border: 1px dashed var(--border);
+      padding: 2px 4px;
+      border-radius: 4px;
+      opacity: 0.8;
+    }
+    .detail-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 16px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
   </style>
 </head>
 <body>
@@ -632,6 +761,22 @@ export class DashboardPanel {
     </tbody>
   </table>
 
+  <div id="detailPanel">
+    <h3 id="detailTitle">Item Details</h3>
+    <div class="detail-section">
+      <div class="detail-section-title">Origin</div>
+      <div id="detailOrigin"></div>
+    </div>
+    <div class="detail-section" id="diffSection" style="display: none;">
+      <button class="btn btn-sm btn-secondary" onclick="diffItem()">Diff vs. original</button>
+    </div>
+    <div class="detail-section" id="crossFrameworkSection" style="display: none;">
+      <div class="detail-section-title">Installed also in</div>
+      <ul class="cross-framework-list" id="crossFrameworkList"></ul>
+    </div>
+    <div class="detail-actions" id="detailActions"></div>
+  </div>
+
   <script type="application/json" id="managedDataJson">${JSON.stringify(managed).replace(/</g, '\\u003c')}</script>
   <script type="application/json" id="observedDataJson">${JSON.stringify(observed).replace(/</g, '\\u003c')}</script>
   <script type="application/json" id="sourceFilterJson">${JSON.stringify(sourceFilter ?? null).replace(/</g, '\\u003c')}</script>
@@ -655,6 +800,52 @@ export class DashboardPanel {
     let currentScope = 'all';
     let currentMembership = 'all';
     let currentSource = JSON.parse(document.getElementById('sourceFilterJson').textContent);
+    let selectedItemKey = null;
+    let detailItemData = null;
+
+    function selectRow(rowEl, key) {
+      document.querySelectorAll('.item-row').forEach(r => r.classList.remove('selected'));
+      rowEl.classList.add('selected');
+      selectedItemKey = key;
+      document.getElementById('detailPanel').style.display = 'block';
+      document.getElementById('detailOrigin').innerHTML = '<div class="spinner"></div> Loading...';
+      document.getElementById('diffSection').style.display = 'none';
+      document.getElementById('crossFrameworkSection').style.display = 'none';
+      document.getElementById('detailActions').innerHTML = '';
+      document.getElementById('detailTitle').textContent = rowEl.getAttribute('data-name') + ' (' + rowEl.getAttribute('data-kind') + ')';
+      
+      vscode.postMessage({ command: 'requestDetail', key: key });
+    }
+
+    function diffItem() {
+      if (detailItemData) {
+        vscode.postMessage({ command: 'diffItem', item: detailItemData });
+      }
+    }
+
+    function detailEditItem() {
+      if (detailItemData) {
+        vscode.postMessage({ command: 'edit', installation: detailItemData });
+      }
+    }
+
+    function detailPromoteItem() {
+      if (detailItemData) {
+        vscode.postMessage({ command: 'promote', observed: detailItemData });
+      }
+    }
+
+    function detailCopyItem() {
+      if (detailItemData) {
+        vscode.postMessage({ command: 'copyItem', item: detailItemData });
+      }
+    }
+
+    function detailMoveItem() {
+      if (detailItemData) {
+        vscode.postMessage({ command: 'moveItem', item: detailItemData });
+      }
+    }
 
     function refreshState() {
       vscode.postMessage({ command: 'refresh' });
@@ -812,6 +1003,44 @@ export class DashboardPanel {
         if (indicator) indicator.style.display = 'none';
         
         filterTable();
+      } else if (msg.command === 'itemDetail') {
+        if (msg.key !== selectedItemKey) return;
+        
+        detailItemData = msg.item;
+        document.getElementById('detailOrigin').textContent = msg.origin;
+        
+        if (msg.diffAvailable) {
+          document.getElementById('diffSection').style.display = 'block';
+        } else {
+          document.getElementById('diffSection').style.display = 'none';
+        }
+        
+        const cfList = document.getElementById('crossFrameworkList');
+        if (msg.crossFramework && msg.crossFramework.length > 0) {
+          cfList.innerHTML = msg.crossFramework.map(cf => {
+            if (cf.strategy === 'name-fallback') {
+              return '<li class="cross-framework-item fallback" title="Probable match based on name only">? ' + escapeHtmlClient(cf.assistant) + ' (' + escapeHtmlClient(cf.scope) + ')</li>';
+            }
+            return '<li class="cross-framework-item">✓ ' + escapeHtmlClient(cf.assistant) + ' (' + escapeHtmlClient(cf.scope) + ')</li>';
+          }).join('');
+          document.getElementById('crossFrameworkSection').style.display = 'block';
+        } else {
+          document.getElementById('crossFrameworkSection').style.display = 'none';
+        }
+
+        const actions = [];
+        if (msg.membership === 'unmanaged') {
+          if (msg.candidates && msg.candidates.length > 0) {
+            actions.push('<button class="btn btn-sm btn-primary" onclick="detailPromoteItem()">Promote</button>');
+          }
+        } else {
+          actions.push('<button class="btn btn-sm btn-secondary" onclick="detailCopyItem()">Copy to...</button>');
+          if (['skill', 'agent', 'command', 'mcp-server'].includes(msg.item.kind)) {
+            actions.push('<button class="btn btn-sm btn-secondary" onclick="detailMoveItem()">Move to...</button>');
+          }
+          actions.push('<button class="btn btn-sm btn-secondary" onclick="detailEditItem()">Edit</button>');
+        }
+        document.getElementById('detailActions').innerHTML = actions.join('');
       }
     });
   </script>
