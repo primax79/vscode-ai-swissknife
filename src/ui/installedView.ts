@@ -391,15 +391,16 @@ export class InstalledTreeDataProvider {
         observedByScope.set(obs.scope, list);
       }
 
-      const result: InstalledTreeItem[] = [];
+      const scopeGroups: ScopeGroupItem[] = [];
       for (const scope of Array.from(scopes).sort()) {
         const managed = managedByScope.get(scope) ?? [];
         const observed = observedByScope.get(scope) ?? [];
         // Use overrideAssistantId, or if somehow missing, take from the first managed/observed item or fallback
         const assistant = overrideAssistantId ?? managed[0]?.assistant ?? observed[0]?.assistant ?? 'claude-code';
-        result.push(new ScopeGroupItem(assistant, scope, scope, managed, observed));
+        scopeGroups.push(new ScopeGroupItem(assistant, scope, scope, managed, observed));
       }
-      return result;
+
+      return scopeGroups;
     }
 
     if (element instanceof ScopeGroupItem) {
