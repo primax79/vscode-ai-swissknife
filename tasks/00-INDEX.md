@@ -129,7 +129,7 @@ start either until 31 lands.
 | 28       | 28  | [Sidebar navigation unification](28-sidebar-unification/plan.md)                           | ✅ done (28.1/28.2)                    | 16, 22                 | M    |
 | 29       | 29  | [Adapter registry & enabled-assistants config](29-adapter-registry/plan.md)                | ✅ done (29.1-29.5 merged; 29.5 setting reshaped array→object-of-booleans post-testing feedback) | 03, 12, 21             | M    |
 | 30       | 30  | [Source-resolver registry](30-source-resolver-registry/plan.md)                            | ✅ done (30.1-30.4 merged; plan.ts's `resolveArtifactContent` dispatch intentionally out of scope, see note) | 04, 11, 20             | M    |
-| 31       | 31  | [Dashboard: provider action-layer decoupling](31-dashboard-action-decoupling/plan.md)      | 📋 planned                            | 28, 29, 30             | M    |
+| 31       | 31  | [Dashboard: provider action-layer decoupling](31-dashboard-action-decoupling/plan.md)      | ✅ done (31.1-31.4 merged)             | 28, 29, 30             | M    |
 | 32       | 32  | [Dashboard: structural skeleton](32-dashboard-skeleton/plan.md)                            | 📋 planned                            | 28, 29                 | M    |
 | 33       | 33  | [Dashboard: Sources & Catalog section](33-dashboard-sources-catalog/plan.md)                | 📋 planned                            | 31, 32                 | L    |
 | 34       | 34  | [Dashboard: Recommendations + Installed action parity](34-dashboard-recommendations-parity/plan.md) | 📋 planned                   | 31, 32                 | M    |
