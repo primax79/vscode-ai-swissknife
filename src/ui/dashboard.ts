@@ -6,7 +6,7 @@ import { analyzeLocalDrift, checkForUpstreamUpdate } from '../engine/drift';
 import type { DriftReport } from '../engine/types';
 import { FormEditorPanel } from './formEditor';
 import { getAssistantIconPath } from './assistantIcons';
-import type { InstalledTreeDataProvider } from './installedView';
+import { InstalledTreeDataProvider, getIdentityKey } from './installedView';
 import { findRelatedInstallations } from '../engine/crossFrameworkLookup';
 
 export class DashboardPanel {
@@ -162,7 +162,7 @@ export class DashboardPanel {
       }
     }
 
-    const inst = allManaged.find(m => `${m.assistant}:${m.scope}:${m.name}` === key);
+    const inst = allManaged.find(m => getIdentityKey(m) === key);
     if (inst) {
       let diffAvailable = false;
       const allSources: Source[] = [];
@@ -210,7 +210,7 @@ export class DashboardPanel {
       return;
     }
 
-    const obs = allObserved.find(o => `${o.assistant}:${o.scope}:${o.name}` === key);
+    const obs = allObserved.find(o => getIdentityKey(o) === key);
     if (obs) {
       this._panel.webview.postMessage({
         command: 'itemDetail',
@@ -282,7 +282,7 @@ export class DashboardPanel {
       driftReports.push(report);
       this._panel.webview.postMessage({
         command: 'driftResult',
-        key: `${inst.assistant}:${inst.scope}:${inst.name}`,
+        key: getIdentityKey(inst),
         status: report.status
       });
     }
@@ -329,7 +329,7 @@ export class DashboardPanel {
     ).length;
     const identicalCount = observed.filter((o) => o.match?.status === 'identical').length;
 
-    const reportMap = new Map(reports.map((r) => [`${r.installation.assistant}:${r.installation.scope}:${r.installation.name}`, r]));
+    const reportMap = new Map(reports.map((r) => [getIdentityKey(r.installation), r]));
 
     const presentAssistants = Array.from(new Set([...managed.map(m => m.assistant), ...observed.map(o => o.assistant)])).sort();
     const environmentPills = presentAssistants.map(a => {
@@ -344,7 +344,7 @@ export class DashboardPanel {
     let rowsHtml = '';
     
     managed.forEach((inst, idx) => {
-      const key = `${inst.assistant}:${inst.scope}:${inst.name}`;
+      const key = getIdentityKey(inst);
       const matchingSource = sources.find((s) => s.id === inst.sourceId);
       const sourceScope = matchingSource?.scope || '';
       const sourceId = inst.sourceId || '';
@@ -398,7 +398,7 @@ export class DashboardPanel {
         actionBtn = `<button class="btn btn-sm btn-primary" onclick="promoteItem(${idx})">Promote</button>`;
       }
 
-      const key = `${obs.assistant}:${obs.scope}:${obs.name}`;
+      const key = getIdentityKey(obs);
       rowsHtml += `
         <tr class="item-row" data-kind="${escapeHtml(obs.kind)}" data-name="${escapeHtml(obs.name.toLowerCase())}" data-assistant="${escapeHtml(obs.assistant)}" data-scope="${escapeHtml(obs.scope)}" data-membership="unmanaged" data-status="unmanaged" data-source-id="${escapeHtml(sourceId)}" data-source-scope="${escapeHtml(sourceScope)}" data-key="${escapeHtml(key)}" onclick="selectRow(this, '${escapeHtml(key)}')">
           <td><span class="kind-pill kind-${escapeHtml(obs.kind)}">${escapeHtml(obs.kind)}</span></td>

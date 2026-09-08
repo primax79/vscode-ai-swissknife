@@ -788,7 +788,7 @@ describe('UI TreeDataProviders', () => {
       // Normal mode without a report defaults to up-to-date
       assert.ok(html.includes('● Managed · up to date'));
       assert.ok(!html.includes('id="scan-indicator"')); // No scanning indicator
-      assert.ok(html.includes('data-drift-key="claude-code:project:demo-skill"'));
+      assert.ok(html.includes('data-drift-key="claude-code:project:skill::demo-skill"'));
       
       panel.dispose();
     });
@@ -826,7 +826,7 @@ describe('UI TreeDataProviders', () => {
       assert.ok(html.includes('Scanning for updates…'));
       
       // Should include the data-drift-key
-      assert.ok(html.includes('data-drift-key="claude-code:project:demo-skill"'));
+      assert.ok(html.includes('data-drift-key="claude-code:project:skill::demo-skill"'));
       
       panel.dispose();
     });

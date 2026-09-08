@@ -1037,8 +1037,20 @@ export class InstalledTreeDataProvider {
   }
 
   private getInstallKey(inst: ManagedInstallation): string {
-    return `${inst.assistant}:${inst.scope}:${inst.projectPath ?? ''}:${inst.name}`;
+    return getIdentityKey(inst);
   }
+}
+
+/**
+ * Composite identity key for managed installations and observed artifacts.
+ * We add this as a new exported helper rather than just modifying the private
+ * getInstallKey so that DashboardPanel can use the exact same logic, ensuring
+ * keys don't drift between the sidebar tree and the webview. We include kind
+ * so that artifacts with the same name but different kinds (e.g. skill vs agent)
+ * don't collide.
+ */
+export function getIdentityKey(item: { assistant: AssistantId; scope: Scope; kind: ItemKind; name: string; projectPath?: string }): string {
+  return `${item.assistant}:${item.scope}:${item.kind}:${item.projectPath ?? ''}:${item.name}`;
 }
 
 export class AssistantTreeDataProvider implements vscode.TreeDataProvider<InstalledTreeItem> {
