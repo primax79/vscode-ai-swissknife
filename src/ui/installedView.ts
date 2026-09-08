@@ -10,7 +10,7 @@ import { planInstall } from '../engine/plan';
 import { planSync } from '../engine/sync';
 import { applyInstall } from '../engine/apply';
 import { softDeletePath } from '../engine/softDelete';
-import { getAdapter, ALL_ADAPTERS } from '../adapters/registry';
+import { getAdapter, ALL_ADAPTERS, getEnabledAdapters } from '../adapters/registry';
 import type { DriftReport } from '../engine/types';
 import { getWorkspaceRoot } from './workspacePicker';
 import { getKindIconName } from './kindIcons';
@@ -553,7 +553,7 @@ export class InstalledTreeDataProvider {
 
   async doSyncItem(sourceItem: ManagedInstallation | ObservedArtifact): Promise<void> {
     const assistantPick = await vscode.window.showQuickPick(
-      ALL_ADAPTERS.map(
+      getEnabledAdapters().map(
         (a) => ({
           label: a.assistant,
           iconPath: new vscode.ThemeIcon(a.iconId),
@@ -690,7 +690,7 @@ export class InstalledTreeDataProvider {
     }
 
     const assistantPick = await vscode.window.showQuickPick(
-      ALL_ADAPTERS.map(
+      getEnabledAdapters().map(
         (a) => ({
           label: a.assistant,
           iconPath: new vscode.ThemeIcon(a.iconId),

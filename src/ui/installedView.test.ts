@@ -21,7 +21,8 @@ Module.prototype.require = function (id: string, ...rest: unknown[]) {
       EventEmitter: class { event = () => ({}); fire = () => {} },
       ThemeIcon: class {},
       workspace: {
-        get workspaceFolders() { return [{ uri: { fsPath: (globalThis as any).testWorkspaceRoot } }]; }
+        get workspaceFolders() { return [{ uri: { fsPath: (globalThis as any).testWorkspaceRoot } }]; },
+        getConfiguration: () => ({ get: () => undefined })
       },
       window: {
         showInformationMessage: async (_msg: string, ..._actions: string[]) => {

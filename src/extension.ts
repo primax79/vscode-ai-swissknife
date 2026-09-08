@@ -180,7 +180,7 @@ export async function handleRecommendForWorkspace(
       return;
     }
     const assistantPick = await vscode.window.showQuickPick(
-      ALL_ADAPTERS.map(a => a.assistant),
+      getEnabledAdapters().map(a => a.assistant),
       {
         placeHolder: 'Select target AI assistant for recommendation',
       }
@@ -257,7 +257,7 @@ export async function handleUnrecommendForWorkspace(
     // Does Available view unrecommend prompt for assistant? The spec doesn't explicitly mention it for unrecommend.
     // But how can we filter without the assistant? If we prompt, we should do it. Let's see:
     const assistantPick = await vscode.window.showQuickPick(
-      ALL_ADAPTERS.map(a => a.assistant),
+      getEnabledAdapters().map(a => a.assistant),
       {
         placeHolder: 'Select target AI assistant to remove recommendation',
       }
@@ -500,7 +500,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (!kindPick) return;
 
       const assistantPick = await vscode.window.showQuickPick(
-        ALL_ADAPTERS.map(a => a.assistant),
+        getEnabledAdapters().map(a => a.assistant),
         {
           placeHolder: 'Select target assistant',
         }
