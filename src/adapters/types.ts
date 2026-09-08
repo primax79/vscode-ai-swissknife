@@ -69,6 +69,8 @@ export interface LocationRef {
 
 export interface Adapter {
   readonly assistant: AssistantId;
+  readonly displayName: string;
+  readonly iconId: string;
 
   skillDir(name: string, loc: LocationRef): string;
   skillPath(name: string, loc: LocationRef): string;

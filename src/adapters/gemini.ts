@@ -17,6 +17,8 @@ import { parseClaudeAgentMarkdown, serializeClaudeAgentMarkdown } from './claude
 
 export class GeminiAdapter implements Adapter {
   readonly assistant: AssistantId = 'gemini-cli';
+  readonly displayName: string = 'Gemini CLI';
+  readonly iconId: string = 'ai-swissknife-gemini-cli';
 
   constructor(private readonly getHomedir: () => string = os.homedir) {}
 

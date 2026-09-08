@@ -350,6 +350,8 @@ export function serializeClaudeCommandMarkdown(cmd: CanonicalCommand): string {
 
 export class ClaudeAdapter implements Adapter {
   readonly assistant: AssistantId = 'claude-code';
+  readonly displayName: string = 'Claude Code';
+  readonly iconId: string = 'ai-swissknife-claude-code';
 
   constructor(private readonly getHomedir: () => string = os.homedir) {}
 

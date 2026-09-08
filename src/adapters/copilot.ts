@@ -22,6 +22,8 @@ import {
 
 export class CopilotAdapter implements Adapter {
   readonly assistant: AssistantId = 'github-copilot';
+  readonly displayName: string = 'GitHub Copilot';
+  readonly iconId: string = 'ai-swissknife-github-copilot';
 
   constructor(private readonly getHomedir: () => string = os.homedir) {}
 

@@ -238,6 +238,8 @@ export function serializeKiloCommandMarkdown(cmd: CanonicalCommand): string {
 
 export class KiloAdapter implements Adapter {
   readonly assistant: AssistantId = 'kilo-code';
+  readonly displayName: string = 'Kilo Code';
+  readonly iconId: string = 'ai-swissknife-kilo-code';
 
   constructor(private readonly getHomedir: () => string = os.homedir) {}
 
