@@ -8,7 +8,7 @@ import { FormEditorPanel } from './formEditor';
 import { getAssistantIconPath } from './assistantIcons';
 import { InstalledTreeDataProvider, getIdentityKey } from './installedView';
 import { SourcesTreeDataProvider, SourceItem } from './sourcesView';
-import { AvailableTreeDataProvider } from './availableView';
+import { AvailableTreeDataProvider, AvailableTreeItem, AvailableFolderItem, AvailableArtifactItem, DiagnosticTreeItem } from './availableView';
 import { findRelatedInstallations } from '../engine/crossFrameworkLookup';
 
 export class DashboardPanel {
@@ -100,6 +100,22 @@ export class DashboardPanel {
             this._refreshCallback();
             await this.update();
             break;
+          case 'requestCatalog': {
+            await this._availableProvider.ensureCatalogLoaded();
+            const groups = this._availableProvider.getCachedSourceGroups();
+            const group = groups.find(g => g.source.id === message.sourceId && g.source.scope === message.scope);
+            if (group) {
+              const children = await this._availableProvider.getChildren(group);
+              const html = this.renderCatalogLevel(children);
+              this._panel.webview.postMessage({
+                command: 'catalogData',
+                sourceId: message.sourceId,
+                scope: message.scope,
+                html
+              });
+            }
+            break;
+          }
           case 'refresh':
             await this.update();
             break;
@@ -484,6 +500,49 @@ export class DashboardPanel {
     </div>`;
   }
 
+  private renderCatalogLevel(items: AvailableTreeItem[], level: number = 0): string {
+    let html = '';
+    for (const item of items) {
+      if (item instanceof DiagnosticTreeItem) {
+        const diag = item.diagnostic;
+        const icon = diag.severity === 'error' ? '🔴' : '⚠️';
+        html += `
+          <div class="catalog-item diagnostic-row" style="padding: 4px 8px; font-size: 11px; color: ${diag.severity === 'error' ? 'var(--badge-error)' : 'var(--badge-warning)'}; display: flex; align-items: center; gap: 6px;">
+            <span>${icon}</span>
+            <span><strong>[${this.escapeHtml(diag.code)}]</strong> ${this.escapeHtml(diag.message)}</span>
+            <span style="opacity:0.7; font-size:10px;">${this.escapeHtml(diag.path)}</span>
+          </div>
+        `;
+      } else if (item instanceof AvailableFolderItem) {
+        const folderId = `folder-${Math.random().toString(36).substr(2, 9)}`;
+        html += `
+          <div class="catalog-folder">
+            <div class="catalog-item folder-row" style="padding: 4px 8px; cursor: pointer; display: flex; align-items: center; gap: 6px;" onclick="toggleFolder('${folderId}', this)">
+              <span class="folder-icon" style="transition: transform 0.2s; font-size: 10px; opacity: 0.8;">▶</span>
+              <span class="folder-icon-img" style="font-size: 12px;">📁</span>
+              <span><strong>${this.escapeHtml(item.label)}</strong></span>
+            </div>
+            <div id="${folderId}" style="display: none; padding-left: 16px; border-left: 1px solid var(--border); margin-left: 5px;">
+              ${this.renderCatalogLevel(item.items, level + 1)}
+            </div>
+          </div>
+        `;
+      } else if (item instanceof AvailableArtifactItem) {
+        html += `
+          <div class="catalog-item artifact-row" style="padding: 4px 8px; display: flex; align-items: center; gap: 10px; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="kind-pill kind-${this.escapeHtml(item.artifact.kind)}">${this.escapeHtml(item.artifact.kind)}</span>
+              <span><strong>${this.escapeHtml(item.artifact.name)}</strong></span>
+              ${item.artifact.description ? `<span style="opacity:0.7; font-size:11px;">${this.escapeHtml(item.artifact.description)}</span>` : ''}
+              ${item.isRecommended ? '<span style="color: var(--badge-warning);">★</span>' : ''}
+            </div>
+          </div>
+        `;
+      }
+    }
+    return html || '<div style="padding: 8px; opacity: 0.6; font-size: 11px;">No items</div>';
+  }
+
   private getSourcesCatalogHtml(sources: Source[]): string {
     const globalSources = sources.filter(s => s.scope === 'global');
     const projectSources = sources.filter(s => s.scope === 'project');
@@ -497,16 +556,21 @@ export class DashboardPanel {
     `;
 
     const renderSourceRow = (s: Source) => `
-      <div class="item-row" style="display: flex; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid var(--border);">
-        <div class="source-info" style="display: flex; align-items: center; gap: 10px;">
-          <strong>${this.escapeHtml(s.name ?? s.id)}</strong>
-          <span class="kind-pill" style="background: rgba(255, 255, 255, 0.1); color: var(--fg);">${this.escapeHtml(s.type)}</span>
-          ${s.url ? `<span style="opacity: 0.7; font-size: 11px;">${this.escapeHtml(s.url)}</span>` : ''}
-          ${s.localPath ? `<span style="opacity: 0.7; font-size: 11px;">${this.escapeHtml(s.localPath)}</span>` : ''}
+      <div class="source-container">
+        <div class="item-row source-row" style="display: flex; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid var(--border); cursor: pointer;" onclick="toggleSource(this, '${this.escapeHtml(s.id)}', '${this.escapeHtml(s.scope)}')">
+          <div class="source-info" style="display: flex; align-items: center; gap: 10px;">
+            <span class="source-caret" style="transition: transform 0.2s; font-size: 10px; opacity: 0.8; display: inline-block;">▶</span>
+            <strong>${this.escapeHtml(s.name ?? s.id)}</strong>
+            <span class="kind-pill" style="background: rgba(255, 255, 255, 0.1); color: var(--fg);">${this.escapeHtml(s.type)}</span>
+            ${s.url ? `<span style="opacity: 0.7; font-size: 11px;">${this.escapeHtml(s.url)}</span>` : ''}
+            ${s.localPath ? `<span style="opacity: 0.7; font-size: 11px;">${this.escapeHtml(s.localPath)}</span>` : ''}
+          </div>
+          <div class="source-actions" style="display: flex; gap: 8px;" onclick="event.stopPropagation()">
+            <button class="btn btn-sm btn-secondary" onclick="vscode.postMessage({ command: 'exportSource', sourceId: '${this.escapeHtml(s.id)}', scope: '${this.escapeHtml(s.scope)}' })">Export</button>
+            <button class="btn btn-sm btn-secondary" style="color: var(--badge-error); border-color: rgba(207, 34, 46, 0.3);" onclick="vscode.postMessage({ command: 'removeSource', sourceId: '${this.escapeHtml(s.id)}', scope: '${this.escapeHtml(s.scope)}' })">Remove</button>
+          </div>
         </div>
-        <div class="source-actions" style="display: flex; gap: 8px;">
-          <button class="btn btn-sm btn-secondary" onclick="vscode.postMessage({ command: 'exportSource', sourceId: '${this.escapeHtml(s.id)}', scope: '${this.escapeHtml(s.scope)}' })">Export</button>
-          <button class="btn btn-sm btn-secondary" style="color: var(--badge-error); border-color: rgba(207, 34, 46, 0.3);" onclick="vscode.postMessage({ command: 'removeSource', sourceId: '${this.escapeHtml(s.id)}', scope: '${this.escapeHtml(s.scope)}' })">Remove</button>
+        <div class="source-catalog" id="catalog-${this.escapeHtml(s.id)}-${this.escapeHtml(s.scope)}" style="display: none; padding: 8px 10px 8px 30px; background: rgba(0,0,0,0.1); border-bottom: 1px solid var(--border);">
         </div>
       </div>
     `;
@@ -1088,6 +1152,37 @@ export class DashboardPanel {
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
     }
+
+    function toggleSource(rowEl, sourceId, scope) {
+      const caret = rowEl.querySelector('.source-caret');
+      const catalogDiv = document.getElementById('catalog-' + escapeHtmlClient(sourceId) + '-' + escapeHtmlClient(scope));
+      if (!catalogDiv) return;
+      if (catalogDiv.style.display === 'none') {
+        catalogDiv.style.display = 'block';
+        if (caret) caret.style.transform = 'rotate(90deg)';
+        if (!catalogDiv.getAttribute('data-loaded')) {
+          catalogDiv.innerHTML = '<div class="spinner" style="display:inline-block; margin-right: 6px; width: 10px; height: 10px;"></div><span style="opacity:0.7; font-size: 11px;">Loading catalog...</span>';
+          vscode.postMessage({ command: 'requestCatalog', sourceId: sourceId, scope: scope });
+        }
+      } else {
+        catalogDiv.style.display = 'none';
+        if (caret) caret.style.transform = 'rotate(0deg)';
+      }
+    }
+
+    function toggleFolder(folderId, rowEl) {
+      const folderDiv = document.getElementById(folderId);
+      const caret = rowEl.querySelector('.folder-icon');
+      if (!folderDiv) return;
+      if (folderDiv.style.display === 'none') {
+        folderDiv.style.display = 'block';
+        if (caret) caret.style.transform = 'rotate(90deg)';
+      } else {
+        folderDiv.style.display = 'none';
+        if (caret) caret.style.transform = 'rotate(0deg)';
+      }
+    }
+
     let managedData = JSON.parse(document.getElementById('managedDataJson').textContent);
     let observedData = JSON.parse(document.getElementById('observedDataJson').textContent);
 
@@ -1346,6 +1441,12 @@ export class DashboardPanel {
         if (indicator) indicator.style.display = 'none';
         
         filterTable();
+      } else if (msg.command === 'catalogData') {
+        const catalogDiv = document.getElementById('catalog-' + escapeHtmlClient(msg.sourceId) + '-' + escapeHtmlClient(msg.scope));
+        if (catalogDiv) {
+          catalogDiv.innerHTML = msg.html;
+          catalogDiv.setAttribute('data-loaded', 'true');
+        }
       } else if (msg.command === 'itemDetail') {
         if (msg.key !== selectedItemKey) return;
         
