@@ -5,12 +5,16 @@ import type {
   CanonicalAgent,
   CanonicalCommand,
   CanonicalMcpServer,
+  CanonicalHook,
+  CanonicalRule,
 } from '../adapters/types';
 import {
   canonicalSkillHash,
   canonicalAgentHash,
   canonicalCommandHash,
   canonicalMcpServerHash,
+  canonicalHookHash,
+  canonicalRuleHash,
   readSkill,
 } from '../adapters/codec';
 import { ClaudeAdapter, claudeAdapter } from '../adapters/claude';
@@ -18,13 +22,12 @@ import { KiloAdapter, kiloAdapter } from '../adapters/kilo';
 import { CopilotAdapter, copilotAdapter } from '../adapters/copilot';
 import { CodexAdapter, codexAdapter } from '../adapters/codex';
 import { GeminiAdapter, geminiAdapter } from '../adapters/gemini';
-import { resolveLocalFolder, resolveArtifactContent as resolveLocalFolderContent } from '../sources/localFolder';
-import { resolveGitCustom, resolveArtifactContent as resolveGitCustomContent } from '../sources/gitCustom';
-import { resolveGitMarketplace, resolveArtifactContent as resolveGitMarketplaceContent } from '../sources/gitMarketplace';
-import { translateSkill } from '../translator/skill';
-import { translateAgent } from '../translator/agent';
-import { translateCommand } from '../translator/command';
-import { translateMcpServer } from '../translator/mcp';
+import { resolveLocalFolder } from '../sources/localFolder';
+import { resolveGitCustom } from '../sources/gitCustom';
+import { resolveGitMarketplace } from '../sources/gitMarketplace';
+import { resolveGitSingleItem } from '../sources/gitSingleItem';
+import { resolveRemoteUrl } from '../sources/remoteUrl';
+import { resolveAndTranslate } from './plan';
 import type { DriftReport } from './types';
 
 function getAdapter(assistant: string, homeRoot?: string) {
@@ -106,6 +109,26 @@ export async function analyzeLocalDrift(
       };
     }
     diskHash = canonicalMcpServerHash(mcp);
+  } else if (installation.kind === 'hook') {
+    const hook = await adapter.readHook(installation.name, loc);
+    if (!hook) {
+      return {
+        installation,
+        status: 'missing-on-disk',
+        details: `Hook config not found for ${installation.name}`,
+      };
+    }
+    diskHash = canonicalHookHash(hook);
+  } else if (installation.kind === 'rule') {
+    const rule = await adapter.readRule(loc);
+    if (!rule) {
+      return {
+        installation,
+        status: 'missing-on-disk',
+        details: `Rule not found for scope ${installation.scope}`,
+      };
+    }
+    diskHash = canonicalRuleHash(rule);
   }
 
   if (installation.contentHash && diskHash !== installation.contentHash) {
@@ -145,6 +168,10 @@ export async function checkForUpstreamUpdate(
       resolution = await resolveGitCustom(source);
     } else if (source.type === 'git-marketplace') {
       resolution = await resolveGitMarketplace(source);
+    } else if (source.type === 'git-single-item') {
+      resolution = await resolveGitSingleItem(source);
+    } else if (source.type === 'remote-url') {
+      resolution = await resolveRemoteUrl(source);
     } else {
       return localReport;
     }
@@ -180,29 +207,20 @@ export async function checkForUpstreamUpdate(
 
   let sourceHash: string | undefined;
   try {
-    let resolved;
-    if (source.type === 'local-folder') {
-      resolved = await resolveLocalFolderContent(source, foundPkg, foundArt);
-    } else if (source.type === 'git-custom') {
-      resolved = await resolveGitCustomContent(source, foundPkg, foundArt);
-    } else if (source.type === 'git-marketplace') {
-      resolved = await resolveGitMarketplaceContent(source, foundPkg, foundArt);
-    }
-
-    if (!resolved) return localReport;
+    const result = await resolveAndTranslate(source, foundPkg, foundArt, installation.assistant);
 
     if (foundArt.kind === 'skill') {
-      const translated = translateSkill(resolved.content as CanonicalSkill, installation.assistant);
-      sourceHash = canonicalSkillHash(translated.value);
+      sourceHash = canonicalSkillHash(result.translated as CanonicalSkill);
     } else if (foundArt.kind === 'agent') {
-      const translated = translateAgent(resolved.content as CanonicalAgent, installation.assistant);
-      sourceHash = canonicalAgentHash(translated.value);
+      sourceHash = canonicalAgentHash(result.translated as CanonicalAgent);
     } else if (foundArt.kind === 'command') {
-      const translated = translateCommand(resolved.content as CanonicalCommand, installation.assistant);
-      sourceHash = canonicalCommandHash(translated.value);
+      sourceHash = canonicalCommandHash(result.translated as CanonicalCommand);
     } else if (foundArt.kind === 'mcp-server') {
-      const translated = translateMcpServer(resolved.content as CanonicalMcpServer, installation.assistant);
-      sourceHash = canonicalMcpServerHash(translated.value);
+      sourceHash = canonicalMcpServerHash(result.translated as CanonicalMcpServer);
+    } else if (foundArt.kind === 'hook') {
+      sourceHash = canonicalHookHash(result.translated as CanonicalHook);
+    } else if (foundArt.kind === 'rule') {
+      sourceHash = canonicalRuleHash(result.translated as CanonicalRule);
     }
   } catch {
     return localReport;

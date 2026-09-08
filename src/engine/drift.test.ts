@@ -6,6 +6,7 @@ import * as path from 'path';
 import type { ManagedInstallation, Source } from '../domain/types';
 import { ClaudeAdapter } from '../adapters/claude';
 import { KiloAdapter } from '../adapters/kilo';
+import { canonicalHookHash, canonicalRuleHash } from '../adapters/codec';
 import { analyzeLocalDrift, checkForUpstreamUpdate } from './drift';
 import { planInstall } from './plan';
 import { applyInstall } from './apply';
@@ -140,5 +141,47 @@ describe('drift analyzer — analyzeLocalDrift & checkForUpstreamUpdate', () => 
 
     const check2 = await checkForUpstreamUpdate(inst, source, testHomeDir);
     assert.strictEqual(check2.status, 'update-available');
+  });
+
+  it('reports up-to-date for hook and rule installations instead of modified-locally', async () => {
+    // 1. Hook
+    const hook = {
+      name: 'test-hook',
+      event: 'PreToolUse' as const,
+      command: 'echo "hello"',
+      extraFields: {},
+    };
+    await kiloAdapter.writeHook(hook, { scope: 'project', projectRoot: testTempDir });
+    const readH = await kiloAdapter.readHook('test-hook', { scope: 'project', projectRoot: testTempDir });
+    const instHook: ManagedInstallation = {
+      assistant: 'kilo-code',
+      scope: 'project',
+      projectPath: testTempDir,
+      kind: 'hook',
+      name: 'test-hook',
+      path: kiloAdapter.hookPath('test-hook', { scope: 'project', projectRoot: testTempDir }),
+      installedAt: new Date().toISOString(),
+      contentHash: canonicalHookHash(readH!),
+    };
+    const reportHook = await analyzeLocalDrift(instHook, testHomeDir);
+    assert.strictEqual(reportHook.status, 'up-to-date');
+
+    // 2. Rule
+    const rule = {
+      content: 'test rule content',
+    };
+    await kiloAdapter.writeRule(rule, { scope: 'project', projectRoot: testTempDir });
+    const instRule: ManagedInstallation = {
+      assistant: 'kilo-code',
+      scope: 'project',
+      projectPath: testTempDir,
+      kind: 'rule',
+      name: 'default',
+      path: kiloAdapter.rulePath({ scope: 'project', projectRoot: testTempDir }),
+      installedAt: new Date().toISOString(),
+      contentHash: canonicalRuleHash(rule),
+    };
+    const reportRule = await analyzeLocalDrift(instRule, testHomeDir);
+    assert.strictEqual(reportRule.status, 'up-to-date');
   });
 });
