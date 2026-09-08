@@ -370,9 +370,14 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
-  checkRecommendations().catch((err) => {
+  const checkRecommendationsPromise = checkRecommendations().catch((err) => {
     console.error('[ai-swissknife] recommendation check failed', err);
   });
+
+  // Exposed (not awaited by VS Code, which only awaits a thenable return
+  // value) so tests can deterministically wait for the fire-and-forget
+  // post-activation recommendation check instead of an arbitrary sleep.
+  return { checkRecommendationsPromise };
 }
 
 export function deactivate() {}

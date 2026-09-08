@@ -958,6 +958,7 @@ describe('UI TreeDataProviders', () => {
   describe('Workspace Open Detection', () => {
     let fakeContext: any;
     let extension: any;
+    let originalHome: string | undefined;
 
     beforeEach(async () => {
       fakeContext = {
@@ -968,8 +969,20 @@ describe('UI TreeDataProviders', () => {
           async update(key: string, value: any) { this._state.set(key, value); }
         }
       };
+      // extension.activate() constructs its own providers internally with no
+      // way to inject testHomeDir, so it resolves "global" scope via
+      // os.homedir() -> process.env.HOME. Without this override these tests
+      // read/resolve-against the real developer machine's actual
+      // ~/.ai-swissknife global state, which is slow (real git resolution)
+      // and non-deterministic.
+      originalHome = process.env.HOME;
+      process.env.HOME = testHomeDir;
       delete require.cache[require.resolve('../extension')];
       extension = require('../extension');
+    });
+
+    afterEach(() => {
+      process.env.HOME = originalHome;
     });
 
     it('shows notification with correct count when unsatisfied recommendations exist', async () => {
@@ -998,8 +1011,7 @@ describe('UI TreeDataProviders', () => {
 
       mockShowInformationMessageResult = 'Review'; // Resolve with something to prevent hang or to check behavior
 
-      extension.activate(fakeContext);
-      await new Promise(r => setTimeout(r, 50)); // let async detection run
+      await extension.activate(fakeContext).checkRecommendationsPromise;
 
       assert.strictEqual(mockShowInformationMessageCalls.length, 1);
       assert.ok(mockShowInformationMessageCalls[0].msg.includes('1 AI Swissknife item(s)'));
@@ -1024,8 +1036,7 @@ describe('UI TreeDataProviders', () => {
       );
       await fakeContext.workspaceState.update('aiSwissknife.ignoreRecommendations', true);
 
-      extension.activate(fakeContext);
-      await new Promise(r => setTimeout(r, 50));
+      await extension.activate(fakeContext).checkRecommendationsPromise;
 
       assert.strictEqual(mockShowInformationMessageCalls.length, 0);
     });
@@ -1053,8 +1064,7 @@ describe('UI TreeDataProviders', () => {
         testTempDir
       );
 
-      extension.activate(fakeContext);
-      await new Promise(r => setTimeout(r, 50));
+      await extension.activate(fakeContext).checkRecommendationsPromise;
 
       assert.strictEqual(mockShowInformationMessageCalls.length, 0);
     });
@@ -1074,8 +1084,7 @@ describe('UI TreeDataProviders', () => {
 
       mockShowInformationMessageResult = "Don't ask again for this workspace";
 
-      extension.activate(fakeContext);
-      await new Promise(r => setTimeout(r, 50));
+      await extension.activate(fakeContext).checkRecommendationsPromise;
 
       assert.strictEqual(fakeContext.workspaceState.get('aiSwissknife.ignoreRecommendations'), true);
     });
@@ -1084,6 +1093,7 @@ describe('UI TreeDataProviders', () => {
   describe('Status Bar Item', () => {
     let fakeContext: any;
     let extension: any;
+    let originalHome: string | undefined;
 
     beforeEach(async () => {
       fakeContext = {
@@ -1094,13 +1104,19 @@ describe('UI TreeDataProviders', () => {
           async update(key: string, value: any) { this._state.set(key, value); }
         }
       };
+      // See "Workspace Open Detection" above for why this is needed.
+      originalHome = process.env.HOME;
+      process.env.HOME = testHomeDir;
       delete require.cache[require.resolve('../extension')];
       extension = require('../extension');
     });
 
+    afterEach(() => {
+      process.env.HOME = originalHome;
+    });
+
     it('creates persistent status bar item with openDashboard command and default label', async () => {
-      extension.activate(fakeContext);
-      await new Promise(r => setTimeout(r, 50));
+      await extension.activate(fakeContext).checkRecommendationsPromise;
 
       assert.ok(mockLastCreatedStatusBarItem);
       assert.strictEqual(mockLastCreatedStatusBarItem.command, 'aiSwissknife.openDashboard');
@@ -1122,8 +1138,7 @@ describe('UI TreeDataProviders', () => {
         testTempDir
       );
 
-      extension.activate(fakeContext);
-      await new Promise(r => setTimeout(r, 50));
+      await extension.activate(fakeContext).checkRecommendationsPromise;
 
       assert.ok(mockLastCreatedStatusBarItem);
       assert.strictEqual(mockLastCreatedStatusBarItem.text, '$(dashboard) AI Swissknife: 2 recommendations');
@@ -1133,6 +1148,7 @@ describe('UI TreeDataProviders', () => {
   describe('configureEnabledAssistants Command', () => {
     let fakeContext: any;
     let extension: any;
+    let originalHome: string | undefined;
 
     beforeEach(async () => {
       fakeContext = {
@@ -1143,11 +1159,18 @@ describe('UI TreeDataProviders', () => {
           async update(key: string, value: any) { this._state.set(key, value); }
         }
       };
+      // See "Workspace Open Detection" above for why this is needed.
+      originalHome = process.env.HOME;
+      process.env.HOME = testHomeDir;
       mockRegisteredCommands.clear();
       mockConfigUpdates = [];
       mockConfigGetResult = undefined;
       delete require.cache[require.resolve('../extension')];
       extension = require('../extension');
+    });
+
+    afterEach(() => {
+      process.env.HOME = originalHome;
     });
 
     it('updates config when QuickPick returns a selection', async () => {
