@@ -10,6 +10,7 @@ import { InstalledTreeDataProvider, getIdentityKey } from './installedView';
 import { SourcesTreeDataProvider, SourceItem } from './sourcesView';
 import { AvailableTreeDataProvider, AvailableTreeItem, AvailableFolderItem, AvailableArtifactItem, DiagnosticTreeItem } from './availableView';
 import { findRelatedInstallations } from '../engine/crossFrameworkLookup';
+import { handleInstallRecommended, installResolvedArtifacts, unrecommendArtifactForWorkspace } from './recommendations';
 
 export class DashboardPanel {
   private async getAllSources(): Promise<Source[]> {
@@ -223,6 +224,46 @@ export class DashboardPanel {
               await this.handleRequestDetail(message.key);
             }
             break;
+          case 'installRecommended':
+            await handleInstallRecommended(() => {
+              this._availableProvider.refreshCatalog();
+              this._refreshCallback();
+              this.update();
+            });
+            break;
+          case 'installRecommendation': {
+            const projectRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            if (projectRoot) {
+              const recGroup = this._availableProvider.getCachedRecommendedGroup();
+              if (recGroup) {
+                const pendingItem = recGroup.pending.find(p => p.source.id === message.sourceId && p.artifact.id === message.artifactId && p.desired.assistant === message.assistant);
+                if (pendingItem) {
+                  const toInstall = {
+                    artifact: pendingItem.artifact,
+                    pkg: pendingItem.pkg,
+                    source: pendingItem.source,
+                    targetAssistant: pendingItem.desired.assistant,
+                    targetScope: pendingItem.desired.scope
+                  };
+                  await installResolvedArtifacts([toInstall], projectRoot);
+                  this._availableProvider.refreshCatalog();
+                  this._refreshCallback();
+                  await this.update();
+                }
+              }
+            }
+            break;
+          }
+          case 'unrecommendRecommendation': {
+            const projectRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+            if (projectRoot) {
+              await unrecommendArtifactForWorkspace(message.sourceId, message.artifactId, message.assistant, projectRoot);
+              this._availableProvider.refreshCatalog();
+              this._refreshCallback();
+              await this.update();
+            }
+            break;
+          }
         }
       },
       null,
@@ -489,6 +530,22 @@ export class DashboardPanel {
       });
     }
 
+    // Phase C: Recommendations
+    (async () => {
+      try {
+        await this._availableProvider.ensureCatalogLoaded();
+        const recGroup = this._availableProvider.getCachedRecommendedGroup();
+        const pending = recGroup ? recGroup.pending : [];
+        const broken = recGroup ? recGroup.broken : [];
+        this._panel.webview.postMessage({
+          command: 'recommendationsData',
+          html: this.getRecommendationsHtml(pending, broken)
+        });
+      } catch {
+        // ignore
+      }
+    })();
+
     // Phase B: Slow drift check
     for (const inst of allManaged) {
       const matchingSource = allSources.find((s) => s.id === inst.sourceId);
@@ -646,10 +703,85 @@ export class DashboardPanel {
     return html;
   }
 
-  private getRecommendationsHtml(): string {
-    return `<div class="empty-state">
-      <p>Recommendations section placeholder</p>
-    </div>`;
+  private getRecommendationsHtml(pending: any[] = [], broken: any[] = []): string {
+    let html = `
+      <div class="toolbar" style="margin-bottom: 16px;">
+        <button class="btn btn-primary" onclick="vscode.postMessage({ command: 'installRecommended' })">Install All Actionable</button>
+      </div>
+    `;
+
+    if (pending.length === 0 && broken.length === 0) {
+      html += `<div class="empty-state">No pending recommendations for this workspace.</div>`;
+      return html;
+    }
+
+    if (pending.length > 0) {
+      html += `
+        <div class="scope-group">
+          <div class="scope-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 8px;">
+            <h3 style="margin: 0; font-size: 13px;">Actionable Recommendations</h3>
+          </div>
+          <div class="source-list">
+      `;
+      for (const p of pending) {
+        const installedInHtml = `<span class="filter-pill env-pill active" style="padding: 2px 6px; font-size: 10px; cursor: default; height: auto;">${this.escapeHtml(p.desired.assistant)}</span>`;
+        html += `
+          <div class="catalog-item artifact-row" style="padding: 8px; display: flex; align-items: center; gap: 10px; justify-content: space-between; border-bottom: 1px solid var(--border);">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="kind-pill kind-${this.escapeHtml(p.artifact.kind)}">${this.escapeHtml(p.artifact.kind)}</span>
+              <span><strong>${this.escapeHtml(p.artifact.name)}</strong></span>
+              ${installedInHtml}
+              ${p.artifact.description ? `<span style="opacity:0.7; font-size:11px;">${this.escapeHtml(p.artifact.description)}</span>` : ''}
+              <span style="opacity: 0.5; font-size: 10px; margin-left: 8px;">from ${this.escapeHtml(p.source.id)}</span>
+            </div>
+            <div style="display: flex; gap: 4px;">
+              <button class="btn btn-sm btn-primary" onclick="vscode.postMessage({ command: 'installRecommendation', sourceId: '${this.escapeHtml(p.source.id)}', scope: '${this.escapeHtml(p.source.scope)}', artifactId: '${this.escapeHtml(p.artifact.id)}', assistant: '${this.escapeHtml(p.desired.assistant)}' })">Install</button>
+              <button class="btn btn-sm btn-secondary" style="color: var(--badge-error); border-color: rgba(207, 34, 46, 0.3);" onclick="vscode.postMessage({ command: 'unrecommendRecommendation', sourceId: '${this.escapeHtml(p.desired.sourceId)}', artifactId: '${this.escapeHtml(p.desired.artifactId)}', assistant: '${this.escapeHtml(p.desired.assistant)}' })">Unrecommend</button>
+            </div>
+          </div>
+        `;
+      }
+      html += `</div></div>`;
+    }
+
+    if (broken.length > 0) {
+      html += `
+        <div class="scope-group" style="margin-top: 24px;">
+          <div class="scope-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 8px;">
+            <h3 style="margin: 0; font-size: 13px; color: var(--badge-error);">Broken Recommendations</h3>
+          </div>
+          <div class="source-list">
+      `;
+      for (const b of broken) {
+        let reasonText = '';
+        if (b.reason.kind === 'source-not-registered') {
+          reasonText = 'Source not registered';
+        } else if (b.reason.kind === 'source-resolution-failed') {
+          reasonText = `Resolution failed (${b.reason.error})`;
+        } else {
+          reasonText = 'Artifact not found in source';
+        }
+        
+        const installedInHtml = `<span class="filter-pill env-pill" style="padding: 2px 6px; font-size: 10px; cursor: default; height: auto;">${this.escapeHtml(b.desired.assistant)}</span>`;
+        html += `
+          <div class="catalog-item artifact-row" style="padding: 8px; display: flex; align-items: center; gap: 10px; justify-content: space-between; border-bottom: 1px solid var(--border); opacity: 0.8;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="color: var(--badge-error);">⚠️</span>
+              <span><strong>${this.escapeHtml(b.desired.artifactId)}</strong></span>
+              ${installedInHtml}
+              <span style="color: var(--badge-error); font-size:11px;">${this.escapeHtml(reasonText)}</span>
+              <span style="opacity: 0.5; font-size: 10px; margin-left: 8px;">from ${this.escapeHtml(b.desired.sourceId)}</span>
+            </div>
+            <div style="display: flex; gap: 4px;">
+              <button class="btn btn-sm btn-secondary" style="color: var(--badge-error); border-color: rgba(207, 34, 46, 0.3);" onclick="vscode.postMessage({ command: 'unrecommendRecommendation', sourceId: '${this.escapeHtml(b.desired.sourceId)}', artifactId: '${this.escapeHtml(b.desired.artifactId)}', assistant: '${this.escapeHtml(b.desired.assistant)}' })">Unrecommend</button>
+            </div>
+          </div>
+        `;
+      }
+      html += `</div></div>`;
+    }
+
+    return html;
   }
 
   private getInstalledSectionHtml(
@@ -1422,7 +1554,10 @@ export class DashboardPanel {
 
     window.addEventListener('message', (event) => {
       const msg = event.data;
-      if (msg.command === 'inventoryData') {
+      if (msg.command === 'recommendationsData') {
+        const recSection = document.getElementById('section-recommendations');
+        if (recSection) recSection.innerHTML = msg.html;
+      } else if (msg.command === 'inventoryData') {
         managedData = msg.managedData;
         observedData = msg.observedData;
         const tbody = document.getElementById('unifiedTable');
