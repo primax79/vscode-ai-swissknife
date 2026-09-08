@@ -18,6 +18,7 @@ import { FormEditorPanel } from './ui/formEditor';
 import { getWorkspaceRoot } from './ui/workspacePicker';
 import { previewProvider, PreviewProvider } from './ui/previewProvider';
 import { readonlyFileContentProvider, ReadonlyFileContentProvider } from './ui/artifactFileTree';
+import { handleCreateArtifact } from './ui/createArtifact';
 
 import { ALL_ADAPTERS, getEnabledAdapters } from './adapters/registry';
 import { handleInstallRecommended } from './ui/recommendations';
@@ -297,42 +298,9 @@ export function activate(context: vscode.ExtensionContext) {
       }
     ),
     vscode.commands.registerCommand('aiSwissknife.createArtifact', async () => {
-      const kindPick = await vscode.window.showQuickPick(['skill', 'agent', 'command', 'mcp-server'], {
-        placeHolder: 'Select artifact kind to create',
+      await handleCreateArtifact(() => {
+        installedProvider.refresh();
       });
-      if (!kindPick) return;
-
-      const assistantPick = await vscode.window.showQuickPick(
-        getEnabledAdapters().map(a => a.assistant),
-        {
-          placeHolder: 'Select target assistant',
-        }
-      );
-      if (!assistantPick) return;
-
-      const scopePick = await vscode.window.showQuickPick(['project', 'global'], {
-        placeHolder: 'Select scope (project or global)',
-      });
-      if (!scopePick) return;
-
-      let projectRoot: string | undefined;
-      if (scopePick === 'project') {
-        projectRoot = await getWorkspaceRoot();
-        if (!projectRoot) return;
-      }
-
-      await FormEditorPanel.open(
-        {
-          mode: 'create',
-          assistant: assistantPick as AssistantId,
-          scope: scopePick as Scope,
-          projectRoot,
-          kind: kindPick as ItemKind,
-        },
-        () => {
-          installedProvider.refresh();
-        }
-      );
     }),
     vscode.commands.registerCommand(
       'aiSwissknife.editArtifact',
