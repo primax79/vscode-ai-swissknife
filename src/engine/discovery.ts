@@ -3,7 +3,6 @@ import type {
   ManagedInstallation,
   ObservedArtifact,
   Scope,
-  AssistantId,
   ItemKind,
   Source,
   ObservedSourceMatch,
@@ -26,11 +25,7 @@ import {
   canonicalRuleHash,
   readSkill,
 } from '../adapters/codec';
-import { ClaudeAdapter, claudeAdapter } from '../adapters/claude';
-import { KiloAdapter, kiloAdapter } from '../adapters/kilo';
-import { CopilotAdapter, copilotAdapter } from '../adapters/copilot';
-import { CodexAdapter, codexAdapter } from '../adapters/codex';
-import { GeminiAdapter, geminiAdapter } from '../adapters/gemini';
+import { getAdapter, getAdapterWithHomeRoot, ALL_ADAPTERS } from '../adapters/registry';
 import { resolveLocalFolder } from '../sources/localFolder';
 import { resolveGitCustom } from '../sources/gitCustom';
 import { resolveGitMarketplace } from '../sources/gitMarketplace';
@@ -39,21 +34,6 @@ import { resolveRemoteUrl } from '../sources/remoteUrl';
 import type { SourceResolution } from '../sources/types';
 import { resolveAndTranslate } from './plan';
 
-function getAdapter(assistant: AssistantId, homeRoot?: string) {
-  if (homeRoot) {
-    if (assistant === 'claude-code') return new ClaudeAdapter(() => homeRoot);
-    if (assistant === 'kilo-code') return new KiloAdapter(() => homeRoot);
-    if (assistant === 'github-copilot') return new CopilotAdapter(() => homeRoot);
-    if (assistant === 'codex-cli') return new CodexAdapter(() => homeRoot);
-    if (assistant === 'gemini-cli') return new GeminiAdapter(() => homeRoot);
-  }
-  if (assistant === 'claude-code') return claudeAdapter;
-  if (assistant === 'kilo-code') return kiloAdapter;
-  if (assistant === 'github-copilot') return copilotAdapter;
-  if (assistant === 'codex-cli') return codexAdapter;
-  if (assistant === 'gemini-cli') return geminiAdapter;
-  throw new Error(`Unsupported assistant: ${assistant}`);
-}
 
 /**
  * Scans the filesystem for all artifacts installed on the given scope,
@@ -74,12 +54,12 @@ export async function scanInstalledInventory(
   }
 
   const rawObserved: ObservedArtifact[] = [];
-  const assistants: AssistantId[] = ['claude-code', 'kilo-code', 'github-copilot', 'codex-cli', 'gemini-cli'];
   const loc = { scope, projectRoot };
   const now = new Date().toISOString();
 
-  for (const assistant of assistants) {
-    const adapter = getAdapter(assistant, homeRoot);
+  for (const adapterSingleton of ALL_ADAPTERS) {
+    const assistant = adapterSingleton.assistant;
+    const adapter = homeRoot ? getAdapterWithHomeRoot(assistant, homeRoot) : adapterSingleton;
 
     // Skills
     try {
@@ -324,7 +304,7 @@ export async function promoteObservedArtifact(
   provenance: Pick<ObservedSourceMatch, 'sourceId' | 'packageId' | 'artifactId' | 'sourceRevision'>,
   homeRoot?: string
 ): Promise<ManagedInstallation> {
-  const adapter = getAdapter(observed.assistant, homeRoot);
+  const adapter = homeRoot ? getAdapterWithHomeRoot(observed.assistant, homeRoot) : getAdapter(observed.assistant);
   const loc = { scope: observed.scope, projectRoot: observed.projectPath };
 
   let contentHash = observed.contentHash;

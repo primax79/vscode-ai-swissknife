@@ -10,14 +10,9 @@ import { planInstall } from '../engine/plan';
 import { planSync } from '../engine/sync';
 import { applyInstall } from '../engine/apply';
 import { softDeletePath } from '../engine/softDelete';
-import { ClaudeAdapter } from '../adapters/claude';
-import { KiloAdapter } from '../adapters/kilo';
-import { CopilotAdapter } from '../adapters/copilot';
-import { CodexAdapter } from '../adapters/codex';
-import { GeminiAdapter } from '../adapters/gemini';
+import { getAdapter, ALL_ADAPTERS } from '../adapters/registry';
 import type { DriftReport } from '../engine/types';
 import { getWorkspaceRoot } from './workspacePicker';
-import { getAssistantIconPath } from './assistantIcons';
 import { getKindIconName } from './kindIcons';
 import {
   ArtifactFileItem,
@@ -140,11 +135,6 @@ export class InstalledTreeDataProvider {
   > = this._onDidChangeTreeData.event;
 
   private driftReports = new Map<string, DriftReport>();
-  private claudeAdapter = new ClaudeAdapter();
-  private kiloAdapter = new KiloAdapter();
-  private copilotAdapter = new CopilotAdapter();
-  private codexAdapter = new CodexAdapter();
-  private geminiAdapter = new GeminiAdapter();
 
   private rawInventoryCache: Promise<{ allManaged: ManagedInstallation[]; allObserved: ObservedArtifact[] }> | null = null;
 
@@ -502,16 +492,7 @@ export class InstalledTreeDataProvider {
       return;
     }
 
-    const targetAdapter =
-      inst.assistant === 'claude-code'
-        ? this.claudeAdapter
-        : inst.assistant === 'github-copilot'
-        ? this.copilotAdapter
-        : inst.assistant === 'codex-cli'
-        ? this.codexAdapter
-        : inst.assistant === 'gemini-cli'
-        ? this.geminiAdapter
-        : this.kiloAdapter;
+    const targetAdapter = getAdapter(inst.assistant);
 
     const fakePkg = {
       id: inst.packageId ?? `${source.id}:${inst.name}`,
@@ -572,10 +553,10 @@ export class InstalledTreeDataProvider {
 
   async doSyncItem(sourceItem: ManagedInstallation | ObservedArtifact): Promise<void> {
     const assistantPick = await vscode.window.showQuickPick(
-      (['claude-code', 'kilo-code', 'github-copilot', 'codex-cli', 'gemini-cli'] as const).map(
-        (id) => ({
-          label: id,
-          iconPath: getAssistantIconPath(id, this.extensionUri),
+      ALL_ADAPTERS.map(
+        (a) => ({
+          label: a.assistant,
+          iconPath: new vscode.ThemeIcon(a.iconId),
         })
       ),
       {
@@ -709,10 +690,10 @@ export class InstalledTreeDataProvider {
     }
 
     const assistantPick = await vscode.window.showQuickPick(
-      (['claude-code', 'kilo-code', 'github-copilot', 'codex-cli', 'gemini-cli'] as const).map(
-        (id) => ({
-          label: id,
-          iconPath: getAssistantIconPath(id, this.extensionUri),
+      ALL_ADAPTERS.map(
+        (a) => ({
+          label: a.assistant,
+          iconPath: new vscode.ThemeIcon(a.iconId),
         })
       ),
       {
@@ -789,16 +770,7 @@ export class InstalledTreeDataProvider {
    */
   private async removeManagedInstallation(inst: ManagedInstallation): Promise<void> {
     if (inst.kind === 'mcp-server') {
-      const originAdapter =
-        inst.assistant === 'claude-code'
-          ? this.claudeAdapter
-          : inst.assistant === 'github-copilot'
-          ? this.copilotAdapter
-          : inst.assistant === 'codex-cli'
-          ? this.codexAdapter
-          : inst.assistant === 'gemini-cli'
-          ? this.geminiAdapter
-          : this.kiloAdapter;
+      const originAdapter = getAdapter(inst.assistant);
       await originAdapter.removeMcpServer(inst.name, {
         scope: inst.scope,
         projectRoot: inst.projectPath,
@@ -1035,12 +1007,7 @@ export class InstalledTreeDataProvider {
        const mcp = translated as import('../adapters/types').CanonicalMcpServer;
        originalContentStr = JSON.stringify(mcp, null, 2);
        try {
-         let adapter;
-         if (assistant === 'claude-code') adapter = (await import('../adapters/claude')).claudeAdapter;
-         else if (assistant === 'kilo-code') adapter = (await import('../adapters/kilo')).kiloAdapter;
-         else if (assistant === 'github-copilot') adapter = (await import('../adapters/copilot')).copilotAdapter;
-         else if (assistant === 'codex-cli') adapter = (await import('../adapters/codex')).codexAdapter;
-         else if (assistant === 'gemini-cli') adapter = (await import('../adapters/gemini')).geminiAdapter;
+         const adapter = getAdapter(assistant);
          
          if (adapter && adapter.readMcpServer) {
            const localMcp = await adapter.readMcpServer(name, { scope, projectRoot });

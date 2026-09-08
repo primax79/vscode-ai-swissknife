@@ -18,11 +18,7 @@ import {
   canonicalMcpServerHash,
 } from '../adapters/codec';
 import { readState, writeState } from '../domain/registry';
-import { ClaudeAdapter, claudeAdapter } from '../adapters/claude';
-import { KiloAdapter, kiloAdapter } from '../adapters/kilo';
-import { CopilotAdapter, copilotAdapter } from '../adapters/copilot';
-import { CodexAdapter, codexAdapter } from '../adapters/codex';
-import { GeminiAdapter, geminiAdapter } from '../adapters/gemini';
+import { getAdapter } from '../adapters/registry';
 
 export interface FormEditorContext {
   mode: 'create' | 'edit';
@@ -32,22 +28,6 @@ export interface FormEditorContext {
   kind: ItemKind;
   name?: string;
   sourceInstallation?: ManagedInstallation;
-}
-
-function getAdapter(assistant: AssistantId, homeRoot?: string) {
-  if (homeRoot) {
-    if (assistant === 'claude-code') return new ClaudeAdapter(() => homeRoot);
-    if (assistant === 'kilo-code') return new KiloAdapter(() => homeRoot);
-    if (assistant === 'github-copilot') return new CopilotAdapter(() => homeRoot);
-    if (assistant === 'codex-cli') return new CodexAdapter(() => homeRoot);
-    if (assistant === 'gemini-cli') return new GeminiAdapter(() => homeRoot);
-  }
-  if (assistant === 'claude-code') return claudeAdapter;
-  if (assistant === 'kilo-code') return kiloAdapter;
-  if (assistant === 'github-copilot') return copilotAdapter;
-  if (assistant === 'codex-cli') return codexAdapter;
-  if (assistant === 'gemini-cli') return geminiAdapter;
-  throw new Error(`Unsupported assistant: ${assistant}`);
 }
 
 export class FormEditorPanel {

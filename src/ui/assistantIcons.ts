@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { AssistantId } from '../domain/types';
 
+// TODO(29.3): getAssistantIconPath may now be unused, verify before deleting
 export function getAssistantIconPath(
   assistant: AssistantId,
   extensionUri: vscode.Uri

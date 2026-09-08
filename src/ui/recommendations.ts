@@ -8,11 +8,7 @@ import { resolveGitMarketplace } from '../sources/gitMarketplace';
 import { resolveGitSingleItem } from '../sources/gitSingleItem';
 import { resolveRemoteUrl } from '../sources/remoteUrl';
 import { resolveRecommendations, SourceResolutionAttempt } from '../engine/recommendations';
-import { ClaudeAdapter } from '../adapters/claude';
-import { KiloAdapter } from '../adapters/kilo';
-import { CopilotAdapter } from '../adapters/copilot';
-import { CodexAdapter } from '../adapters/codex';
-import { GeminiAdapter } from '../adapters/gemini';
+import { getAdapter } from '../adapters/registry';
 import { planInstall } from '../engine/plan';
 import { applyInstall } from '../engine/apply';
 import type { PreparedInstall } from '../engine/types';
@@ -21,23 +17,12 @@ export async function installResolvedArtifacts(
   items: { artifact: Artifact; pkg: Package; source: Source; targetAssistant: AssistantId; targetScope: Scope }[],
   projectRoot: string
 ) {
-  const claudeAdapter = new ClaudeAdapter();
-  const kiloAdapter = new KiloAdapter();
-  const copilotAdapter = new CopilotAdapter();
-  const codexAdapter = new CodexAdapter();
-  const geminiAdapter = new GeminiAdapter();
-
   const preparedList: PreparedInstall[] = [];
   let supportedCount = 0;
   let conflictCount = 0;
 
   for (const item of items) {
-    const targetAdapter =
-      item.targetAssistant === 'claude-code' ? claudeAdapter
-      : item.targetAssistant === 'github-copilot' ? copilotAdapter
-      : item.targetAssistant === 'codex-cli' ? codexAdapter
-      : item.targetAssistant === 'gemini-cli' ? geminiAdapter
-      : kiloAdapter;
+    const targetAdapter = getAdapter(item.targetAssistant);
 
     const prepared = await planInstall({
       source: item.source,
