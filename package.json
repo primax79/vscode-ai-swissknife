@@ -22,6 +22,32 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "configuration": {
+      "title": "AI Swissknife",
+      "properties": {
+        "aiSwissknife.enabledAssistants": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "claude-code",
+              "kilo-code",
+              "github-copilot",
+              "codex-cli",
+              "gemini-cli"
+            ]
+          },
+          "default": [
+            "claude-code",
+            "kilo-code",
+            "github-copilot",
+            "codex-cli",
+            "gemini-cli"
+          ],
+          "description": "List of AI assistants enabled in AI Swissknife. Disabling an assistant hides its view."
+        }
+      }
+    },
     "icons": {
       "ai-swissknife-claude-code": {
         "description": "Claude Code",
@@ -76,23 +102,28 @@
         },
         {
           "id": "aiSwissknife.installed.claude-code",
-          "name": "Claude Code"
+          "name": "Claude Code",
+          "when": "aiSwissknife.enabled.claude-code"
         },
         {
           "id": "aiSwissknife.installed.kilo-code",
-          "name": "Kilo Code"
+          "name": "Kilo Code",
+          "when": "aiSwissknife.enabled.kilo-code"
         },
         {
           "id": "aiSwissknife.installed.github-copilot",
-          "name": "GitHub Copilot"
+          "name": "GitHub Copilot",
+          "when": "aiSwissknife.enabled.github-copilot"
         },
         {
           "id": "aiSwissknife.installed.codex-cli",
-          "name": "Codex CLI"
+          "name": "Codex CLI",
+          "when": "aiSwissknife.enabled.codex-cli"
         },
         {
           "id": "aiSwissknife.installed.gemini-cli",
-          "name": "Gemini CLI"
+          "name": "Gemini CLI",
+          "when": "aiSwissknife.enabled.gemini-cli"
         }
       ]
     },

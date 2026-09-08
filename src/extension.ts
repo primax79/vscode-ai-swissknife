@@ -22,7 +22,7 @@ import { getWorkspaceRoot } from './ui/workspacePicker';
 import { previewProvider, PreviewProvider } from './ui/previewProvider';
 import { readonlyFileContentProvider, ReadonlyFileContentProvider } from './ui/artifactFileTree';
 
-import { ALL_ADAPTERS } from './adapters/registry';
+import { ALL_ADAPTERS, getEnabledAdapters } from './adapters/registry';
 import { handleInstallRecommended } from './ui/recommendations';
 import {
   computePendingCounts,
@@ -306,11 +306,33 @@ export function activate(context: vscode.ExtensionContext) {
   const availableProvider = new AvailableTreeDataProvider(context.extensionUri);
   const sourcesProvider = new SourcesTreeDataProvider(availableProvider);
   const installedProvider = new InstalledTreeDataProvider(context.extensionUri);
-  const claudeProvider = new AssistantTreeDataProvider(installedProvider, 'claude-code');
-  const kiloProvider = new AssistantTreeDataProvider(installedProvider, 'kilo-code');
-  const copilotProvider = new AssistantTreeDataProvider(installedProvider, 'github-copilot');
-  const codexProvider = new AssistantTreeDataProvider(installedProvider, 'codex-cli');
-  const geminiProvider = new AssistantTreeDataProvider(installedProvider, 'gemini-cli');
+
+  const assistantProviders = ALL_ADAPTERS.map((adapter) => {
+    const provider = new AssistantTreeDataProvider(installedProvider, adapter.assistant);
+    return vscode.window.registerTreeDataProvider(`aiSwissknife.installed.${adapter.assistant}`, provider);
+  });
+
+  const updateEnabledContext = () => {
+    const enabled = getEnabledAdapters();
+    const enabledIds = new Set(enabled.map((a) => a.assistant));
+    for (const adapter of ALL_ADAPTERS) {
+      vscode.commands.executeCommand(
+        'setContext',
+        `aiSwissknife.enabled.${adapter.assistant}`,
+        enabledIds.has(adapter.assistant)
+      );
+    }
+  };
+
+  updateEnabledContext();
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration('aiSwissknife.enabledAssistants')) {
+        updateEnabledContext();
+      }
+    })
+  );
 
   const refreshAllInstalled = () => {
     installedProvider.refresh();
@@ -387,11 +409,7 @@ export function activate(context: vscode.ExtensionContext) {
     statusBarItem,
     ...watchers,
     sourcesTreeView,
-    vscode.window.registerTreeDataProvider('aiSwissknife.installed.claude-code', claudeProvider),
-    vscode.window.registerTreeDataProvider('aiSwissknife.installed.kilo-code', kiloProvider),
-    vscode.window.registerTreeDataProvider('aiSwissknife.installed.github-copilot', copilotProvider),
-    vscode.window.registerTreeDataProvider('aiSwissknife.installed.codex-cli', codexProvider),
-    vscode.window.registerTreeDataProvider('aiSwissknife.installed.gemini-cli', geminiProvider),
+    ...assistantProviders,
 
     vscode.commands.registerCommand('aiSwissknife.addSource', () => sourcesProvider.addSource()),
     vscode.commands.registerCommand('aiSwissknife.removeSource', (item?: SourceItem) =>
