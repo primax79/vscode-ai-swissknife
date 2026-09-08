@@ -30,10 +30,10 @@ import type { DesiredSource } from '../domain/registry';
 
 describe('resolveRecommendedSources', () => {
   it('resolves sources and handles failures without interrupting the loop', async () => {
-    const mockGit = mock.method(gitCustomModule, 'resolveGitCustom', async () => {
+    const mockGit = mock.method(gitCustomModule.gitCustomResolver, 'resolve', async () => {
       return { packages: [{ id: 'p1', sourceId: 's1', nativeFormat: 'raw', artifacts: [] }] };
     });
-    const mockLocal = mock.method(localFolderModule, 'resolveLocalFolder', async () => {
+    const mockLocal = mock.method(localFolderModule.localFolderResolver, 'resolve', async () => {
       throw new Error('Local folder not found');
     });
 

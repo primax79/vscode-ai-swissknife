@@ -3,11 +3,7 @@ import * as vscode from 'vscode';
 import type { Source, Package, Artifact, AssistantId, Scope, ManagedInstallation } from '../domain/types';
 import type { DetectionDiagnostic, SourceResolution } from '../sources/types';
 import { readManifest, fromDesiredSource } from '../domain/registry';
-import { resolveLocalFolder } from '../sources/localFolder';
-import { resolveGitCustom } from '../sources/gitCustom';
-import { resolveGitMarketplace } from '../sources/gitMarketplace';
-import { resolveGitSingleItem } from '../sources/gitSingleItem';
-import { resolveRemoteUrl } from '../sources/remoteUrl';
+import { getSourceResolver } from '../sources/registry';
 import { getAdapter, ALL_ADAPTERS } from '../adapters/registry';
 import { planInstall } from '../engine/plan';
 import { applyInstall } from '../engine/apply';
@@ -305,20 +301,8 @@ export class AvailableTreeDataProvider
 
     for (const src of sources) {
       try {
-        let resolution: SourceResolution;
-        if (src.type === 'local-folder') {
-          resolution = await resolveLocalFolder(src);
-        } else if (src.type === 'git-custom') {
-          resolution = await resolveGitCustom(src);
-        } else if (src.type === 'git-marketplace') {
-          resolution = await resolveGitMarketplace(src);
-        } else if (src.type === 'git-single-item') {
-          resolution = await resolveGitSingleItem(src);
-        } else if (src.type === 'remote-url') {
-          resolution = await resolveRemoteUrl(src);
-        } else {
-          resolution = { packages: [], diagnostics: [] };
-        }
+        const resolver = getSourceResolver(src.type);
+        const resolution: SourceResolution = await resolver.resolve(src);
         this.cachedSourceGroups.push(new AvailableSourceGroupItem(src, resolution));
         resolutionAttempts.set(src.id, { status: 'resolved', source: src, packages: resolution.packages });
       } catch (err: unknown) {

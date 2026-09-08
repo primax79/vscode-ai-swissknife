@@ -887,23 +887,9 @@ export class InstalledTreeDataProvider {
 
     let resolution;
     try {
-      const { resolveLocalFolder } = await import('../sources/localFolder');
-      const { resolveGitCustom } = await import('../sources/gitCustom');
-      const { resolveGitMarketplace } = await import('../sources/gitMarketplace');
-      const { resolveGitSingleItem } = await import('../sources/gitSingleItem');
-      const { resolveRemoteUrl } = await import('../sources/remoteUrl');
-      
-      if (source.type === 'local-folder') {
-        resolution = await resolveLocalFolder(source);
-      } else if (source.type === 'git-custom') {
-        resolution = await resolveGitCustom(source);
-      } else if (source.type === 'git-marketplace') {
-        resolution = await resolveGitMarketplace(source);
-      } else if (source.type === 'git-single-item') {
-        resolution = await resolveGitSingleItem(source);
-      } else if (source.type === 'remote-url') {
-        resolution = await resolveRemoteUrl(source);
-      }
+      const { getSourceResolver } = await import('../sources/registry');
+      const resolver = getSourceResolver(source.type);
+      resolution = await resolver.resolve(source);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       vscode.window.showErrorMessage(`Failed to resolve source: ${msg}`);

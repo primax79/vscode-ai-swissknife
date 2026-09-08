@@ -2,11 +2,7 @@ import * as vscode from 'vscode';
 import type { AssistantId, Scope, ItemKind, Source } from './domain/types';
 import { readManifest, writeManifest, fromDesiredSource, type DesiredSource } from './domain/registry';
 import type { SourceResolution } from './sources/types';
-import { resolveLocalFolder } from './sources/localFolder';
-import { resolveGitCustom } from './sources/gitCustom';
-import { resolveGitMarketplace } from './sources/gitMarketplace';
-import { resolveGitSingleItem } from './sources/gitSingleItem';
-import { resolveRemoteUrl } from './sources/remoteUrl';
+import { getSourceResolver } from './sources/registry';
 import { SourcesTreeDataProvider, SourceItem } from './ui/sourcesView';
 import {
   AvailableTreeDataProvider,
@@ -44,12 +40,12 @@ export {
 } from './engine/pendingCounts';
 
 async function resolveSourcePackages(source: Source): Promise<SourceResolution> {
-  if (source.type === 'local-folder') return resolveLocalFolder(source);
-  if (source.type === 'git-custom') return resolveGitCustom(source);
-  if (source.type === 'git-marketplace') return resolveGitMarketplace(source);
-  if (source.type === 'git-single-item') return resolveGitSingleItem(source);
-  if (source.type === 'remote-url') return resolveRemoteUrl(source);
-  return { packages: [], diagnostics: [] };
+  try {
+    const resolver = getSourceResolver(source.type);
+    return await resolver.resolve(source);
+  } catch {
+    return { packages: [], diagnostics: [] };
+  }
 }
 
 /**

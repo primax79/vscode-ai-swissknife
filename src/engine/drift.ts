@@ -18,11 +18,7 @@ import {
   readSkill,
 } from '../adapters/codec';
 import { getAdapter, getAdapterWithHomeRoot } from '../adapters/registry';
-import { resolveLocalFolder } from '../sources/localFolder';
-import { resolveGitCustom } from '../sources/gitCustom';
-import { resolveGitMarketplace } from '../sources/gitMarketplace';
-import { resolveGitSingleItem } from '../sources/gitSingleItem';
-import { resolveRemoteUrl } from '../sources/remoteUrl';
+import { getSourceResolver } from '../sources/registry';
 import { resolveAndTranslate } from './plan';
 import type { DriftReport } from './types';
 
@@ -142,19 +138,8 @@ export async function checkForUpstreamUpdate(
 
   let resolution;
   try {
-    if (source.type === 'local-folder') {
-      resolution = await resolveLocalFolder(source);
-    } else if (source.type === 'git-custom') {
-      resolution = await resolveGitCustom(source);
-    } else if (source.type === 'git-marketplace') {
-      resolution = await resolveGitMarketplace(source);
-    } else if (source.type === 'git-single-item') {
-      resolution = await resolveGitSingleItem(source);
-    } else if (source.type === 'remote-url') {
-      resolution = await resolveRemoteUrl(source);
-    } else {
-      return localReport;
-    }
+    const resolver = getSourceResolver(source.type);
+    resolution = await resolver.resolve(source);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     return {

@@ -26,11 +26,7 @@ import {
   readSkill,
 } from '../adapters/codec';
 import { getAdapter, getAdapterWithHomeRoot, ALL_ADAPTERS } from '../adapters/registry';
-import { resolveLocalFolder } from '../sources/localFolder';
-import { resolveGitCustom } from '../sources/gitCustom';
-import { resolveGitMarketplace } from '../sources/gitMarketplace';
-import { resolveGitSingleItem } from '../sources/gitSingleItem';
-import { resolveRemoteUrl } from '../sources/remoteUrl';
+import { getSourceResolver } from '../sources/registry';
 import type { SourceResolution } from '../sources/types';
 import { resolveAndTranslate } from './plan';
 
@@ -202,18 +198,8 @@ export async function scanInstalledInventory(
   const resolvedSources: { source: Source; resolution: SourceResolution }[] = [];
   for (const source of allSources) {
     try {
-      let resolution;
-      if (source.type === 'local-folder') {
-        resolution = await resolveLocalFolder(source);
-      } else if (source.type === 'git-custom') {
-        resolution = await resolveGitCustom(source);
-      } else if (source.type === 'git-marketplace') {
-        resolution = await resolveGitMarketplace(source);
-      } else if (source.type === 'git-single-item') {
-        resolution = await resolveGitSingleItem(source);
-      } else if (source.type === 'remote-url') {
-        resolution = await resolveRemoteUrl(source);
-      }
+      const resolver = getSourceResolver(source.type);
+      const resolution = await resolver.resolve(source);
 
       if (resolution) {
         resolvedSources.push({ source, resolution });

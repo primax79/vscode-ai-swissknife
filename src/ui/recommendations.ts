@@ -2,11 +2,7 @@ import * as vscode from 'vscode';
 import type { Artifact, Package, Source, AssistantId, Scope } from '../domain/types';
 import { readManifest, readState, fromDesiredSource, type DesiredSource } from '../domain/registry';
 import { getWorkspaceRoot } from './workspacePicker';
-import { resolveLocalFolder } from '../sources/localFolder';
-import { resolveGitCustom } from '../sources/gitCustom';
-import { resolveGitMarketplace } from '../sources/gitMarketplace';
-import { resolveGitSingleItem } from '../sources/gitSingleItem';
-import { resolveRemoteUrl } from '../sources/remoteUrl';
+import { getSourceResolver } from '../sources/registry';
 import { resolveRecommendations, SourceResolutionAttempt } from '../engine/recommendations';
 import { getAdapter } from '../adapters/registry';
 import { planInstall } from '../engine/plan';
@@ -101,12 +97,8 @@ export async function resolveRecommendedSources(
     const source = fromDesiredSource(desiredSource, projectRoot);
     
     try {
-      let packages: Package[] = [];
-      if (source.type === 'local-folder') packages = (await resolveLocalFolder(source)).packages;
-      else if (source.type === 'git-custom') packages = (await resolveGitCustom(source)).packages;
-      else if (source.type === 'git-marketplace') packages = (await resolveGitMarketplace(source)).packages;
-      else if (source.type === 'git-single-item') packages = (await resolveGitSingleItem(source)).packages;
-      else if (source.type === 'remote-url') packages = (await resolveRemoteUrl(source)).packages;
+      const resolver = getSourceResolver(source.type);
+      const packages: Package[] = (await resolver.resolve(source)).packages;
       
       resolutionAttempts.set(sourceId, { status: 'resolved', source, packages });
     } catch (err: unknown) {
