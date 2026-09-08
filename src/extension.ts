@@ -296,7 +296,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (!kindPick) return;
 
       const assistantPick = await vscode.window.showQuickPick(
-        ALL_ADAPTERS.map(a => a.assistant),
+        getEnabledAdapters().map(a => a.assistant),
         {
           placeHolder: 'Select target assistant',
         }

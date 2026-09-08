@@ -4,7 +4,7 @@ import type { Source, Package, Artifact, AssistantId, Scope, ManagedInstallation
 import type { DetectionDiagnostic, SourceResolution } from '../sources/types';
 import { readManifest, fromDesiredSource } from '../domain/registry';
 import { getSourceResolver } from '../sources/registry';
-import { getAdapter, ALL_ADAPTERS } from '../adapters/registry';
+import { getAdapter, getEnabledAdapters } from '../adapters/registry';
 import { planInstall } from '../engine/plan';
 import { applyInstall } from '../engine/apply';
 import type { PreparedInstall } from '../engine/types';
@@ -549,7 +549,7 @@ export class AvailableTreeDataProvider
     const { source, pkg, artifact } = item;
 
     const assistantPick = await vscode.window.showQuickPick(
-      ALL_ADAPTERS.map(
+      getEnabledAdapters().map(
         (adapter) => ({
           label: adapter.assistant,
           iconPath: new vscode.ThemeIcon(adapter.iconId),
@@ -787,7 +787,7 @@ export class AvailableTreeDataProvider
     }
 
     const assistantPick = await vscode.window.showQuickPick(
-      ALL_ADAPTERS.map(
+      getEnabledAdapters().map(
         (adapter) => ({
           label: adapter.assistant,
           iconPath: new vscode.ThemeIcon(adapter.iconId),

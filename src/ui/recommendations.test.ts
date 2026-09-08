@@ -14,6 +14,9 @@ const mockVscode = {
     showInformationMessage: async () => undefined,
     showQuickPick: async () => undefined,
   },
+  workspace: {
+    getConfiguration: () => ({ get: () => undefined }),
+  },
   ProgressLocation: { Notification: 1 }
 };
 

@@ -4,7 +4,7 @@ import { readManifest, writeManifest, readState, fromDesiredSource, type Desired
 import { getWorkspaceRoot } from './workspacePicker';
 import { getSourceResolver } from '../sources/registry';
 import { resolveRecommendations, SourceResolutionAttempt } from '../engine/recommendations';
-import { ALL_ADAPTERS, getAdapter } from '../adapters/registry';
+import { getAdapter, getEnabledAdapters } from '../adapters/registry';
 import { planInstall } from '../engine/plan';
 import { applyInstall } from '../engine/apply';
 import type { PreparedInstall } from '../engine/types';
@@ -322,7 +322,7 @@ export async function recommendAvailableArtifact(
     return false;
   }
   const assistantPick = await vscode.window.showQuickPick(
-    ALL_ADAPTERS.map((a) => a.assistant),
+    getEnabledAdapters().map((a) => a.assistant),
     {
       placeHolder: 'Select target AI assistant for recommendation',
     }
@@ -408,7 +408,7 @@ export async function unrecommendAvailableArtifact(
     return false;
   }
   const assistantPick = await vscode.window.showQuickPick(
-    ALL_ADAPTERS.map((a) => a.assistant),
+    getEnabledAdapters().map((a) => a.assistant),
     {
       placeHolder: 'Select target AI assistant to remove recommendation',
     }
