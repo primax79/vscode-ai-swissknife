@@ -20,6 +20,7 @@ export class DashboardPanel {
   private readonly _availableProvider: AvailableTreeDataProvider;
   private readonly _refreshCallback: () => void;
   private _disposables: vscode.Disposable[] = [];
+  private _htmlInitialized: boolean = false;
 
   private _sourceFilter?: { id: string; scope: Scope };
 
@@ -293,7 +294,107 @@ export class DashboardPanel {
     }
 
     // Phase A: Fast render
-    this._panel.webview.html = this.getHtml(allSources, allManaged, allObserved, [], true, this._sourceFilter);
+    if (!this._htmlInitialized) {
+      this._panel.webview.html = this.getHtml(allSources, allManaged, allObserved, [], true, this._sourceFilter);
+      this._htmlInitialized = true;
+    } else {
+      const escapeHtml = (unsafe: string) => {
+        return (unsafe || '')
+          .toString()
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#039;");
+      };
+
+      const totalInstalled = allManaged.length;
+      const totalUnmanaged = allObserved.length;
+      const identicalCount = allObserved.filter((o) => o.match?.status === 'identical').length;
+
+      const presentAssistants = Array.from(new Set([...allManaged.map(m => m.assistant), ...allObserved.map(o => o.assistant)])).sort();
+      const environmentPills = presentAssistants.map(a => {
+        const iconUris = getAssistantIconPath(a, this._extensionUri);
+        const iconSrc = this._panel.webview.asWebviewUri(iconUris.light);
+        return `<button class="filter-pill env-pill" data-env="${escapeHtml(a)}" onclick="setEnvFilter('${escapeHtml(a)}')">
+          <img src="${iconSrc}" class="assistant-icon" width="14" height="14" />
+          ${escapeHtml(a)}
+        </button>`;
+      }).join('\n');
+
+      let rowsHtml = '';
+      allManaged.forEach((inst, idx) => {
+        const key = getIdentityKey(inst);
+        const matchingSource = allSources.find((s) => s.id === inst.sourceId);
+        const sourceScope = matchingSource?.scope || '';
+        const sourceId = inst.sourceId || '';
+        const status = 'checking…';
+        const badgeClass = 'badge-pending';
+        const badgeText = '● Managed · checking…';
+        rowsHtml += `
+          <tr class="item-row" data-kind="${escapeHtml(inst.kind)}" data-name="${escapeHtml(inst.name.toLowerCase())}" data-assistant="${escapeHtml(inst.assistant)}" data-scope="${escapeHtml(inst.scope)}" data-membership="managed" data-status="${escapeHtml(status)}" data-source-id="${escapeHtml(sourceId)}" data-source-scope="${escapeHtml(sourceScope)}" data-key="${escapeHtml(key)}" onclick="selectRow(this, '${escapeHtml(key)}')">
+            <td><span class="kind-pill kind-${escapeHtml(inst.kind)}">${escapeHtml(inst.kind)}</span></td>
+            <td><strong>${escapeHtml(inst.name)}</strong></td>
+            <td>${escapeHtml(inst.assistant)}</td>
+            <td><span class="scope-pill scope-${escapeHtml(inst.scope)}">${escapeHtml(inst.scope)}</span></td>
+            <td data-drift-key="${escapeHtml(key)}"><span class="badge ${badgeClass}">${escapeHtml(badgeText)}</span></td>
+            <td>
+              <button class="btn btn-sm btn-secondary" onclick="editItem(${idx})">Edit</button>
+            </td>
+          </tr>
+        `;
+      });
+
+      allObserved.forEach((obs, idx) => {
+        const sourceId = obs.match?.sourceId || '';
+        const matchingSource = allSources.find((s) => s.id === sourceId);
+        const sourceScope = matchingSource?.scope || '';
+        let badgeClass = 'badge-unmanaged';
+        let badgeText = '◌ Unmanaged · local only';
+        let tooltip = '';
+        if (obs.match?.status === 'identical') {
+          badgeClass = 'badge-success';
+          badgeText = `◌ Unmanaged · identical to ${obs.match.sourceId}`;
+          tooltip = ` title="${escapeHtml(obs.match.details || '')}"`;
+        } else if (obs.match?.status === 'different') {
+          badgeClass = 'badge-warning';
+          badgeText = `◌ Unmanaged · differs from ${obs.match.sourceId}`;
+          tooltip = ` title="${escapeHtml(obs.match.details || '')}"`;
+        }
+        let actionBtn = '';
+        if ((obs.candidates?.length ?? 0) > 0) {
+          actionBtn = `<button class="btn btn-sm btn-primary" onclick="promoteItem(${idx})">Promote</button>`;
+        }
+        const key = getIdentityKey(obs);
+        rowsHtml += `
+          <tr class="item-row" data-kind="${escapeHtml(obs.kind)}" data-name="${escapeHtml(obs.name.toLowerCase())}" data-assistant="${escapeHtml(obs.assistant)}" data-scope="${escapeHtml(obs.scope)}" data-membership="unmanaged" data-status="unmanaged" data-source-id="${escapeHtml(sourceId)}" data-source-scope="${escapeHtml(sourceScope)}" data-key="${escapeHtml(key)}" onclick="selectRow(this, '${escapeHtml(key)}')">
+            <td><span class="kind-pill kind-${escapeHtml(obs.kind)}">${escapeHtml(obs.kind)}</span></td>
+            <td><strong>${escapeHtml(obs.name)}</strong></td>
+            <td>${escapeHtml(obs.assistant)}</td>
+            <td><span class="scope-pill scope-${escapeHtml(obs.scope)}">${escapeHtml(obs.scope)}</span></td>
+            <td><span class="badge ${badgeClass}"${tooltip}>${escapeHtml(badgeText)}</span></td>
+            <td>
+              ${actionBtn}
+            </td>
+          </tr>
+        `;
+      });
+      if (!rowsHtml) {
+        rowsHtml = '<tr><td colspan="6" style="text-align:center; opacity:0.6;">No items found.</td></tr>';
+      }
+
+      this._panel.webview.postMessage({
+        command: 'inventoryData',
+        managedData: allManaged,
+        observedData: allObserved,
+        rowsHtml,
+        totalInstalled,
+        totalUnmanaged,
+        identicalCount,
+        environmentPills,
+        scanning: true
+      });
+    }
 
     // Phase B: Slow drift check
     for (const inst of allManaged) {
@@ -901,8 +1002,8 @@ export class DashboardPanel {
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
     }
-    const managedData = JSON.parse(document.getElementById('managedDataJson').textContent);
-    const observedData = JSON.parse(document.getElementById('observedDataJson').textContent);
+    let managedData = JSON.parse(document.getElementById('managedDataJson').textContent);
+    let observedData = JSON.parse(document.getElementById('observedDataJson').textContent);
 
     let currentKind = 'all';
     let currentEnv = 'all';
@@ -1092,7 +1193,49 @@ export class DashboardPanel {
 
     window.addEventListener('message', (event) => {
       const msg = event.data;
-      if (msg.command === 'driftResult') {
+      if (msg.command === 'inventoryData') {
+        managedData = msg.managedData;
+        observedData = msg.observedData;
+        const tbody = document.getElementById('unifiedTable');
+        if (tbody) tbody.innerHTML = msg.rowsHtml;
+        const manStat = document.getElementById('stat-managed');
+        if (manStat) manStat.textContent = msg.totalInstalled;
+        const unmanStat = document.getElementById('stat-unmanaged');
+        if (unmanStat) unmanStat.textContent = msg.totalUnmanaged;
+        const unmanLbl = document.getElementById('stat-unmanaged-lbl');
+        if (unmanLbl) unmanLbl.textContent = \`Unmanaged Discovered (\${msg.identicalCount} identical, \${msg.totalUnmanaged - msg.identicalCount} custom)\`;
+        
+        // When phase A finishes, these are not computed yet so they might reset to 0 or previous values.
+        // It's safer to not touch updatesAvailable/modifiedLocally in Phase A.
+        // They will be updated in scanComplete.
+
+        const filterGroup = document.querySelector('.filters-bar .filter-group');
+        if (filterGroup) {
+          filterGroup.innerHTML = \`<button class="filter-pill env-pill \${currentEnv === 'all' ? 'active' : ''}" data-env="all" onclick="setEnvFilter('all')">All Env</button>\\n\` + msg.environmentPills;
+          if (currentEnv !== 'all') {
+            const pill = filterGroup.querySelector('.env-pill[data-env="' + currentEnv + '"]');
+            if (pill) pill.classList.add('active');
+          }
+        }
+
+        let indicator = document.getElementById('scan-indicator');
+        if (msg.scanning) {
+          if (!indicator) {
+            indicator = document.createElement('div');
+            indicator.className = 'scan-indicator';
+            indicator.id = 'scan-indicator';
+            indicator.innerHTML = '<div class="spinner"></div>Scanning for updates…';
+            const container = document.querySelector('.header-actions');
+            if (container) container.insertBefore(indicator, container.firstChild);
+          } else {
+            indicator.style.display = 'flex';
+          }
+        } else {
+          if (indicator) indicator.style.display = 'none';
+        }
+        
+        filterTable();
+      } else if (msg.command === 'driftResult') {
         const cell = document.querySelector('[data-drift-key="' + msg.key + '"]');
         if (cell) {
           const row = cell.closest('tr');
