@@ -26,6 +26,7 @@ import { getWorkspaceRoot } from './ui/workspacePicker';
 import { previewProvider, PreviewProvider } from './ui/previewProvider';
 import { readonlyFileContentProvider, ReadonlyFileContentProvider } from './ui/artifactFileTree';
 
+import { ALL_ADAPTERS } from './adapters/registry';
 import { handleInstallRecommended } from './ui/recommendations';
 import {
   computePendingCounts,
@@ -183,7 +184,7 @@ export async function handleRecommendForWorkspace(
       return;
     }
     const assistantPick = await vscode.window.showQuickPick(
-      ['claude-code', 'kilo-code', 'github-copilot', 'codex-cli', 'gemini-cli'],
+      ALL_ADAPTERS.map(a => a.assistant),
       {
         placeHolder: 'Select target AI assistant for recommendation',
       }
@@ -260,7 +261,7 @@ export async function handleUnrecommendForWorkspace(
     // Does Available view unrecommend prompt for assistant? The spec doesn't explicitly mention it for unrecommend.
     // But how can we filter without the assistant? If we prompt, we should do it. Let's see:
     const assistantPick = await vscode.window.showQuickPick(
-      ['claude-code', 'kilo-code', 'github-copilot', 'codex-cli', 'gemini-cli'],
+      ALL_ADAPTERS.map(a => a.assistant),
       {
         placeHolder: 'Select target AI assistant to remove recommendation',
       }
@@ -460,7 +461,7 @@ export function activate(context: vscode.ExtensionContext) {
       if (!kindPick) return;
 
       const assistantPick = await vscode.window.showQuickPick(
-        ['claude-code', 'kilo-code', 'github-copilot', 'codex-cli', 'gemini-cli'],
+        ALL_ADAPTERS.map(a => a.assistant),
         {
           placeHolder: 'Select target assistant',
         }

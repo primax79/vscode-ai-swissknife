@@ -8,16 +8,11 @@ import { resolveGitCustom } from '../sources/gitCustom';
 import { resolveGitMarketplace } from '../sources/gitMarketplace';
 import { resolveGitSingleItem } from '../sources/gitSingleItem';
 import { resolveRemoteUrl } from '../sources/remoteUrl';
-import { ClaudeAdapter } from '../adapters/claude';
-import { KiloAdapter } from '../adapters/kilo';
-import { CopilotAdapter } from '../adapters/copilot';
-import { CodexAdapter } from '../adapters/codex';
-import { GeminiAdapter } from '../adapters/gemini';
+import { getAdapter, ALL_ADAPTERS } from '../adapters/registry';
 import { planInstall } from '../engine/plan';
 import { applyInstall } from '../engine/apply';
 import type { PreparedInstall } from '../engine/types';
 import { getWorkspaceRoot } from './workspacePicker';
-import { getAssistantIconPath } from './assistantIcons';
 import { getKindIconName } from './kindIcons';
 import { previewProvider } from './previewProvider';
 import type { SourceItem } from './sourcesView';
@@ -200,11 +195,6 @@ export class AvailableTreeDataProvider
   private cachedSourceGroups: AvailableSourceGroupItem[] = [];
   private cachedRecommendedGroup?: RecommendedGroupItem;
   private installedByArtifactKey = new Map<string, AssistantId[]>();
-  private claudeAdapter = new ClaudeAdapter();
-  private kiloAdapter = new KiloAdapter();
-  private copilotAdapter = new CopilotAdapter();
-  private codexAdapter = new CodexAdapter();
-  private geminiAdapter = new GeminiAdapter();
   private onInstalledRefreshCallback?: () => void;
   private refreshInFlight?: Promise<void>;
 
@@ -575,10 +565,10 @@ export class AvailableTreeDataProvider
     const { source, pkg, artifact } = item;
 
     const assistantPick = await vscode.window.showQuickPick(
-      (['claude-code', 'kilo-code', 'github-copilot', 'codex-cli', 'gemini-cli'] as const).map(
-        (id) => ({
-          label: id,
-          iconPath: getAssistantIconPath(id, this.extensionUri),
+      ALL_ADAPTERS.map(
+        (adapter) => ({
+          label: adapter.assistant,
+          iconPath: new vscode.ThemeIcon(adapter.iconId),
         })
       ),
       {
@@ -587,16 +577,7 @@ export class AvailableTreeDataProvider
     );
     if (!assistantPick) return;
     const targetAssistant = assistantPick.label as AssistantId;
-    const targetAdapter =
-      targetAssistant === 'claude-code'
-        ? this.claudeAdapter
-        : targetAssistant === 'github-copilot'
-        ? this.copilotAdapter
-        : targetAssistant === 'codex-cli'
-        ? this.codexAdapter
-        : targetAssistant === 'gemini-cli'
-        ? this.geminiAdapter
-        : this.kiloAdapter;
+    const targetAdapter = getAdapter(targetAssistant);
 
     const scopePick = await vscode.window.showQuickPick(['project', 'global'], {
       placeHolder: 'Select installation scope (project or global)',
@@ -740,10 +721,10 @@ export class AvailableTreeDataProvider
     }
 
     const assistantPick = await vscode.window.showQuickPick(
-      (['claude-code', 'kilo-code', 'github-copilot', 'codex-cli', 'gemini-cli'] as const).map(
-        (id) => ({
-          label: id,
-          iconPath: getAssistantIconPath(id, this.extensionUri),
+      ALL_ADAPTERS.map(
+        (adapter) => ({
+          label: adapter.assistant,
+          iconPath: new vscode.ThemeIcon(adapter.iconId),
         })
       ),
       {
@@ -752,16 +733,7 @@ export class AvailableTreeDataProvider
     );
     if (!assistantPick) return;
     const targetAssistant = assistantPick.label as AssistantId;
-    const targetAdapter =
-      targetAssistant === 'claude-code'
-        ? this.claudeAdapter
-        : targetAssistant === 'github-copilot'
-        ? this.copilotAdapter
-        : targetAssistant === 'codex-cli'
-        ? this.codexAdapter
-        : targetAssistant === 'gemini-cli'
-        ? this.geminiAdapter
-        : this.kiloAdapter;
+    const targetAdapter = getAdapter(targetAssistant);
 
     const scopePick = await vscode.window.showQuickPick(['project', 'global'], {
       placeHolder: 'Select installation scope (project or global)',

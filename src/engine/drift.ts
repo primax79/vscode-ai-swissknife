@@ -17,11 +17,7 @@ import {
   canonicalRuleHash,
   readSkill,
 } from '../adapters/codec';
-import { ClaudeAdapter, claudeAdapter } from '../adapters/claude';
-import { KiloAdapter, kiloAdapter } from '../adapters/kilo';
-import { CopilotAdapter, copilotAdapter } from '../adapters/copilot';
-import { CodexAdapter, codexAdapter } from '../adapters/codex';
-import { GeminiAdapter, geminiAdapter } from '../adapters/gemini';
+import { getAdapter, getAdapterWithHomeRoot } from '../adapters/registry';
 import { resolveLocalFolder } from '../sources/localFolder';
 import { resolveGitCustom } from '../sources/gitCustom';
 import { resolveGitMarketplace } from '../sources/gitMarketplace';
@@ -30,22 +26,6 @@ import { resolveRemoteUrl } from '../sources/remoteUrl';
 import { resolveAndTranslate } from './plan';
 import type { DriftReport } from './types';
 
-function getAdapter(assistant: string, homeRoot?: string) {
-  if (homeRoot) {
-    if (assistant === 'claude-code') return new ClaudeAdapter(() => homeRoot);
-    if (assistant === 'kilo-code') return new KiloAdapter(() => homeRoot);
-    if (assistant === 'github-copilot') return new CopilotAdapter(() => homeRoot);
-    if (assistant === 'codex-cli') return new CodexAdapter(() => homeRoot);
-    if (assistant === 'gemini-cli') return new GeminiAdapter(() => homeRoot);
-  }
-  if (assistant === 'claude-code') return claudeAdapter;
-  if (assistant === 'kilo-code') return kiloAdapter;
-  if (assistant === 'github-copilot') return copilotAdapter;
-  if (assistant === 'codex-cli') return codexAdapter;
-  if (assistant === 'gemini-cli') return geminiAdapter;
-  throw new Error(`Unsupported assistant: ${assistant}`);
-}
-
 /**
  * Analyzes whether an installed item has drifted on the local disk relative to its recorded contentHash in state.json.
  */
@@ -53,7 +33,7 @@ export async function analyzeLocalDrift(
   installation: ManagedInstallation,
   homeRoot?: string
 ): Promise<DriftReport> {
-  const adapter = getAdapter(installation.assistant, homeRoot);
+  const adapter = homeRoot ? getAdapterWithHomeRoot(installation.assistant, homeRoot) : getAdapter(installation.assistant);
   const loc = {
     scope: installation.scope,
     projectRoot: installation.projectPath,

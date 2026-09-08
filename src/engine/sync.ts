@@ -14,11 +14,9 @@ import {
   canonicalMcpServerHash,
   readSkill,
 } from '../adapters/codec';
-import { serializeSkillMarkdown, serializeClaudeAgentMarkdown, serializeClaudeCommandMarkdown, ClaudeAdapter, claudeAdapter } from '../adapters/claude';
-import { serializeKiloAgentMarkdown, serializeKiloCommandMarkdown, KiloAdapter, kiloAdapter } from '../adapters/kilo';
-import { CopilotAdapter, copilotAdapter } from '../adapters/copilot';
-import { CodexAdapter, codexAdapter } from '../adapters/codex';
-import { GeminiAdapter, geminiAdapter } from '../adapters/gemini';
+import { serializeSkillMarkdown, serializeClaudeAgentMarkdown, serializeClaudeCommandMarkdown } from '../adapters/claude';
+import { serializeKiloAgentMarkdown, serializeKiloCommandMarkdown } from '../adapters/kilo';
+import { getAdapter, getAdapterWithHomeRoot } from '../adapters/registry';
 import { translateSkill } from '../translator/skill';
 import { translateAgent } from '../translator/agent';
 import { translateCommand } from '../translator/command';
@@ -31,22 +29,6 @@ import type {
 
 function sha256(data: Uint8Array | string): string {
   return crypto.createHash('sha256').update(data).digest('hex');
-}
-
-function getAdapter(assistant: AssistantId, homeRoot?: string) {
-  if (homeRoot) {
-    if (assistant === 'claude-code') return new ClaudeAdapter(() => homeRoot);
-    if (assistant === 'kilo-code') return new KiloAdapter(() => homeRoot);
-    if (assistant === 'github-copilot') return new CopilotAdapter(() => homeRoot);
-    if (assistant === 'codex-cli') return new CodexAdapter(() => homeRoot);
-    if (assistant === 'gemini-cli') return new GeminiAdapter(() => homeRoot);
-  }
-  if (assistant === 'claude-code') return claudeAdapter;
-  if (assistant === 'kilo-code') return kiloAdapter;
-  if (assistant === 'github-copilot') return copilotAdapter;
-  if (assistant === 'codex-cli') return codexAdapter;
-  if (assistant === 'gemini-cli') return geminiAdapter;
-  throw new Error(`Unsupported assistant: ${assistant}`);
 }
 
 export interface PlanSyncParams {
@@ -63,8 +45,8 @@ export interface PlanSyncParams {
  */
 export async function planSync(params: PlanSyncParams): Promise<PreparedInstall> {
   const { sourceItem, targetAssistant, targetScope, targetProjectRoot, homeRoot } = params;
-  const srcAdapter = getAdapter(sourceItem.assistant, homeRoot);
-  const targetAdapter = getAdapter(targetAssistant, homeRoot);
+  const srcAdapter = homeRoot ? getAdapterWithHomeRoot(sourceItem.assistant, homeRoot) : getAdapter(sourceItem.assistant);
+  const targetAdapter = homeRoot ? getAdapterWithHomeRoot(targetAssistant, homeRoot) : getAdapter(targetAssistant);
 
   const srcLoc = {
     scope: sourceItem.scope,

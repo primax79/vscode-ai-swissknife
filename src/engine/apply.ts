@@ -17,18 +17,14 @@ import {
   parseClaudeAgentMarkdown,
   serializeClaudeCommandMarkdown,
   parseClaudeCommandMarkdown,
-  claudeAdapter,
 } from '../adapters/claude';
 import {
   serializeKiloAgentMarkdown,
   parseKiloAgentMarkdown,
   serializeKiloCommandMarkdown,
   parseKiloCommandMarkdown,
-  kiloAdapter,
 } from '../adapters/kilo';
-import { copilotAdapter } from '../adapters/copilot';
-import { codexAdapter } from '../adapters/codex';
-import { geminiAdapter } from '../adapters/gemini';
+import { getAdapter } from '../adapters/registry';
 import { readState, writeState } from '../domain/registry';
 import type { PreparedInstall, ApplyOutcome } from './types';
 
@@ -336,16 +332,7 @@ export async function applyInstall(
       };
     }
 
-    const adapter =
-      plan.targetAssistant === 'claude-code'
-        ? claudeAdapter
-        : plan.targetAssistant === 'github-copilot'
-        ? copilotAdapter
-        : plan.targetAssistant === 'codex-cli'
-        ? codexAdapter
-        : plan.targetAssistant === 'gemini-cli'
-        ? geminiAdapter
-        : kiloAdapter;
+    const adapter = getAdapter(plan.targetAssistant);
     const targetFilePath = plan.targetDir;
     const randomId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const backupPath = `${targetFilePath}.backup-${randomId}`;
