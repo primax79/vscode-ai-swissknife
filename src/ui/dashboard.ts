@@ -100,6 +100,11 @@ export class DashboardPanel {
             this._refreshCallback();
             await this.update();
             break;
+          case 'refreshCatalog':
+            await this._availableProvider.refreshCatalog();
+            this._refreshCallback();
+            await this.update();
+            break;
           case 'requestCatalog': {
             await this._availableProvider.ensureCatalogLoaded();
             const groups = this._availableProvider.getCachedSourceGroups();
@@ -555,11 +560,21 @@ export class DashboardPanel {
           </div>
         `;
       } else if (item instanceof AvailableArtifactItem) {
+        const installedIn = this._availableProvider.getInstalledAssistants(item.source.id, item.artifact.id);
+        const badgesHtml = installedIn.map(a => {
+          const iconUris = getAssistantIconPath(a as AssistantId, this._extensionUri);
+          const iconSrc = this._panel.webview.asWebviewUri(iconUris.light);
+          return `<span class="filter-pill env-pill active" style="padding: 2px 6px; font-size: 10px; cursor: default; height: auto;" title="Installed in ${this.escapeHtml(a)}">
+            <img src="${iconSrc}" class="assistant-icon" width="12" height="12" style="vertical-align: middle; margin-right: 4px;" />${this.escapeHtml(a)}
+          </span>`;
+        }).join('');
+
         html += `
           <div class="catalog-item artifact-row" style="padding: 4px 8px; display: flex; align-items: center; gap: 10px; justify-content: space-between;">
             <div style="display: flex; align-items: center; gap: 8px;">
               <span class="kind-pill kind-${this.escapeHtml(item.artifact.kind)}">${this.escapeHtml(item.artifact.kind)}</span>
               <span><strong>${this.escapeHtml(item.artifact.name)}</strong></span>
+              ${badgesHtml}
               ${item.artifact.description ? `<span style="opacity:0.7; font-size:11px;">${this.escapeHtml(item.artifact.description)}</span>` : ''}
               ${item.isRecommended ? '<span style="color: var(--badge-warning);">★</span>' : ''}
             </div>
@@ -583,6 +598,7 @@ export class DashboardPanel {
         <button class="btn btn-primary" onclick="vscode.postMessage({ command: 'addSource' })">+ Add Source</button>
         <button class="btn btn-secondary" onclick="vscode.postMessage({ command: 'importConfig' })">Import</button>
         <button class="btn btn-secondary" onclick="vscode.postMessage({ command: 'exportConfig' })">Export All</button>
+        <button class="btn btn-secondary" onclick="vscode.postMessage({ command: 'refreshCatalog' })">Refresh Catalog</button>
       </div>
     `;
 
