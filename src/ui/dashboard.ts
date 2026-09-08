@@ -116,6 +116,13 @@ export class DashboardPanel {
             }
             break;
           }
+          case 'previewArtifact': {
+            const item = this._availableProvider.resolveArtifactById(message.sourceId, message.scope, message.artifactId);
+            if (item) {
+              await this._availableProvider.previewArtifact(item);
+            }
+            break;
+          }
           case 'refresh':
             await this.update();
             break;
@@ -535,6 +542,9 @@ export class DashboardPanel {
               <span><strong>${this.escapeHtml(item.artifact.name)}</strong></span>
               ${item.artifact.description ? `<span style="opacity:0.7; font-size:11px;">${this.escapeHtml(item.artifact.description)}</span>` : ''}
               ${item.isRecommended ? '<span style="color: var(--badge-warning);">★</span>' : ''}
+            </div>
+            <div style="display: flex; gap: 4px;">
+              <button class="btn btn-sm btn-secondary" onclick="vscode.postMessage({ command: 'previewArtifact', sourceId: '${this.escapeHtml(item.source.id)}', scope: '${this.escapeHtml(item.source.scope)}', artifactId: '${this.escapeHtml(item.artifact.id)}' })">Preview</button>
             </div>
           </div>
         `;
