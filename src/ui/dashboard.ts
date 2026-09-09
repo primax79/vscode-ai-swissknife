@@ -636,7 +636,9 @@ export class DashboardPanel {
         identicalCount,
         environmentPills,
         scanning: true,
-        sourcesHtml: this.getSourcesCatalogHtml(allSources)
+        sourcesHtml: this.getSourcesCatalogHtml(allSources),
+        totalSources: allSources.length,
+        overviewNeedsAttentionHtml: this.getNeedsAttentionHtml(allManaged, [], true)
       });
     }
 
@@ -649,7 +651,8 @@ export class DashboardPanel {
         const broken = recGroup ? recGroup.broken : [];
         this._panel.webview.postMessage({
           command: 'recommendationsData',
-          html: this.getRecommendationsHtml(pending, broken)
+          html: this.getRecommendationsHtml(pending, broken),
+          pendingCount: pending.length
         });
       } catch {
         // ignore
@@ -683,15 +686,120 @@ export class DashboardPanel {
     this._panel.webview.postMessage({
       command: 'scanComplete',
       updatesAvailable,
-      modifiedLocally
+      modifiedLocally,
+      overviewNeedsAttentionHtml: this.getNeedsAttentionHtml(allManaged, driftReports, false)
     });
   }
 
 
-  private getOverviewHtml(): string {
-    return `<div class="empty-state">
-      <p>Overview section placeholder</p>
-    </div>`;
+  private getNeedsAttentionHtml(managed: ManagedInstallation[], reports: DriftReport[], scanning: boolean): string {
+    const reportMap = new Map(reports.map((r) => [getIdentityKey(r.installation), r]));
+    const needsAttention = managed
+      .map(inst => {
+        const key = getIdentityKey(inst);
+        const report = reportMap.get(key);
+        return { inst, key, status: report?.status ?? (scanning ? 'checking…' : 'up-to-date') };
+      })
+      .filter(x => x.status === 'update-available' || x.status === 'modified-and-update-available' || x.status === 'modified-locally')
+      .slice(0, 5);
+
+    if (needsAttention.length === 0) {
+      return `<div class="empty-state" style="padding: 20px;">No items need attention.</div>`;
+    }
+
+    let html = `
+      <table>
+        <thead>
+          <tr>
+            <th>Kind</th>
+            <th>Name</th>
+            <th>Assistant</th>
+            <th>Scope</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    for (const x of needsAttention) {
+      let badgeClass = 'badge-pending';
+      let badgeText = x.status;
+      if (x.status === 'update-available') { badgeClass = 'badge-info'; badgeText = 'Update available'; }
+      else if (x.status === 'modified-locally' || x.status === 'modified-and-update-available') { badgeClass = 'badge-warning'; badgeText = 'Modified locally'; }
+      
+      html += `
+        <tr class="overview-item-row" style="cursor: pointer;" onclick="switchSection('installed'); const row = document.querySelector('#section-installed .item-row[data-key=\\'${this.escapeHtml(x.key)}\\']'); if (row) selectRow(row, '${this.escapeHtml(x.key)}');" onmouseover="this.style.backgroundColor='rgba(255, 255, 255, 0.05)'" onmouseout="this.style.backgroundColor=''">
+          <td><span class="kind-pill kind-${this.escapeHtml(x.inst.kind)}">${this.escapeHtml(x.inst.kind)}</span></td>
+          <td><strong>${this.escapeHtml(x.inst.name)}</strong></td>
+          <td>${this.escapeHtml(x.inst.assistant)}</td>
+          <td><span class="scope-pill scope-${this.escapeHtml(x.inst.scope)}">${this.escapeHtml(x.inst.scope)}</span></td>
+          <td><span class="badge ${badgeClass}">${this.escapeHtml(badgeText)}</span></td>
+        </tr>
+      `;
+    }
+
+    html += `
+        </tbody>
+      </table>
+    `;
+    
+    return html;
+  }
+
+  private getOverviewHtml(
+    sources: Source[],
+    managed: ManagedInstallation[],
+    reports: DriftReport[],
+    scanning: boolean,
+    totalInstalled: number,
+    totalUnmanaged: number,
+    updatesAvailable: number,
+    modifiedLocally: number,
+    pendingRecommendationsCount: number
+  ): string {
+    return `
+      <div class="stats-ribbon">
+        <div class="stat-chip">
+          <span class="stat-num" id="overview-stat-managed">${totalInstalled}</span>
+          <span class="stat-label">Managed Installations</span>
+        </div>
+        <div class="stat-chip stat-info">
+          <span class="stat-num" id="overview-stat-updates">${updatesAvailable}</span>
+          <span class="stat-label">Updates Available</span>
+        </div>
+        <div class="stat-chip stat-warning">
+          <span class="stat-num" id="overview-stat-modified">${modifiedLocally}</span>
+          <span class="stat-label">Modified Locally</span>
+        </div>
+        <div class="stat-chip stat-unmanaged">
+          <span class="stat-num" id="overview-stat-unmanaged">${totalUnmanaged}</span>
+          <span class="stat-label">Unmanaged Discovered</span>
+        </div>
+        <div class="stat-chip">
+          <span class="stat-num" id="overview-stat-pending">${pendingRecommendationsCount}</span>
+          <span class="stat-label">Pending Recommendations</span>
+        </div>
+        <div class="stat-chip">
+          <span class="stat-num" id="overview-stat-sources">${sources.length}</span>
+          <span class="stat-label">Sources</span>
+        </div>
+      </div>
+
+      <div class="toolbar" style="margin-top: 24px; margin-bottom: 16px;">
+        <button class="btn btn-primary" onclick="switchSection('installed')">View Installed</button>
+        <button class="btn btn-secondary" onclick="switchSection('catalog')">View Sources &amp; Catalog</button>
+        <button class="btn btn-secondary" onclick="switchSection('recommendations')">View Recommendations</button>
+      </div>
+
+      <div class="scope-group" style="margin-top: 24px;">
+        <div class="scope-header" style="border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 8px;">
+          <h3 style="margin: 0; font-size: 13px;">Needs Attention</h3>
+        </div>
+        <div id="overview-needs-attention">
+          ${this.getNeedsAttentionHtml(managed, reports, scanning)}
+        </div>
+      </div>
+    `;
   }
 
   private renderCatalogLevel(items: AvailableTreeItem[], level: number = 0): string {
@@ -1024,6 +1132,9 @@ export class DashboardPanel {
     const identicalCount = observed.filter((o) => o.match?.status === 'identical').length;
 
     const reportMap = new Map(reports.map((r) => [getIdentityKey(r.installation), r]));
+
+    const recGroup = this._availableProvider.getCachedRecommendedGroup?.();
+    const pendingRecommendationsCount = recGroup ? recGroup.pending.length : 0;
 
     const presentAssistants = Array.from(new Set([...managed.map(m => m.assistant), ...observed.map(o => o.assistant)])).sort();
     const environmentPills = presentAssistants.map(a => {
@@ -1402,7 +1513,7 @@ export class DashboardPanel {
   </div>
 
   <div id="section-overview" class="dashboard-section" style="display: none;">
-    ${this.getOverviewHtml()}
+    ${this.getOverviewHtml(sources, managed, reports, scanning, totalInstalled, totalUnmanaged, updatesAvailable, modifiedLocally, pendingRecommendationsCount)}
   </div>
   <div id="section-installed" class="dashboard-section" style="display: block;">
     ${this.getInstalledSectionHtml(sources, managed, observed, reports, scanning, totalInstalled, totalUnmanaged, updatesAvailable, modifiedLocally, identicalCount, environmentPills, rowsHtml)}
@@ -1664,12 +1775,23 @@ export class DashboardPanel {
       
       const manStat = document.getElementById('stat-managed');
       if (manStat) manStat.textContent = visManaged;
+      const overviewManStat = document.getElementById('overview-stat-managed');
+      if (overviewManStat) overviewManStat.textContent = visManaged;
+      
       const upStat = document.getElementById('stat-updates-available');
       if (upStat) upStat.textContent = visUpdates;
+      const overviewUpStat = document.getElementById('overview-stat-updates');
+      if (overviewUpStat) overviewUpStat.textContent = visUpdates;
+      
       const modStat = document.getElementById('stat-modified-locally');
       if (modStat) modStat.textContent = visModified;
+      const overviewModStat = document.getElementById('overview-stat-modified');
+      if (overviewModStat) overviewModStat.textContent = visModified;
+      
       const unmanStat = document.getElementById('stat-unmanaged');
       if (unmanStat) unmanStat.textContent = visUnmanaged;
+      const overviewUnmanStat = document.getElementById('overview-stat-unmanaged');
+      if (overviewUnmanStat) overviewUnmanStat.textContent = visUnmanaged;
       const unmanLbl = document.getElementById('stat-unmanaged-lbl');
       if (unmanLbl) unmanLbl.textContent = \`Unmanaged Discovered (\${visUnmanagedIdentical} identical, \${visUnmanaged - visUnmanagedIdentical} custom)\`;
     }
@@ -1679,6 +1801,8 @@ export class DashboardPanel {
       if (msg.command === 'recommendationsData') {
         const recSection = document.getElementById('section-recommendations');
         if (recSection) recSection.innerHTML = msg.html;
+        const pendingStat = document.getElementById('overview-stat-pending');
+        if (pendingStat && msg.pendingCount !== undefined) pendingStat.textContent = msg.pendingCount;
       } else if (msg.command === 'inventoryData') {
         managedData = msg.managedData;
         observedData = msg.observedData;
@@ -1694,6 +1818,13 @@ export class DashboardPanel {
         // When phase A finishes, these are not computed yet so they might reset to 0 or previous values.
         // It's safer to not touch updatesAvailable/modifiedLocally in Phase A.
         // They will be updated in scanComplete.
+
+        const overviewSourcesStat = document.getElementById('overview-stat-sources');
+        if (overviewSourcesStat && msg.totalSources !== undefined) overviewSourcesStat.textContent = msg.totalSources;
+        const overviewNeedsAttention = document.getElementById('overview-needs-attention');
+        if (overviewNeedsAttention && msg.overviewNeedsAttentionHtml) {
+          overviewNeedsAttention.innerHTML = msg.overviewNeedsAttentionHtml;
+        }
 
         const filterGroup = document.querySelector('.filters-bar .filter-group');
         if (filterGroup) {
@@ -1745,6 +1876,11 @@ export class DashboardPanel {
         const indicator = document.getElementById('scan-indicator');
         if (indicator) indicator.style.display = 'none';
         
+        const overviewNeedsAttention = document.getElementById('overview-needs-attention');
+        if (overviewNeedsAttention && msg.overviewNeedsAttentionHtml) {
+          overviewNeedsAttention.innerHTML = msg.overviewNeedsAttentionHtml;
+        }
+
         filterTable();
       } else if (msg.command === 'catalogData') {
         const catalogDiv = document.getElementById('catalog-' + escapeHtmlClient(msg.sourceId) + '-' + escapeHtmlClient(msg.scope));
