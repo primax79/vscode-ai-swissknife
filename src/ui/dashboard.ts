@@ -653,9 +653,9 @@ export class DashboardPanel {
                              <span class="badge badge-pending">● Managed · checking…</span>
                           </td>
                           <td style="text-align: right; width: 30%;">
-                            <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); vscode.postMessage({ command: 'previewInstalledArtifact', key: '${this.escapeHtml(key)}' })">Preview</button>
-                            <button class="btn btn-sm btn-secondary diff-btn" style="display: none;" onclick="event.stopPropagation(); vscode.postMessage({ command: 'diffInstalledArtifact', key: '${this.escapeHtml(key)}' })">Diff</button>
-                            <button class="btn btn-sm btn-primary update-btn" style="display: none;" onclick="event.stopPropagation(); vscode.postMessage({ command: 'updateItem', key: '${this.escapeHtml(key)}' })">Update to latest</button>
+                            <button class="btn btn-sm btn-secondary" title="Preview" onclick="event.stopPropagation(); vscode.postMessage({ command: 'previewInstalledArtifact', key: '${this.escapeHtml(key)}' })">👁</button>
+                            <button class="btn btn-sm btn-secondary diff-btn" title="Diff" style="display: none;" onclick="event.stopPropagation(); vscode.postMessage({ command: 'diffInstalledArtifact', key: '${this.escapeHtml(key)}' })">⇄</button>
+                            <button class="btn btn-sm btn-primary update-btn" title="Update to latest" style="display: none;" onclick="event.stopPropagation(); vscode.postMessage({ command: 'updateItem', key: '${this.escapeHtml(key)}' })">⟳</button>
                           </td>
                         </tr>
                       `;
@@ -688,7 +688,7 @@ export class DashboardPanel {
         }
         let actionBtn = '';
         if ((obs.candidates?.length ?? 0) > 0) {
-          actionBtn = `<button class="btn btn-sm btn-primary" onclick="promoteItem(${idx})">Promote</button>`;
+          actionBtn = `<button class="btn btn-sm btn-primary" title="Promote" onclick="promoteItem(${idx})">⇧</button>`;
         }
         const key = getIdentityKey(obs);
         observedRowsHtml += `
@@ -918,7 +918,7 @@ export class DashboardPanel {
               <div></div>
               <div></div>
               <div style="display: flex; gap: 4px; justify-content: flex-end;" onclick="event.stopPropagation()">
-                <button class="btn btn-sm btn-primary" onclick="vscode.postMessage({ command: 'installFolder', sourceId: '${this.escapeHtml(item.source.id)}', scope: '${this.escapeHtml(item.source.scope)}', folderPath: '${this.escapeHtml(item.folderPath)}' })">Install</button>
+                <button class="btn btn-sm btn-primary" title="Install" onclick="vscode.postMessage({ command: 'installFolder', sourceId: '${this.escapeHtml(item.source.id)}', scope: '${this.escapeHtml(item.source.scope)}', folderPath: '${this.escapeHtml(item.folderPath)}' })">⬇</button>
               </div>
             </div>
             <div id="${folderId}" style="display: none; padding-left: 16px; border-left: 1px solid var(--border); margin-left: 5px;">
@@ -952,8 +952,8 @@ export class DashboardPanel {
               ${badgesHtml}
             </div>
             <div style="display: flex; gap: 4px; justify-content: flex-end;">
-              <button class="btn btn-sm btn-secondary" onclick="vscode.postMessage({ command: 'previewArtifact', sourceId: '${this.escapeHtml(item.source.id)}', scope: '${this.escapeHtml(item.source.scope)}', artifactId: '${this.escapeHtml(item.artifact.id)}' })">Preview</button>
-              <button class="btn btn-sm btn-primary" onclick="vscode.postMessage({ command: 'installArtifact', sourceId: '${this.escapeHtml(item.source.id)}', scope: '${this.escapeHtml(item.source.scope)}', artifactId: '${this.escapeHtml(item.artifact.id)}' })">Install</button>
+              <button class="btn btn-sm btn-secondary" title="Preview" onclick="vscode.postMessage({ command: 'previewArtifact', sourceId: '${this.escapeHtml(item.source.id)}', scope: '${this.escapeHtml(item.source.scope)}', artifactId: '${this.escapeHtml(item.artifact.id)}' })">👁</button>
+              <button class="btn btn-sm btn-primary" title="Install" onclick="vscode.postMessage({ command: 'installArtifact', sourceId: '${this.escapeHtml(item.source.id)}', scope: '${this.escapeHtml(item.source.scope)}', artifactId: '${this.escapeHtml(item.artifact.id)}' })">⬇</button>
             </div>
           </div>
         `;
@@ -968,10 +968,10 @@ export class DashboardPanel {
 
     let html = `
       <div class="toolbar" style="margin-bottom: 16px;">
-        <button class="btn btn-primary" onclick="vscode.postMessage({ command: 'addSource' })">+ Add Source</button>
-        <button class="btn btn-secondary" onclick="vscode.postMessage({ command: 'importConfig' })">Import</button>
-        <button class="btn btn-secondary" onclick="vscode.postMessage({ command: 'exportConfig' })">Export All</button>
-        <button class="btn btn-secondary" onclick="vscode.postMessage({ command: 'refreshCatalog' })">Refresh Catalog</button>
+        <button class="btn btn-primary" title="Add Source" onclick="vscode.postMessage({ command: 'addSource' })">＋</button>
+        <button class="btn btn-secondary" title="Import" onclick="vscode.postMessage({ command: 'importConfig' })">⬇</button>
+        <button class="btn btn-secondary" title="Export All" onclick="vscode.postMessage({ command: 'exportConfig' })">⇧</button>
+        <button class="btn btn-secondary" title="Refresh Catalog" onclick="vscode.postMessage({ command: 'refreshCatalog' })">↻</button>
       </div>
     `;
 
@@ -990,9 +990,9 @@ export class DashboardPanel {
           </div>
           <div></div>
           <div class="source-actions" style="display: flex; gap: 4px; justify-content: flex-end;" onclick="event.stopPropagation()">
-            <button class="btn btn-sm btn-primary" onclick="vscode.postMessage({ command: 'installSourceGroup', sourceId: '${this.escapeHtml(s.id)}', scope: '${this.escapeHtml(s.scope)}' })">Install</button>
-            <button class="btn btn-sm btn-secondary" onclick="vscode.postMessage({ command: 'exportSource', sourceId: '${this.escapeHtml(s.id)}', scope: '${this.escapeHtml(s.scope)}' })">Export</button>
-            <button class="btn btn-sm btn-secondary" style="color: var(--badge-error); border-color: rgba(207, 34, 46, 0.3);" onclick="vscode.postMessage({ command: 'removeSource', sourceId: '${this.escapeHtml(s.id)}', scope: '${this.escapeHtml(s.scope)}' })">Remove</button>
+            <button class="btn btn-sm btn-primary" title="Install Source Group" onclick="vscode.postMessage({ command: 'installSourceGroup', sourceId: '${this.escapeHtml(s.id)}', scope: '${this.escapeHtml(s.scope)}' })">⬇</button>
+            <button class="btn btn-sm btn-secondary" title="Export Source" onclick="vscode.postMessage({ command: 'exportSource', sourceId: '${this.escapeHtml(s.id)}', scope: '${this.escapeHtml(s.scope)}' })">⇧</button>
+            <button class="btn btn-sm btn-secondary" title="Remove Source" style="color: var(--badge-error); border-color: rgba(207, 34, 46, 0.3);" onclick="vscode.postMessage({ command: 'removeSource', sourceId: '${this.escapeHtml(s.id)}', scope: '${this.escapeHtml(s.scope)}' })">🗑</button>
           </div>
         </div>
         <div class="source-catalog" id="catalog-${this.escapeHtml(s.id)}-${this.escapeHtml(s.scope)}" style="display: none; padding: 8px 10px 8px 30px; background: rgba(0,0,0,0.1); border-bottom: 1px solid var(--border);">
@@ -1003,7 +1003,7 @@ export class DashboardPanel {
     html += `<div class="scope-group">
       <div class="scope-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 8px;">
         <h3 style="margin: 0; font-size: 13px;">Global Sources</h3>
-        <button class="btn btn-sm btn-secondary" onclick="vscode.postMessage({ command: 'addSource', scope: 'global' })">+ Add</button>
+        <button class="btn btn-sm btn-secondary" title="Add Global Source" onclick="vscode.postMessage({ command: 'addSource', scope: 'global' })">＋</button>
       </div>
       <div class="source-list">
         ${globalSources.length > 0 ? globalSources.map(renderSourceRow).join('') : '<div class="empty-state" style="padding: 20px;">No global sources</div>'}
@@ -1013,7 +1013,7 @@ export class DashboardPanel {
     html += `<div class="scope-group" style="margin-top: 24px;">
       <div class="scope-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 8px;">
         <h3 style="margin: 0; font-size: 13px;">Project Sources</h3>
-        <button class="btn btn-sm btn-secondary" onclick="vscode.postMessage({ command: 'addSource', scope: 'project' })">+ Add</button>
+        <button class="btn btn-sm btn-secondary" title="Add Project Source" onclick="vscode.postMessage({ command: 'addSource', scope: 'project' })">＋</button>
       </div>
       <div class="source-list">
         ${projectSources.length > 0 ? projectSources.map(renderSourceRow).join('') : '<div class="empty-state" style="padding: 20px;">No project sources</div>'}
@@ -1026,7 +1026,7 @@ export class DashboardPanel {
   private getRecommendationsHtml(pending: any[] = [], broken: any[] = []): string {
     let html = `
       <div class="toolbar" style="margin-bottom: 16px;">
-        <button class="btn btn-primary" onclick="vscode.postMessage({ command: 'installRecommended' })">Install All Actionable</button>
+        <button class="btn btn-primary" title="Install All Actionable" onclick="vscode.postMessage({ command: 'installRecommended' })">⬇</button>
       </div>
     `;
 
@@ -1055,8 +1055,8 @@ export class DashboardPanel {
               <span style="opacity: 0.5; font-size: 10px; margin-left: 8px;">from ${this.escapeHtml(p.source.id)}</span>
             </div>
             <div style="display: flex; gap: 4px;">
-              <button class="btn btn-sm btn-primary" onclick="vscode.postMessage({ command: 'installRecommendation', sourceId: '${this.escapeHtml(p.source.id)}', scope: '${this.escapeHtml(p.source.scope)}', artifactId: '${this.escapeHtml(p.artifact.id)}', assistant: '${this.escapeHtml(p.desired.assistant)}' })">Install</button>
-              <button class="btn btn-sm btn-secondary" style="color: var(--badge-error); border-color: rgba(207, 34, 46, 0.3);" onclick="vscode.postMessage({ command: 'unrecommendRecommendation', sourceId: '${this.escapeHtml(p.desired.sourceId)}', artifactId: '${this.escapeHtml(p.desired.artifactId)}', assistant: '${this.escapeHtml(p.desired.assistant)}' })">Unrecommend</button>
+              <button class="btn btn-sm btn-primary" title="Install" onclick="vscode.postMessage({ command: 'installRecommendation', sourceId: '${this.escapeHtml(p.source.id)}', scope: '${this.escapeHtml(p.source.scope)}', artifactId: '${this.escapeHtml(p.artifact.id)}', assistant: '${this.escapeHtml(p.desired.assistant)}' })">⬇</button>
+              <button class="btn btn-sm btn-secondary" title="Unrecommend" style="color: var(--badge-error); border-color: rgba(207, 34, 46, 0.3);" onclick="vscode.postMessage({ command: 'unrecommendRecommendation', sourceId: '${this.escapeHtml(p.desired.sourceId)}', artifactId: '${this.escapeHtml(p.desired.artifactId)}', assistant: '${this.escapeHtml(p.desired.assistant)}' })">🗑</button>
             </div>
           </div>
         `;
@@ -1093,7 +1093,7 @@ export class DashboardPanel {
               <span style="opacity: 0.5; font-size: 10px; margin-left: 8px;">from ${this.escapeHtml(b.desired.sourceId)}</span>
             </div>
             <div style="display: flex; gap: 4px;">
-              <button class="btn btn-sm btn-secondary" style="color: var(--badge-error); border-color: rgba(207, 34, 46, 0.3);" onclick="vscode.postMessage({ command: 'unrecommendRecommendation', sourceId: '${this.escapeHtml(b.desired.sourceId)}', artifactId: '${this.escapeHtml(b.desired.artifactId)}', assistant: '${this.escapeHtml(b.desired.assistant)}' })">Unrecommend</button>
+              <button class="btn btn-sm btn-secondary" title="Unrecommend" style="color: var(--badge-error); border-color: rgba(207, 34, 46, 0.3);" onclick="vscode.postMessage({ command: 'unrecommendRecommendation', sourceId: '${this.escapeHtml(b.desired.sourceId)}', artifactId: '${this.escapeHtml(b.desired.artifactId)}', assistant: '${this.escapeHtml(b.desired.assistant)}' })">🗑</button>
             </div>
           </div>
         `;
@@ -1217,7 +1217,7 @@ export class DashboardPanel {
       <div id="detailOrigin"></div>
     </div>
     <div class="detail-section" id="diffSection" style="display: none;">
-      <button class="btn btn-sm btn-secondary" onclick="diffItem()">Diff vs. original</button>
+      <button class="btn btn-sm btn-secondary" title="Diff vs. original" onclick="diffItem()">⇄</button>
     </div>
     <div class="detail-section" id="crossFrameworkSection" style="display: none;">
       <div class="detail-section-title">Installed also in</div>
@@ -1316,9 +1316,9 @@ export class DashboardPanel {
                            <span class="badge ${badgeClass}">${this.escapeHtml(badgeText)}</span>
                         </td>
                         <td style="text-align: right; width: 30%;">
-                          <button class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); vscode.postMessage({ command: 'previewInstalledArtifact', key: '${this.escapeHtml(key)}' })">Preview</button>
-                          <button class="btn btn-sm btn-secondary diff-btn" style="${status === 'modified-locally' || status === 'modified-and-update-available' ? 'display: inline-block;' : 'display: none;'}" onclick="event.stopPropagation(); vscode.postMessage({ command: 'diffInstalledArtifact', key: '${this.escapeHtml(key)}' })">Diff</button>
-                          <button class="btn btn-sm btn-primary update-btn" style="${status === 'update-available' || status === 'modified-and-update-available' ? 'display: inline-block;' : 'display: none;'}" onclick="event.stopPropagation(); vscode.postMessage({ command: 'updateItem', key: '${this.escapeHtml(key)}' })">Update to latest</button>
+                          <button class="btn btn-sm btn-secondary" title="Preview" onclick="event.stopPropagation(); vscode.postMessage({ command: 'previewInstalledArtifact', key: '${this.escapeHtml(key)}' })">👁</button>
+                          <button class="btn btn-sm btn-secondary diff-btn" title="Diff" style="${status === 'modified-locally' || status === 'modified-and-update-available' ? 'display: inline-block;' : 'display: none;'}" onclick="event.stopPropagation(); vscode.postMessage({ command: 'diffInstalledArtifact', key: '${this.escapeHtml(key)}' })">⇄</button>
+                          <button class="btn btn-sm btn-primary update-btn" title="Update to latest" style="${status === 'update-available' || status === 'modified-and-update-available' ? 'display: inline-block;' : 'display: none;'}" onclick="event.stopPropagation(); vscode.postMessage({ command: 'updateItem', key: '${this.escapeHtml(key)}' })">⟳</button>
                         </td>
                       </tr>
                     `;
@@ -1510,10 +1510,13 @@ export class DashboardPanel {
       cursor: pointer;
       font-size: 12px;
       font-weight: 500;
+      min-width: 28px;
+      text-align: center;
     }
     .btn-sm {
       padding: 3px 8px;
       font-size: 11px;
+      min-width: 24px;
     }
     .btn-secondary {
       background: rgba(255, 255, 255, 0.1);
@@ -1656,8 +1659,8 @@ export class DashboardPanel {
     
     <div class="header-actions">
       ${scanning ? '<div class="scan-indicator" id="scan-indicator"><div class="spinner"></div>Scanning for updates…</div>' : ''}
-      <button class="btn btn-primary" onclick="vscode.postMessage({ command: 'createArtifact' })">+ New Artifact</button>
-      <button class="btn btn-secondary" onclick="refreshState()">Refresh</button>
+      <button class="btn btn-primary" title="New Artifact" onclick="vscode.postMessage({ command: 'createArtifact' })">＋</button>
+      <button class="btn btn-secondary" title="Refresh" onclick="refreshState()">↻</button>
       ${identicalCount > 0 ? '<button class="btn btn-primary" onclick="promoteAllIdentical()">Promote ' + identicalCount + ' Identical Source Items</button>' : ''}
     </div>
   </div>
@@ -2154,18 +2157,18 @@ export class DashboardPanel {
         const actions = [];
         if (msg.membership === 'unmanaged') {
           if (msg.candidates && msg.candidates.length > 0) {
-            actions.push('<button class="btn btn-sm btn-primary" onclick="detailPromoteItem()">Promote</button>');
+            actions.push('<button class="btn btn-sm btn-primary" title="Promote" onclick="detailPromoteItem()">⇧</button>');
           }
         } else {
-          actions.push('<button class="btn btn-sm btn-secondary" onclick="detailCopyItem()">Copy to...</button>');
+          actions.push('<button class="btn btn-sm btn-secondary" title="Copy to..." onclick="detailCopyItem()">⧉</button>');
           if (['skill', 'agent', 'command', 'mcp-server'].includes(msg.item.kind)) {
-            actions.push('<button class="btn btn-sm btn-secondary" onclick="detailMoveItem()">Move to...</button>');
+            actions.push('<button class="btn btn-sm btn-secondary" title="Move to..." onclick="detailMoveItem()">⇥</button>');
           }
-          actions.push('<button class="btn btn-sm btn-secondary" onclick="detailEditItem()">Edit</button>');
+          actions.push('<button class="btn btn-sm btn-secondary" title="Edit" onclick="detailEditItem()">✎</button>');
           if (msg.status === 'update-available' || msg.status === 'modified-and-update-available') {
-            actions.push('<button class="btn btn-sm btn-primary" onclick="detailUpdateItem()">Update to latest</button>');
+            actions.push('<button class="btn btn-sm btn-primary" title="Update to latest" onclick="detailUpdateItem()">⟳</button>');
           }
-          actions.push('<button class="btn btn-sm btn-secondary" style="color: var(--badge-error); border-color: rgba(207, 34, 46, 0.3);" onclick="detailUninstallItem()">Uninstall</button>');
+          actions.push('<button class="btn btn-sm btn-secondary" title="Uninstall" style="color: var(--badge-error); border-color: rgba(207, 34, 46, 0.3);" onclick="detailUninstallItem()">🗑</button>');
         }
         document.getElementById('detailActions').innerHTML = actions.join('');
       } else if (msg.command === 'clearDetail') {
