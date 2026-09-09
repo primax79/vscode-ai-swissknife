@@ -351,8 +351,63 @@ export class DashboardPanel {
       }
     );
 
+    // Show something immediately instead of the webview's default black
+    // background while update()'s first data fetch is still in flight.
+    panel.webview.html = DashboardPanel.getLoadingHtml();
+
     DashboardPanel.currentPanel = new DashboardPanel(panel, extensionUri, provider, sourcesProvider, availableProvider, refreshCallback);
     return DashboardPanel.currentPanel;
+  }
+
+  private static getLoadingHtml(): string {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>AI Swissknife Dashboard</title>
+  <style>
+    body {
+      font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+      background-color: var(--vscode-editor-background);
+      color: var(--vscode-editor-foreground);
+      padding: 16px 20px;
+      margin: 0;
+    }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--vscode-panel-border, #333);
+    }
+    .header h1 { margin: 0 0 2px 0; font-size: 18px; font-weight: 600; }
+    .header p { margin: 0; opacity: 0.7; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 12px; }
+    th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--vscode-panel-border, #333); }
+    th { opacity: 0.8; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .loading-row { text-align: center; opacity: 0.7; padding: 24px; }
+    .spinner { display: inline-block; vertical-align: middle; margin-right: 8px; border: 2px solid rgba(136, 136, 136, 0.2); border-top-color: #888; border-radius: 50%; width: 12px; height: 12px; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1>AI Swissknife Dashboard</h1>
+      <p>Loading…</p>
+    </div>
+  </div>
+  <table>
+    <thead>
+      <tr><th>Kind</th><th>Name</th><th>Assistant</th><th>Scope</th><th>Status</th><th>Action</th></tr>
+    </thead>
+    <tbody>
+      <tr><td colspan="6" class="loading-row"><span class="spinner"></span>Loading dashboard data…</td></tr>
+    </tbody>
+  </table>
+</body>
+</html>`;
   }
 
   public setSourceFilter(id: string, scope: Scope) {
