@@ -819,13 +819,17 @@ export class DashboardPanel {
         const folderId = `folder-${Math.random().toString(36).substr(2, 9)}`;
         html += `
           <div class="catalog-folder">
-            <div class="catalog-item folder-row" style="padding: 4px 8px; cursor: pointer; display: flex; align-items: center; justify-content: space-between;" onclick="toggleFolder('${folderId}', this)">
+            <div class="catalog-item folder-row" style="padding: 4px 8px; cursor: pointer; display: grid; grid-template-columns: 100px 180px 1fr auto 180px; align-items: center; gap: 10px;" onclick="toggleFolder('${folderId}', this)">
               <div style="display: flex; align-items: center; gap: 6px;">
                 <span class="folder-icon" style="transition: transform 0.2s; font-size: 10px; opacity: 0.8;">▶</span>
                 <span class="folder-icon-img" style="font-size: 12px;">📁</span>
-                <span><strong>${this.escapeHtml(item.label)}</strong></span>
               </div>
-              <div style="display: flex; gap: 4px;" onclick="event.stopPropagation()">
+              <div style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">
+                <strong>${this.escapeHtml(item.label)}</strong>
+              </div>
+              <div></div>
+              <div></div>
+              <div style="display: flex; gap: 4px; justify-content: flex-end;" onclick="event.stopPropagation()">
                 <button class="btn btn-sm btn-primary" onclick="vscode.postMessage({ command: 'installFolder', sourceId: '${this.escapeHtml(item.source.id)}', scope: '${this.escapeHtml(item.source.scope)}', folderPath: '${this.escapeHtml(item.folderPath)}' })">Install</button>
               </div>
             </div>
@@ -845,15 +849,21 @@ export class DashboardPanel {
         }).join('');
 
         html += `
-          <div class="catalog-item artifact-row" style="padding: 4px 8px; display: flex; align-items: center; gap: 10px; justify-content: space-between;">
-            <div style="display: flex; align-items: center; gap: 8px;">
+          <div class="catalog-item artifact-row" style="padding: 4px 8px; display: grid; grid-template-columns: 100px 180px 1fr auto 180px; align-items: center; gap: 10px;">
+            <div>
               <span class="kind-pill kind-${this.escapeHtml(item.artifact.kind)}">${this.escapeHtml(item.artifact.kind)}</span>
-              <span><strong>${this.escapeHtml(item.artifact.name)}</strong></span>
-              ${badgesHtml}
-              ${item.artifact.description ? `<span style="opacity:0.7; font-size:11px;">${this.escapeHtml(item.artifact.description)}</span>` : ''}
-              ${item.isRecommended ? '<span style="color: var(--badge-warning);">★</span>' : ''}
             </div>
-            <div style="display: flex; gap: 4px;">
+            <div style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; display: flex; align-items: center; gap: 4px;">
+              <strong style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${this.escapeHtml(item.artifact.name)}</strong>
+              ${item.isRecommended ? '<span style="color: var(--badge-warning); flex-shrink: 0;" title="Recommended">★</span>' : ''}
+            </div>
+            <div style="opacity:0.7; font-size:11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${this.escapeHtml(item.artifact.description || '')}">
+              ${item.artifact.description ? this.escapeHtml(item.artifact.description) : ''}
+            </div>
+            <div style="display: flex; gap: 4px; flex-wrap: nowrap;">
+              ${badgesHtml}
+            </div>
+            <div style="display: flex; gap: 4px; justify-content: flex-end;">
               <button class="btn btn-sm btn-secondary" onclick="vscode.postMessage({ command: 'previewArtifact', sourceId: '${this.escapeHtml(item.source.id)}', scope: '${this.escapeHtml(item.source.scope)}', artifactId: '${this.escapeHtml(item.artifact.id)}' })">Preview</button>
               <button class="btn btn-sm btn-primary" onclick="vscode.postMessage({ command: 'installArtifact', sourceId: '${this.escapeHtml(item.source.id)}', scope: '${this.escapeHtml(item.source.scope)}', artifactId: '${this.escapeHtml(item.artifact.id)}' })">Install</button>
             </div>
@@ -879,15 +889,19 @@ export class DashboardPanel {
 
     const renderSourceRow = (s: Source) => `
       <div class="source-container">
-        <div class="item-row source-row" style="display: flex; justify-content: space-between; padding: 8px 10px; border-bottom: 1px solid var(--border); cursor: pointer;" onclick="toggleSource(this, '${this.escapeHtml(s.id)}', '${this.escapeHtml(s.scope)}')">
-          <div class="source-info" style="display: flex; align-items: center; gap: 10px;">
+        <div class="item-row source-row" style="display: grid; grid-template-columns: 100px 180px 1fr auto 180px; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--border); cursor: pointer;" onclick="toggleSource(this, '${this.escapeHtml(s.id)}', '${this.escapeHtml(s.scope)}')">
+          <div style="display: flex; align-items: center; gap: 6px;">
             <span class="source-caret" style="transition: transform 0.2s; font-size: 10px; opacity: 0.8; display: inline-block;">▶</span>
-            <strong>${this.escapeHtml(s.name ?? s.id)}</strong>
             <span class="kind-pill" style="background: rgba(255, 255, 255, 0.1); color: var(--fg);">${this.escapeHtml(s.type)}</span>
-            ${s.url ? `<span style="opacity: 0.7; font-size: 11px;">${this.escapeHtml(s.url)}</span>` : ''}
-            ${s.localPath ? `<span style="opacity: 0.7; font-size: 11px;">${this.escapeHtml(s.localPath)}</span>` : ''}
           </div>
-          <div class="source-actions" style="display: flex; gap: 8px;" onclick="event.stopPropagation()">
+          <div style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis;">
+            <strong>${this.escapeHtml(s.name ?? s.id)}</strong>
+          </div>
+          <div style="opacity: 0.7; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${this.escapeHtml(s.url || s.localPath || '')}">
+            ${s.url ? this.escapeHtml(s.url) : (s.localPath ? this.escapeHtml(s.localPath) : '')}
+          </div>
+          <div></div>
+          <div class="source-actions" style="display: flex; gap: 4px; justify-content: flex-end;" onclick="event.stopPropagation()">
             <button class="btn btn-sm btn-primary" onclick="vscode.postMessage({ command: 'installSourceGroup', sourceId: '${this.escapeHtml(s.id)}', scope: '${this.escapeHtml(s.scope)}' })">Install</button>
             <button class="btn btn-sm btn-secondary" onclick="vscode.postMessage({ command: 'exportSource', sourceId: '${this.escapeHtml(s.id)}', scope: '${this.escapeHtml(s.scope)}' })">Export</button>
             <button class="btn btn-sm btn-secondary" style="color: var(--badge-error); border-color: rgba(207, 34, 46, 0.3);" onclick="vscode.postMessage({ command: 'removeSource', sourceId: '${this.escapeHtml(s.id)}', scope: '${this.escapeHtml(s.scope)}' })">Remove</button>
