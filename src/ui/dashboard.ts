@@ -644,7 +644,7 @@ export class DashboardPanel {
                     ${sortedInstallations.map(inst => {
                       const key = getIdentityKey(inst);
                       return `
-                        <tr class="item-row sub-row" data-key="${this.escapeHtml(key)}" onclick="selectRow(this, '${this.escapeHtml(key)}')">
+                        <tr class="item-row sub-row" data-key="${this.escapeHtml(key)}" data-assistant="${this.escapeHtml(inst.assistant)}" onclick="selectRow(this, '${this.escapeHtml(key)}')">
                           <td style="padding-left: 30px; width: 30%;">
                              <img src="${this._panel.webview.asWebviewUri(getAssistantIconPath(inst.assistant, this._extensionUri).light)}" class="assistant-icon" width="14" height="14" style="vertical-align: middle; margin-right: 6px;" />
                              ${this.escapeHtml(inst.assistant)}
@@ -1307,7 +1307,7 @@ export class DashboardPanel {
                     }
 
                     return `
-                      <tr class="item-row sub-row" data-key="${this.escapeHtml(key)}" onclick="selectRow(this, '${this.escapeHtml(key)}')">
+                      <tr class="item-row sub-row" data-key="${this.escapeHtml(key)}" data-assistant="${this.escapeHtml(inst.assistant)}" onclick="selectRow(this, '${this.escapeHtml(key)}')">
                         <td style="padding-left: 30px; width: 30%;">
                            <img src="${this._panel.webview.asWebviewUri(getAssistantIconPath(inst.assistant, this._extensionUri).light)}" class="assistant-icon" width="14" height="14" style="vertical-align: middle; margin-right: 6px;" />
                            ${this.escapeHtml(inst.assistant)}
@@ -1943,7 +1943,7 @@ export class DashboardPanel {
       document.querySelectorAll('.item-row-group').forEach(row => {
         const kind = row.getAttribute('data-kind');
         const name = row.getAttribute('data-name');
-        const env = row.getAttribute('data-assistant'); // note: managed group won't have this, wait
+        const env = row.getAttribute('data-assistant');
         const scope = row.getAttribute('data-scope');
         const mem = row.getAttribute('data-membership');
         const text = row.innerText.toLowerCase();
