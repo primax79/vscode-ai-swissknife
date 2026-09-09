@@ -152,6 +152,7 @@ for detail.
 | 32       | 32  | [Dashboard: structural skeleton](32-dashboard-skeleton/plan.md)                            | ✅ done (32.1-32.3 merged)             | 28, 29                 | M    |
 | 33       | 33  | [Dashboard: Sources & Catalog section](33-dashboard-sources-catalog/plan.md)                | ✅ done (33.1-33.5 merged)             | 31, 32                 | L    |
 | 34       | 34  | [Dashboard: Recommendations + Installed action parity](34-dashboard-recommendations-parity/plan.md) | ✅ done (34.1-34.3 merged)   | 31, 32                 | M    |
+| 35       | 35  | [Dashboard: hands-on testing fixes](35-dashboard-hands-on-fixes/plan.md)                   | 📋 planned                            | 31, 32, 33, 34         | M    |
 
 ## Specs
 
