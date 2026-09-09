@@ -1078,7 +1078,7 @@ export class DashboardPanel {
 
     const reportMap = new Map(reports.map((r) => [getIdentityKey(r.installation), r]));
 
-    const recGroup = this._availableProvider.getCachedRecommendedGroup();
+    const recGroup = this._availableProvider.getCachedRecommendedGroup?.();
     const pendingRecommendationsCount = recGroup ? recGroup.pending.length : 0;
 
     const presentAssistants = Array.from(new Set([...managed.map(m => m.assistant), ...observed.map(o => o.assistant)])).sort();
