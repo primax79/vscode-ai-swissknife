@@ -32,6 +32,36 @@ export class DashboardPanel {
     return allSources;
   }
 
+  /**
+   * Re-resolves a ManagedInstallation from a fresh inventory scan by its
+   * composite identity key -- never trust the client's own copy of the
+   * installation (security: doUninstallItem/doUpdateInstallation act on
+   * inst.path). Returns undefined (and shows an error, since silently
+   * doing nothing on a real button click is indistinguishable from a
+   * frozen UI) when the key doesn't match anything currently on disk.
+   */
+  private async resolveManagedInstallationByKey(key: string): Promise<ManagedInstallation | undefined> {
+    const allManaged: ManagedInstallation[] = [];
+    try {
+      const gInv = await scanInstalledInventory('global');
+      allManaged.push(...gInv.managed);
+    } catch { /* ignore */ }
+    const folders = vscode.workspace.workspaceFolders;
+    if (folders && folders.length > 0) {
+      try {
+        const pInv = await scanInstalledInventory('project', folders[0].uri.fsPath);
+        allManaged.push(...pInv.managed);
+      } catch { /* ignore */ }
+    }
+    const inst = allManaged.find(m => getIdentityKey(m) === key);
+    if (!inst) {
+      vscode.window.showErrorMessage(
+        `Couldn't find that installation anymore (key: ${key}). It may have been moved, uninstalled, or belong to a workspace folder other than the first one open. Try refreshing the Dashboard.`
+      );
+    }
+    return inst;
+  }
+
   public static currentPanel: DashboardPanel | undefined;
   private readonly _panel: vscode.WebviewPanel;
   private readonly _extensionUri: vscode.Uri;
@@ -52,6 +82,27 @@ export class DashboardPanel {
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
+  }
+
+  /**
+   * Safely embeds an arbitrary string (e.g. an identity key derived from a
+   * user-chosen artifact name) as a JS string literal inside an inline
+   * HTML event handler attribute, e.g. onclick="fn(${this.jsStringLiteral(x)})".
+   * escapeHtml() alone is NOT enough here: the browser HTML-decodes
+   * attribute values (so escapeHtml's `'` -> `&#039;` decodes right back to
+   * `'`) before handing the decoded text to the JS parser as the handler's
+   * source, so a value containing a real apostrophe (a plausible skill/
+   * artifact name, e.g. "team's-toolkit") silently breaks the enclosing
+   * '...' JS string and the whole handler fails to parse -- the button
+   * looks clickable but does nothing, with no visible error unless
+   * DevTools happens to be open. JSON.stringify already produces a valid,
+   * self-quoted JS string literal for any input (handles backslashes,
+   * quotes, newlines, etc.); escaping *that* for the HTML attribute
+   * context (its own `"` becomes `&quot;`) makes the whole thing safe in
+   * both layers.
+   */
+  private jsStringLiteral(value: string): string {
+    return this.escapeHtml(JSON.stringify(value ?? ''));
   }
 
   private constructor(
@@ -233,20 +284,7 @@ export class DashboardPanel {
             break;
           case 'uninstallItem': {
             if (message.key) {
-              const allManaged: ManagedInstallation[] = [];
-              try {
-                const gInv = await scanInstalledInventory('global');
-                allManaged.push(...gInv.managed);
-              } catch { /* ignore */ }
-              const folders = vscode.workspace.workspaceFolders;
-              if (folders && folders.length > 0) {
-                const projectRoot = folders[0].uri.fsPath;
-                try {
-                  const pInv = await scanInstalledInventory('project', projectRoot);
-                  allManaged.push(...pInv.managed);
-                } catch { /* ignore */ }
-              }
-              const inst = allManaged.find(m => getIdentityKey(m) === message.key);
+              const inst = await this.resolveManagedInstallationByKey(message.key);
               if (inst) {
                 await this._provider.doUninstallItem(inst);
                 this._refreshCallback();
@@ -256,21 +294,9 @@ export class DashboardPanel {
             }
             break;
           }
-                    case 'previewInstalledArtifact': {
+          case 'previewInstalledArtifact': {
             if (message.key) {
-              const allManaged = [];
-              try {
-                const gInv = await scanInstalledInventory('global');
-                allManaged.push(...gInv.managed);
-              } catch { /* ignore */ }
-              const folders = vscode.workspace.workspaceFolders;
-              if (folders && folders.length > 0) {
-                try {
-                  const pInv = await scanInstalledInventory('project', folders[0].uri.fsPath);
-                  allManaged.push(...pInv.managed);
-                } catch { /* ignore */ }
-              }
-              const inst = allManaged.find(m => getIdentityKey(m) === message.key);
+              const inst = await this.resolveManagedInstallationByKey(message.key);
               if (inst) {
                 const p = resolveArtifactPreviewPath(inst.path, inst.kind);
                 if (p) {
@@ -284,19 +310,7 @@ export class DashboardPanel {
           }
           case 'diffInstalledArtifact': {
             if (message.key) {
-              const allManaged = [];
-              try {
-                const gInv = await scanInstalledInventory('global');
-                allManaged.push(...gInv.managed);
-              } catch { /* ignore */ }
-              const folders = vscode.workspace.workspaceFolders;
-              if (folders && folders.length > 0) {
-                try {
-                  const pInv = await scanInstalledInventory('project', folders[0].uri.fsPath);
-                  allManaged.push(...pInv.managed);
-                } catch { /* ignore */ }
-              }
-              const inst = allManaged.find(m => getIdentityKey(m) === message.key);
+              const inst = await this.resolveManagedInstallationByKey(message.key);
               if (inst) {
                 await this._provider.doDiffAgainstOriginal(inst);
               }
@@ -305,20 +319,7 @@ export class DashboardPanel {
           }
           case 'updateItem': {
             if (message.key) {
-              const allManaged: ManagedInstallation[] = [];
-              try {
-                const gInv = await scanInstalledInventory('global');
-                allManaged.push(...gInv.managed);
-              } catch { /* ignore */ }
-              const folders = vscode.workspace.workspaceFolders;
-              if (folders && folders.length > 0) {
-                const projectRoot = folders[0].uri.fsPath;
-                try {
-                  const pInv = await scanInstalledInventory('project', projectRoot);
-                  allManaged.push(...pInv.managed);
-                } catch { /* ignore */ }
-              }
-              const inst = allManaged.find(m => getIdentityKey(m) === message.key);
+              const inst = await this.resolveManagedInstallationByKey(message.key);
               if (inst) {
                 await this._provider.doUpdateInstallation(inst);
                 this._refreshCallback();
@@ -644,7 +645,7 @@ export class DashboardPanel {
                     ${sortedInstallations.map(inst => {
                       const key = getIdentityKey(inst);
                       return `
-                        <tr class="item-row sub-row" data-key="${this.escapeHtml(key)}" data-assistant="${this.escapeHtml(inst.assistant)}" onclick="selectRow(this, '${this.escapeHtml(key)}')">
+                        <tr class="item-row sub-row" data-key="${this.escapeHtml(key)}" data-assistant="${this.escapeHtml(inst.assistant)}" onclick="selectRow(this, ${this.jsStringLiteral(key)})">
                           <td style="padding-left: 30px; width: 30%;">
                              <img src="${this._panel.webview.asWebviewUri(getAssistantIconPath(inst.assistant, this._extensionUri).light)}" class="assistant-icon" width="14" height="14" style="vertical-align: middle; margin-right: 6px;" />
                              ${this.escapeHtml(inst.assistant)}
@@ -653,9 +654,9 @@ export class DashboardPanel {
                              <span class="badge badge-pending">● Managed · checking…</span>
                           </td>
                           <td style="text-align: right; width: 30%;">
-                            <button class="btn btn-sm btn-secondary" title="Preview" onclick="event.stopPropagation(); vscode.postMessage({ command: 'previewInstalledArtifact', key: '${this.escapeHtml(key)}' })">👁</button>
-                            <button class="btn btn-sm btn-secondary diff-btn" title="Diff" style="display: none;" onclick="event.stopPropagation(); vscode.postMessage({ command: 'diffInstalledArtifact', key: '${this.escapeHtml(key)}' })">⇄</button>
-                            <button class="btn btn-sm btn-primary update-btn" title="Update to latest" style="display: none;" onclick="event.stopPropagation(); vscode.postMessage({ command: 'updateItem', key: '${this.escapeHtml(key)}' })">⟳</button>
+                            <button class="btn btn-sm btn-secondary" title="Preview" onclick="event.stopPropagation(); vscode.postMessage({ command: 'previewInstalledArtifact', key: ${this.jsStringLiteral(key)} })">👁</button>
+                            <button class="btn btn-sm btn-secondary diff-btn" title="Diff" style="display: none;" onclick="event.stopPropagation(); vscode.postMessage({ command: 'diffInstalledArtifact', key: ${this.jsStringLiteral(key)} })">⇄</button>
+                            <button class="btn btn-sm btn-primary update-btn" title="Update to latest" style="display: none;" onclick="event.stopPropagation(); vscode.postMessage({ command: 'updateItem', key: ${this.jsStringLiteral(key)} })">⟳</button>
                           </td>
                         </tr>
                       `;
@@ -692,7 +693,7 @@ export class DashboardPanel {
         }
         const key = getIdentityKey(obs);
         observedRowsHtml += `
-          <tr class="item-row item-row-group" data-kind="${this.escapeHtml(obs.kind)}" data-name="${this.escapeHtml(obs.name.toLowerCase())}" data-assistant="${this.escapeHtml(obs.assistant)}" data-scope="${this.escapeHtml(obs.scope)}" data-membership="unmanaged" data-status="unmanaged" data-source-id="${this.escapeHtml(sourceId)}" data-source-scope="${this.escapeHtml(sourceScope)}" data-key="${this.escapeHtml(key)}" onclick="selectRow(this, '${this.escapeHtml(key)}')">
+          <tr class="item-row item-row-group" data-kind="${this.escapeHtml(obs.kind)}" data-name="${this.escapeHtml(obs.name.toLowerCase())}" data-assistant="${this.escapeHtml(obs.assistant)}" data-scope="${this.escapeHtml(obs.scope)}" data-membership="unmanaged" data-status="unmanaged" data-source-id="${this.escapeHtml(sourceId)}" data-source-scope="${this.escapeHtml(sourceScope)}" data-key="${this.escapeHtml(key)}" onclick="selectRow(this, ${this.jsStringLiteral(key)})">
             <td><span class="kind-pill kind-${this.escapeHtml(obs.kind)}">${this.escapeHtml(obs.kind)}</span></td>
             <td><strong>${this.escapeHtml(obs.name)}</strong></td>
             <td>${this.escapeHtml(obs.assistant)}</td>
@@ -1307,7 +1308,7 @@ export class DashboardPanel {
                     }
 
                     return `
-                      <tr class="item-row sub-row" data-key="${this.escapeHtml(key)}" data-assistant="${this.escapeHtml(inst.assistant)}" onclick="selectRow(this, '${this.escapeHtml(key)}')">
+                      <tr class="item-row sub-row" data-key="${this.escapeHtml(key)}" data-assistant="${this.escapeHtml(inst.assistant)}" onclick="selectRow(this, ${this.jsStringLiteral(key)})">
                         <td style="padding-left: 30px; width: 30%;">
                            <img src="${this._panel.webview.asWebviewUri(getAssistantIconPath(inst.assistant, this._extensionUri).light)}" class="assistant-icon" width="14" height="14" style="vertical-align: middle; margin-right: 6px;" />
                            ${this.escapeHtml(inst.assistant)}
@@ -1316,9 +1317,9 @@ export class DashboardPanel {
                            <span class="badge ${badgeClass}">${this.escapeHtml(badgeText)}</span>
                         </td>
                         <td style="text-align: right; width: 30%;">
-                          <button class="btn btn-sm btn-secondary" title="Preview" onclick="event.stopPropagation(); vscode.postMessage({ command: 'previewInstalledArtifact', key: '${this.escapeHtml(key)}' })">👁</button>
-                          <button class="btn btn-sm btn-secondary diff-btn" title="Diff" style="${status === 'modified-locally' || status === 'modified-and-update-available' ? 'display: inline-block;' : 'display: none;'}" onclick="event.stopPropagation(); vscode.postMessage({ command: 'diffInstalledArtifact', key: '${this.escapeHtml(key)}' })">⇄</button>
-                          <button class="btn btn-sm btn-primary update-btn" title="Update to latest" style="${status === 'update-available' || status === 'modified-and-update-available' ? 'display: inline-block;' : 'display: none;'}" onclick="event.stopPropagation(); vscode.postMessage({ command: 'updateItem', key: '${this.escapeHtml(key)}' })">⟳</button>
+                          <button class="btn btn-sm btn-secondary" title="Preview" onclick="event.stopPropagation(); vscode.postMessage({ command: 'previewInstalledArtifact', key: ${this.jsStringLiteral(key)} })">👁</button>
+                          <button class="btn btn-sm btn-secondary diff-btn" title="Diff" style="${status === 'modified-locally' || status === 'modified-and-update-available' ? 'display: inline-block;' : 'display: none;'}" onclick="event.stopPropagation(); vscode.postMessage({ command: 'diffInstalledArtifact', key: ${this.jsStringLiteral(key)} })">⇄</button>
+                          <button class="btn btn-sm btn-primary update-btn" title="Update to latest" style="${status === 'update-available' || status === 'modified-and-update-available' ? 'display: inline-block;' : 'display: none;'}" onclick="event.stopPropagation(); vscode.postMessage({ command: 'updateItem', key: ${this.jsStringLiteral(key)} })">⟳</button>
                         </td>
                       </tr>
                     `;
@@ -1358,7 +1359,7 @@ export class DashboardPanel {
 
       const key = getIdentityKey(obs);
       observedRowsHtml += `
-        <tr class="item-row item-row-group" data-kind="${this.escapeHtml(obs.kind)}" data-name="${this.escapeHtml(obs.name.toLowerCase())}" data-assistant="${this.escapeHtml(obs.assistant)}" data-scope="${this.escapeHtml(obs.scope)}" data-membership="unmanaged" data-status="unmanaged" data-source-id="${this.escapeHtml(sourceId)}" data-source-scope="${this.escapeHtml(sourceScope)}" data-key="${this.escapeHtml(key)}" onclick="selectRow(this, '${this.escapeHtml(key)}')">
+        <tr class="item-row item-row-group" data-kind="${this.escapeHtml(obs.kind)}" data-name="${this.escapeHtml(obs.name.toLowerCase())}" data-assistant="${this.escapeHtml(obs.assistant)}" data-scope="${this.escapeHtml(obs.scope)}" data-membership="unmanaged" data-status="unmanaged" data-source-id="${this.escapeHtml(sourceId)}" data-source-scope="${this.escapeHtml(sourceScope)}" data-key="${this.escapeHtml(key)}" onclick="selectRow(this, ${this.jsStringLiteral(key)})">
           <td><span class="kind-pill kind-${this.escapeHtml(obs.kind)}">${this.escapeHtml(obs.kind)}</span></td>
           <td><strong>${this.escapeHtml(obs.name)}</strong></td>
           <td>${this.escapeHtml(obs.assistant)}</td>
