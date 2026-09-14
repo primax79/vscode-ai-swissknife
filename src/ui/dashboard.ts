@@ -609,7 +609,7 @@ export class DashboardPanel {
       const environmentPills = presentAssistants.map(a => {
         const iconUris = getAssistantIconPath(a, this._extensionUri);
         const iconSrc = this._panel.webview.asWebviewUri(iconUris.light);
-        return `<button class="filter-pill env-pill" data-env="${this.escapeHtml(a)}" onclick="setEnvFilter('${this.escapeHtml(a)}')">
+        return `<button class="filter-pill env-pill" data-env="${this.escapeHtml(a)}" onclick="setEnvFilter(${this.jsStringLiteral(a)})">
           <img src="${iconSrc}" class="assistant-icon" width="14" height="14" />
           ${this.escapeHtml(a)}
         </button>`;
@@ -817,7 +817,7 @@ export class DashboardPanel {
       else if (x.status === 'modified-locally' || x.status === 'modified-and-update-available') { badgeClass = 'badge-warning'; badgeText = 'Modified locally'; }
       
       html += `
-        <tr class="overview-item-row" style="cursor: pointer;" onclick="switchSection('installed'); const row = document.querySelector('#section-installed .item-row[data-key=\\'${this.escapeHtml(x.key)}\\']'); if (row) selectRow(row, '${this.escapeHtml(x.key)}');" onmouseover="this.style.backgroundColor='rgba(255, 255, 255, 0.05)'" onmouseout="this.style.backgroundColor=''">
+        <tr class="overview-item-row" style="cursor: pointer;" onclick="jumpToInstalledRow(${this.jsStringLiteral(x.key)})" onmouseover="this.style.backgroundColor='rgba(255, 255, 255, 0.05)'" onmouseout="this.style.backgroundColor=''">
           <td><span class="kind-pill kind-${this.escapeHtml(x.inst.kind)}">${this.escapeHtml(x.inst.kind)}</span></td>
           <td><strong>${this.escapeHtml(x.inst.name)}</strong></td>
           <td>${this.escapeHtml(x.inst.assistant)}</td>
@@ -919,7 +919,7 @@ export class DashboardPanel {
               <div></div>
               <div></div>
               <div style="display: flex; gap: 4px; justify-content: flex-end;" onclick="event.stopPropagation()">
-                <button class="btn btn-sm btn-primary" title="Install" onclick="vscode.postMessage({ command: 'installFolder', sourceId: '${this.escapeHtml(item.source.id)}', scope: '${this.escapeHtml(item.source.scope)}', folderPath: '${this.escapeHtml(item.folderPath)}' })">⬇</button>
+                <button class="btn btn-sm btn-primary" title="Install" onclick="vscode.postMessage({ command: 'installFolder', sourceId: ${this.jsStringLiteral(item.source.id)}, scope: ${this.jsStringLiteral(item.source.scope)}, folderPath: ${this.jsStringLiteral(item.folderPath)} })">⬇</button>
               </div>
             </div>
             <div id="${folderId}" style="display: none; padding-left: 16px; border-left: 1px solid var(--border); margin-left: 5px;">
@@ -953,8 +953,8 @@ export class DashboardPanel {
               ${badgesHtml}
             </div>
             <div style="display: flex; gap: 4px; justify-content: flex-end;">
-              <button class="btn btn-sm btn-secondary" title="Preview" onclick="vscode.postMessage({ command: 'previewArtifact', sourceId: '${this.escapeHtml(item.source.id)}', scope: '${this.escapeHtml(item.source.scope)}', artifactId: '${this.escapeHtml(item.artifact.id)}' })">👁</button>
-              <button class="btn btn-sm btn-primary" title="Install" onclick="vscode.postMessage({ command: 'installArtifact', sourceId: '${this.escapeHtml(item.source.id)}', scope: '${this.escapeHtml(item.source.scope)}', artifactId: '${this.escapeHtml(item.artifact.id)}' })">⬇</button>
+              <button class="btn btn-sm btn-secondary" title="Preview" onclick="vscode.postMessage({ command: 'previewArtifact', sourceId: ${this.jsStringLiteral(item.source.id)}, scope: ${this.jsStringLiteral(item.source.scope)}, artifactId: ${this.jsStringLiteral(item.artifact.id)} })">👁</button>
+              <button class="btn btn-sm btn-primary" title="Install" onclick="vscode.postMessage({ command: 'installArtifact', sourceId: ${this.jsStringLiteral(item.source.id)}, scope: ${this.jsStringLiteral(item.source.scope)}, artifactId: ${this.jsStringLiteral(item.artifact.id)} })">⬇</button>
             </div>
           </div>
         `;
@@ -978,7 +978,7 @@ export class DashboardPanel {
 
     const renderSourceRow = (s: Source) => `
       <div class="source-container">
-        <div class="item-row source-row" style="display: grid; grid-template-columns: 100px 180px 1fr auto 180px; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--border); cursor: pointer;" onclick="toggleSource(this, '${this.escapeHtml(s.id)}', '${this.escapeHtml(s.scope)}')">
+        <div class="item-row source-row" style="display: grid; grid-template-columns: 100px 180px 1fr auto 180px; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--border); cursor: pointer;" onclick="toggleSource(this, ${this.jsStringLiteral(s.id)}, ${this.jsStringLiteral(s.scope)})">
           <div style="display: flex; align-items: center; gap: 6px;">
             <span class="source-caret" style="transition: transform 0.2s; font-size: 10px; opacity: 0.8; display: inline-block;">▶</span>
             <span class="kind-pill" style="background: rgba(255, 255, 255, 0.1); color: var(--fg);">${this.escapeHtml(s.type)}</span>
@@ -991,9 +991,9 @@ export class DashboardPanel {
           </div>
           <div></div>
           <div class="source-actions" style="display: flex; gap: 4px; justify-content: flex-end;" onclick="event.stopPropagation()">
-            <button class="btn btn-sm btn-primary" title="Install Source Group" onclick="vscode.postMessage({ command: 'installSourceGroup', sourceId: '${this.escapeHtml(s.id)}', scope: '${this.escapeHtml(s.scope)}' })">⬇</button>
-            <button class="btn btn-sm btn-secondary" title="Export Source" onclick="vscode.postMessage({ command: 'exportSource', sourceId: '${this.escapeHtml(s.id)}', scope: '${this.escapeHtml(s.scope)}' })">⇧</button>
-            <button class="btn btn-sm btn-secondary" title="Remove Source" style="color: var(--badge-error); border-color: rgba(207, 34, 46, 0.3);" onclick="vscode.postMessage({ command: 'removeSource', sourceId: '${this.escapeHtml(s.id)}', scope: '${this.escapeHtml(s.scope)}' })">🗑</button>
+            <button class="btn btn-sm btn-primary" title="Install Source Group" onclick="vscode.postMessage({ command: 'installSourceGroup', sourceId: ${this.jsStringLiteral(s.id)}, scope: ${this.jsStringLiteral(s.scope)} })">⬇</button>
+            <button class="btn btn-sm btn-secondary" title="Export Source" onclick="vscode.postMessage({ command: 'exportSource', sourceId: ${this.jsStringLiteral(s.id)}, scope: ${this.jsStringLiteral(s.scope)} })">⇧</button>
+            <button class="btn btn-sm btn-secondary" title="Remove Source" style="color: var(--badge-error); border-color: rgba(207, 34, 46, 0.3);" onclick="vscode.postMessage({ command: 'removeSource', sourceId: ${this.jsStringLiteral(s.id)}, scope: ${this.jsStringLiteral(s.scope)} })">🗑</button>
           </div>
         </div>
         <div class="source-catalog" id="catalog-${this.escapeHtml(s.id)}-${this.escapeHtml(s.scope)}" style="display: none; padding: 8px 10px 8px 30px; background: rgba(0,0,0,0.1); border-bottom: 1px solid var(--border);">
@@ -1056,8 +1056,8 @@ export class DashboardPanel {
               <span style="opacity: 0.5; font-size: 10px; margin-left: 8px;">from ${this.escapeHtml(p.source.id)}</span>
             </div>
             <div style="display: flex; gap: 4px;">
-              <button class="btn btn-sm btn-primary" title="Install" onclick="vscode.postMessage({ command: 'installRecommendation', sourceId: '${this.escapeHtml(p.source.id)}', scope: '${this.escapeHtml(p.source.scope)}', artifactId: '${this.escapeHtml(p.artifact.id)}', assistant: '${this.escapeHtml(p.desired.assistant)}' })">⬇</button>
-              <button class="btn btn-sm btn-secondary" title="Unrecommend" style="color: var(--badge-error); border-color: rgba(207, 34, 46, 0.3);" onclick="vscode.postMessage({ command: 'unrecommendRecommendation', sourceId: '${this.escapeHtml(p.desired.sourceId)}', artifactId: '${this.escapeHtml(p.desired.artifactId)}', assistant: '${this.escapeHtml(p.desired.assistant)}' })">🗑</button>
+              <button class="btn btn-sm btn-primary" title="Install" onclick="vscode.postMessage({ command: 'installRecommendation', sourceId: ${this.jsStringLiteral(p.source.id)}, scope: ${this.jsStringLiteral(p.source.scope)}, artifactId: ${this.jsStringLiteral(p.artifact.id)}, assistant: ${this.jsStringLiteral(p.desired.assistant)} })">⬇</button>
+              <button class="btn btn-sm btn-secondary" title="Unrecommend" style="color: var(--badge-error); border-color: rgba(207, 34, 46, 0.3);" onclick="vscode.postMessage({ command: 'unrecommendRecommendation', sourceId: ${this.jsStringLiteral(p.desired.sourceId)}, artifactId: ${this.jsStringLiteral(p.desired.artifactId)}, assistant: ${this.jsStringLiteral(p.desired.assistant)} })">🗑</button>
             </div>
           </div>
         `;
@@ -1094,7 +1094,7 @@ export class DashboardPanel {
               <span style="opacity: 0.5; font-size: 10px; margin-left: 8px;">from ${this.escapeHtml(b.desired.sourceId)}</span>
             </div>
             <div style="display: flex; gap: 4px;">
-              <button class="btn btn-sm btn-secondary" title="Unrecommend" style="color: var(--badge-error); border-color: rgba(207, 34, 46, 0.3);" onclick="vscode.postMessage({ command: 'unrecommendRecommendation', sourceId: '${this.escapeHtml(b.desired.sourceId)}', artifactId: '${this.escapeHtml(b.desired.artifactId)}', assistant: '${this.escapeHtml(b.desired.assistant)}' })">🗑</button>
+              <button class="btn btn-sm btn-secondary" title="Unrecommend" style="color: var(--badge-error); border-color: rgba(207, 34, 46, 0.3);" onclick="vscode.postMessage({ command: 'unrecommendRecommendation', sourceId: ${this.jsStringLiteral(b.desired.sourceId)}, artifactId: ${this.jsStringLiteral(b.desired.artifactId)}, assistant: ${this.jsStringLiteral(b.desired.assistant)} })">🗑</button>
             </div>
           </div>
         `;
@@ -1258,7 +1258,7 @@ export class DashboardPanel {
     const environmentPills = presentAssistants.map(a => {
       const iconUris = getAssistantIconPath(a as AssistantId, this._extensionUri);
       const iconSrc = this._panel.webview.asWebviewUri(iconUris.light);
-      return `<button class="filter-pill env-pill" data-env="${this.escapeHtml(a)}" onclick="setEnvFilter('${this.escapeHtml(a)}')">
+      return `<button class="filter-pill env-pill" data-env="${this.escapeHtml(a)}" onclick="setEnvFilter(${this.jsStringLiteral(a)})">
         <img src="${iconSrc}" class="assistant-icon" width="14" height="14" />
         ${this.escapeHtml(a)}
       </button>`;
@@ -1769,6 +1769,20 @@ export class DashboardPanel {
       document.getElementById('detailTitle').textContent = rowEl.getAttribute('data-name') + ' (' + rowEl.getAttribute('data-kind') + ')';
       
       vscode.postMessage({ command: 'requestDetail', key: key });
+    }
+
+    // Switches to the Installed tab and opens a specific row's detail
+    // panel by identity key. Deliberately avoids building a CSS attribute
+    // selector string out of the key (e.g. '[data-key="' + key + '"]') --
+    // an artifact name containing a quote character would break that
+    // selector string the same way it used to break onclick handlers built
+    // via string concatenation; a plain attribute-value comparison over
+    // the existing rows sidesteps CSS-selector escaping entirely.
+    function jumpToInstalledRow(key) {
+      switchSection('installed');
+      const row = Array.from(document.querySelectorAll('#section-installed .item-row[data-key]'))
+        .find(r => r.getAttribute('data-key') === key);
+      if (row) selectRow(row, key);
     }
 
     function diffItem() {
