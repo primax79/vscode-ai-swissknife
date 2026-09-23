@@ -139,7 +139,7 @@ export async function checkForUpstreamUpdate(
   let resolution;
   try {
     const resolver = getSourceResolver(source.type);
-    resolution = await resolver.resolve(source);
+    resolution = await resolver.resolve(source, { homeRoot });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     return {

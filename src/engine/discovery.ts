@@ -199,7 +199,7 @@ export async function scanInstalledInventory(
   for (const source of allSources) {
     try {
       const resolver = getSourceResolver(source.type);
-      const resolution = await resolver.resolve(source);
+      const resolution = await resolver.resolve(source, { homeRoot });
 
       if (resolution) {
         resolvedSources.push({ source, resolution });

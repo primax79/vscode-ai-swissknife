@@ -1,8 +1,31 @@
-import { describe, it, beforeEach, afterEach } from 'node:test';
+import { describe, it, before, after, beforeEach, afterEach } from 'node:test';
 import * as assert from 'node:assert';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+
+// File-wide HOME sandbox. Several tests below build providers without an
+// explicit homeRoot, so "global" scope falls back to os.homedir(). Without
+// this, those tests read the developer's real ~/.ai-swissknife manifest and
+// kick off real git fetches of its registered sources — which also made the
+// suite flaky: a fetch started under the real HOME could still be running
+// when a later test swapped HOME to its own temp dir, writing into it while
+// afterEach was removing it (ENOTEMPTY).
+const realHome = process.env.HOME;
+const realUserProfile = process.env.USERPROFILE;
+const sandboxHome = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-swissknife-ui-sandbox-home-'));
+process.env.HOME = sandboxHome;
+process.env.USERPROFILE = sandboxHome;
+before(() => {
+  assert.strictEqual(os.homedir(), sandboxHome);
+});
+after(() => {
+  for (const [key, value] of [['HOME', realHome], ['USERPROFILE', realUserProfile]] as const) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  fs.rmSync(sandboxHome, { recursive: true, force: true });
+});
 
 // Setup minimal mock for 'vscode' before importing UI modules in pure Node tests
 // eslint-disable-next-line @typescript-eslint/no-var-requires

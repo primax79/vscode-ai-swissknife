@@ -302,7 +302,7 @@ export class AvailableTreeDataProvider
     for (const src of sources) {
       try {
         const resolver = getSourceResolver(src.type);
-        const resolution: SourceResolution = await resolver.resolve(src);
+        const resolution: SourceResolution = await resolver.resolve(src, { homeRoot: this.homeRoot });
         this.cachedSourceGroups.push(new AvailableSourceGroupItem(src, resolution));
         resolutionAttempts.set(src.id, { status: 'resolved', source: src, packages: resolution.packages });
       } catch (err: unknown) {

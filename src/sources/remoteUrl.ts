@@ -19,13 +19,13 @@ import { extractSkillFrontmatter } from './detect';
  */
 export async function resolveRemoteUrl(
   source: Source,
-  opts?: { cacheDir?: string }
+  opts?: { cacheDir?: string; homeRoot?: string }
 ): Promise<SourceResolution> {
   if (!source.url || source.url.trim() === '') {
     throw new Error(`source.url is required for remote-url source "${source.id}"`);
   }
 
-  const baseCacheDir = opts?.cacheDir ?? path.join(os.homedir(), '.ai-swissknife', 'cache', 'remote');
+  const baseCacheDir = opts?.cacheDir ?? path.join(opts?.homeRoot ?? os.homedir(), '.ai-swissknife', 'cache', 'remote');
   const sanitizedId = source.id.replace(/[^a-zA-Z0-9._-]/g, '_');
   const targetDir = path.join(baseCacheDir, sanitizedId);
   await fs.promises.mkdir(targetDir, { recursive: true });
@@ -102,9 +102,9 @@ export async function resolveArtifactContent(
   source: Source,
   pkg: Package,
   artifact: Artifact,
-  opts?: { cacheDir?: string }
+  opts?: { cacheDir?: string; homeRoot?: string }
 ): Promise<ResolvedArtifact<CanonicalSkill | CanonicalAgent | CanonicalCommand | CanonicalMcpServer | CanonicalHook | CanonicalRule>> {
-  const baseCacheDir = opts?.cacheDir ?? path.join(os.homedir(), '.ai-swissknife', 'cache', 'remote');
+  const baseCacheDir = opts?.cacheDir ?? path.join(opts?.homeRoot ?? os.homedir(), '.ai-swissknife', 'cache', 'remote');
   const sanitizedId = source.id.replace(/[^a-zA-Z0-9._-]/g, '_');
   const targetDir = path.join(baseCacheDir, sanitizedId);
   const fileName = path.basename(new URL(source.url!).pathname) || 'artifact.md';

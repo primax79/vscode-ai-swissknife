@@ -80,12 +80,12 @@ export interface SourceResolver {
   readonly type: SourceType;
   readonly displayName: string;
   readonly iconThemeId: string;
-  resolve(source: Source, opts?: { cacheDir?: string }): Promise<SourceResolution>;
+  resolve(source: Source, opts?: { cacheDir?: string; homeRoot?: string }): Promise<SourceResolution>;
   resolveArtifactContent(
     source: Source,
     pkg: Package,
     artifact: Artifact,
-    opts?: { cacheDir?: string }
+    opts?: { cacheDir?: string; homeRoot?: string }
   ): Promise<ResolvedArtifact<CanonicalSkill | CanonicalAgent | CanonicalCommand | CanonicalMcpServer | CanonicalHook | CanonicalRule>>;
 }
 

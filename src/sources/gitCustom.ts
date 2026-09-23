@@ -25,6 +25,8 @@ import { runGit } from './gitProcess';
 
 export interface GitCustomResolveOptions {
   cacheDir?: string;
+  /** Home root for the default cache dir (tests); ignored when cacheDir is set. */
+  homeRoot?: string;
 }
 
 export class KeyedMutex {
@@ -84,7 +86,7 @@ export async function resolveGitCustom(
     throw new Error(`source.url is required for git-custom source "${source.id}"`);
   }
 
-  const baseCacheDir = opts?.cacheDir ?? path.join(os.homedir(), '.ai-swissknife', 'cache', 'sources');
+  const baseCacheDir = opts?.cacheDir ?? path.join(opts?.homeRoot ?? os.homedir(), '.ai-swissknife', 'cache', 'sources');
   const sanitizedId = source.id.replace(/[^a-zA-Z0-9._-]/g, '_');
   const targetDir = path.join(baseCacheDir, sanitizedId);
 
@@ -341,7 +343,7 @@ export async function resolveArtifactContent(
     throw new Error('Package version commit is required for git-custom content resolution');
   }
 
-  const baseCacheDir = opts?.cacheDir ?? path.join(os.homedir(), '.ai-swissknife', 'cache', 'sources');
+  const baseCacheDir = opts?.cacheDir ?? path.join(opts?.homeRoot ?? os.homedir(), '.ai-swissknife', 'cache', 'sources');
   const sanitizedId = source.id.replace(/[^a-zA-Z0-9._-]/g, '_');
   const targetDir = path.join(baseCacheDir, sanitizedId);
 
