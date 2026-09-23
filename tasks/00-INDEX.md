@@ -111,6 +111,26 @@ consume `postMessage` field bugs, missing cross-refresh calls on
 Initiative-26-era Dashboard actions) — see the individual merge commits
 for detail.
 
+**2026-09-14 — Initiative 35 complete**: hands-on `.vsix` testing
+feedback on Phase 9 (instant loading shell, Overview content, Installed
+per-tool comparison matrix replacing the flat table, catalog rows as a
+real grid table, icon-only buttons), specced inline in its own
+[`plan.md`](35-dashboard-hands-on-fixes/plan.md) — no separate spec file.
+Followed by two unplanned fixes (Dashboard buttons silently failing on
+artifact names containing an apostrophe).
+
+**2026-09-23 — Test-isolation fix, all planned development complete**:
+the UI test suite was reading the developer's real `~/.ai-swissknife`
+global manifest and running real `git fetch`es of its registered sources
+(providers built without `homeRoot` fall back to `os.homedir()`), which
+also made the suite flaky (a fetch started under the real HOME could
+write into a later test's temp home while it was being removed —
+`ENOTEMPTY`). Fixed with a file-wide HOME sandbox in `ui.test.ts`, plus
+threading `homeRoot` through the `SourceResolver` opts so resolver cache
+dirs honour it (`discovery`, `drift`, `availableView` call sites). No
+open initiatives remain; next work is expected to come from another
+hands-on testing round.
+
 ## Initiatives
 
 `#` is the stable id (folder/task prefix); it is NOT reading order —
@@ -194,6 +214,17 @@ Phase 6 (sidebar/Dashboard usability overhaul):
 
 Phase 7 (sidebar navigation unification):
 16, 22 ──────────────────────► 28 (Sources+Available merge, Installed kind-grouping)
+
+Phase 8 (internal registries, independent of each other):
+03, 12, 21 ──────────────────► 29 (Adapter registry + enabled-assistants config)
+04, 11, 20 ──────────────────► 30 (Source-resolver registry)
+
+Phase 9 (Dashboard superset of sidebar, sequenced after Phase 8):
+28, 29, 30 ──► 31 (action-layer decoupling) ──┬──► 33 (Sources & Catalog)
+28, 29 ──────► 32 (structural skeleton) ──────┴──► 34 (Recommendations + parity)
+
+Hands-on fixes:
+31, 32, 33, 34 ──────────────► 35 (Dashboard hands-on testing fixes)
 ```
 
 ---
