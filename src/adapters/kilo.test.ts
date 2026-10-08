@@ -3,6 +3,8 @@ import * as assert from 'node:assert';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { execSync } from 'node:child_process';
+import * as jsonc from 'jsonc-parser';
 import { KiloAdapter, kiloAdapter } from './kilo';
 import { ClaudeAdapter, claudeAdapter } from './claude';
 import type {
@@ -133,15 +135,83 @@ describe('KiloAdapter', () => {
       );
     });
 
-    it('mcpConfigPath returns correct global and project paths', () => {
+    it('mcpConfigPath returns correct default global and project paths (kilo.jsonc)', () => {
       const globalPath = adapter.mcpConfigPath({ scope: 'global' });
-      assert.strictEqual(globalPath, path.join(testHomeDir, '.config', 'kilo', 'mcp.json'));
+      assert.strictEqual(globalPath, path.join(testHomeDir, '.config', 'kilo', 'kilo.jsonc'));
 
       const projectPath = adapter.mcpConfigPath({
         scope: 'project',
         projectRoot: testProjectDir,
       });
-      assert.strictEqual(projectPath, path.join(testProjectDir, '.kilo', 'mcp.json'));
+      assert.strictEqual(projectPath, path.join(testProjectDir, '.kilo', 'kilo.jsonc'));
+    });
+
+    it('mcpConfigPath follows global discovery order', async () => {
+      const globalDir = path.join(testHomeDir, '.config', 'kilo');
+      await fs.promises.mkdir(globalDir, { recursive: true });
+
+      // config.json (least precedence)
+      const configJson = path.join(globalDir, 'config.json');
+      await fs.promises.writeFile(configJson, '{}');
+      assert.strictEqual(adapter.mcpConfigPath({ scope: 'global' }), configJson);
+
+      // opencode.json
+      const opencodeJson = path.join(globalDir, 'opencode.json');
+      await fs.promises.writeFile(opencodeJson, '{}');
+      assert.strictEqual(adapter.mcpConfigPath({ scope: 'global' }), opencodeJson);
+
+      // opencode.jsonc
+      const opencodeJsonc = path.join(globalDir, 'opencode.jsonc');
+      await fs.promises.writeFile(opencodeJsonc, '{}');
+      assert.strictEqual(adapter.mcpConfigPath({ scope: 'global' }), opencodeJsonc);
+
+      // kilo.json
+      const kiloJson = path.join(globalDir, 'kilo.json');
+      await fs.promises.writeFile(kiloJson, '{}');
+      assert.strictEqual(adapter.mcpConfigPath({ scope: 'global' }), kiloJson);
+
+      // kilo.jsonc (highest precedence)
+      const kiloJsonc = path.join(globalDir, 'kilo.jsonc');
+      await fs.promises.writeFile(kiloJsonc, '{}');
+      assert.strictEqual(adapter.mcpConfigPath({ scope: 'global' }), kiloJsonc);
+    });
+
+    it('mcpConfigPath follows project discovery order', async () => {
+      // 1. Root config file
+      const rootKiloJson = path.join(testProjectDir, 'kilo.json');
+      await fs.promises.writeFile(rootKiloJson, '{}');
+      assert.strictEqual(
+        adapter.mcpConfigPath({ scope: 'project', projectRoot: testProjectDir }),
+        rootKiloJson
+      );
+
+      // 2. .kilocode takes precedence over project root
+      const kilocodeDir = path.join(testProjectDir, '.kilocode');
+      await fs.promises.mkdir(kilocodeDir, { recursive: true });
+      const kilocodeOpencodeJson = path.join(kilocodeDir, 'opencode.json');
+      await fs.promises.writeFile(kilocodeOpencodeJson, '{}');
+      assert.strictEqual(
+        adapter.mcpConfigPath({ scope: 'project', projectRoot: testProjectDir }),
+        kilocodeOpencodeJson
+      );
+
+      // 3. .kilo takes precedence over .kilocode
+      const kiloDir = path.join(testProjectDir, '.kilo');
+      await fs.promises.mkdir(kiloDir, { recursive: true });
+      const kiloKiloJson = path.join(kiloDir, 'kilo.json');
+      await fs.promises.writeFile(kiloKiloJson, '{}');
+      assert.strictEqual(
+        adapter.mcpConfigPath({ scope: 'project', projectRoot: testProjectDir }),
+        kiloKiloJson
+      );
+
+      // 4. .kilo/kilo.jsonc takes highest precedence
+      const kiloKiloJsonc = path.join(kiloDir, 'kilo.jsonc');
+      await fs.promises.writeFile(kiloKiloJsonc, '{}');
+      assert.strictEqual(
+        adapter.mcpConfigPath({ scope: 'project', projectRoot: testProjectDir }),
+        kiloKiloJsonc
+      );
     });
 
     it('rulePath returns correct global (~/.config/kilo/AGENTS.md) and project (<root>/CLAUDE.md) paths', () => {
@@ -366,15 +436,35 @@ describe('KiloAdapter', () => {
   });
 
   describe('mcpServers', () => {
-    it('Round-trip: writeMcpServer merges server into .kilo/mcp.json and reads back', async () => {
+    it('Round-trip: writeMcpServer writes exact Kilo local shape to kilo.jsonc and reads back', async () => {
       const server1: CanonicalMcpServer = {
         id: 'sqlite',
         type: 'stdio',
         command: 'uvx',
         args: ['mcp-server-sqlite', '--db-path', 'test.db'],
+        env: { DB_DIR: '/tmp/db' },
       };
 
       await adapter.writeMcpServer(server1, { scope: 'project', projectRoot: testProjectDir });
+      const configPath = adapter.mcpConfigPath({ scope: 'project', projectRoot: testProjectDir });
+      assert.strictEqual(configPath, path.join(testProjectDir, '.kilo', 'kilo.jsonc'));
+
+      // Verify exact on-disk shape
+      const rawContent = await fs.promises.readFile(configPath, 'utf-8');
+      const parsed = jsonc.parse(rawContent);
+      assert.ok(parsed.mcp);
+      assert.deepStrictEqual(parsed.mcp.sqlite, {
+        type: 'local',
+        command: ['uvx', 'mcp-server-sqlite', '--db-path', 'test.db'],
+        environment: { DB_DIR: '/tmp/db' },
+      });
+      // Ensure "enabled" is not injected by default
+      assert.strictEqual('enabled' in parsed.mcp.sqlite, false);
+
+      // Verify legacy mcp.json was NOT written
+      assert.strictEqual(fs.existsSync(path.join(testProjectDir, '.kilo', 'mcp.json')), false);
+
+      // Verify readMcpServer maps back to canonical
       const loaded = await adapter.readMcpServer('sqlite', {
         scope: 'project',
         projectRoot: testProjectDir,
@@ -384,12 +474,172 @@ describe('KiloAdapter', () => {
       assert.strictEqual(loaded.type, 'stdio');
       assert.strictEqual(loaded.command, 'uvx');
       assert.deepStrictEqual(loaded.args, ['mcp-server-sqlite', '--db-path', 'test.db']);
+      assert.deepStrictEqual(loaded.env, { DB_DIR: '/tmp/db' });
 
       const list = await adapter.listMcpServers({ scope: 'project', projectRoot: testProjectDir });
       assert.deepStrictEqual(list, ['sqlite']);
     });
 
-    it('removeMcpServer removes only the specified server', async () => {
+    it('Round-trip: writeMcpServer writes remote shape and preserves extraFields (global scope)', async () => {
+      const server: CanonicalMcpServer = {
+        id: 'remote-api',
+        type: 'http',
+        url: 'https://api.example.com/mcp',
+        headers: { Authorization: 'Bearer test-token' },
+        extraFields: {
+          oauth: false,
+          timeout: 10000,
+          enabled: true,
+        },
+      };
+
+      await adapter.writeMcpServer(server, { scope: 'global' });
+      const globalConfigPath = adapter.mcpConfigPath({ scope: 'global' });
+      assert.strictEqual(globalConfigPath, path.join(testHomeDir, '.config', 'kilo', 'kilo.jsonc'));
+
+      // Verify exact on-disk shape
+      const rawContent = await fs.promises.readFile(globalConfigPath, 'utf-8');
+      const parsed = jsonc.parse(rawContent);
+      assert.deepStrictEqual(parsed.mcp['remote-api'], {
+        type: 'remote',
+        url: 'https://api.example.com/mcp',
+        headers: { Authorization: 'Bearer test-token' },
+        oauth: false,
+        timeout: 10000,
+        enabled: true,
+      });
+
+      // Verify legacy mcp.json was NOT written in global scope
+      assert.strictEqual(fs.existsSync(path.join(testHomeDir, '.config', 'kilo', 'mcp.json')), false);
+
+      // Verify readMcpServer maps remote back to http and restores extraFields
+      const loaded = await adapter.readMcpServer('remote-api', { scope: 'global' });
+      assert.ok(loaded);
+      assert.strictEqual(loaded.id, 'remote-api');
+      assert.strictEqual(loaded.type, 'http');
+      assert.strictEqual(loaded.url, 'https://api.example.com/mcp');
+      assert.deepStrictEqual(loaded.headers, { Authorization: 'Bearer test-token' });
+      assert.deepStrictEqual(loaded.extraFields, {
+        oauth: false,
+        timeout: 10000,
+        enabled: true,
+      });
+
+      const list = await adapter.listMcpServers({ scope: 'global' });
+      assert.deepStrictEqual(list, ['remote-api']);
+    });
+
+    it('Comments and trailing commas survive byte-for-byte except the changed key', async () => {
+      const kiloDir = path.join(testProjectDir, '.kilo');
+      await fs.promises.mkdir(kiloDir, { recursive: true });
+      const configPath = path.join(kiloDir, 'kilo.jsonc');
+
+      const initialContent = `// Top-level comment
+{
+  // Model settings
+  "model": "claude-3-7-sonnet",
+  /* Provider block */
+  "provider": {
+    "anthropic": {},
+  },
+  "tools": [
+    "bash",
+    "edit",
+  ],
+}
+`;
+      await fs.promises.writeFile(configPath, initialContent, 'utf-8');
+
+      // Install server
+      const server: CanonicalMcpServer = {
+        id: 'test-server',
+        type: 'stdio',
+        command: 'node',
+        args: ['index.js'],
+      };
+      await adapter.writeMcpServer(server, { scope: 'project', projectRoot: testProjectDir });
+
+      const updatedContent = await fs.promises.readFile(configPath, 'utf-8');
+      assert.ok(updatedContent.includes('// Top-level comment'));
+      assert.ok(updatedContent.includes('// Model settings'));
+      assert.ok(updatedContent.includes('/* Provider block */'));
+      assert.ok(updatedContent.includes('"anthropic": {},'));
+      assert.ok(updatedContent.includes('"edit",'));
+      assert.ok(updatedContent.includes('"test-server"'));
+
+      // Remove server
+      await adapter.removeMcpServer('test-server', { scope: 'project', projectRoot: testProjectDir });
+      const contentAfterRemoval = await fs.promises.readFile(configPath, 'utf-8');
+      assert.ok(contentAfterRemoval.includes('// Top-level comment'));
+      assert.ok(contentAfterRemoval.includes('// Model settings'));
+      assert.ok(contentAfterRemoval.includes('/* Provider block */'));
+      assert.ok(contentAfterRemoval.includes('"anthropic": {},'));
+      assert.ok(contentAfterRemoval.includes('"edit",'));
+      assert.strictEqual(contentAfterRemoval.includes('"test-server"'), false);
+    });
+
+    it('Legacy mcp.json entries are discoverable and removable, but new installs never write mcp.json', async () => {
+      const kiloDir = path.join(testProjectDir, '.kilo');
+      await fs.promises.mkdir(kiloDir, { recursive: true });
+      const legacyPath = path.join(kiloDir, 'mcp.json');
+
+      await fs.promises.writeFile(
+        legacyPath,
+        JSON.stringify({
+          mcpServers: {
+            'legacy-sqlite': {
+              command: 'uvx',
+              args: ['mcp-server-sqlite'],
+              env: { LEGACY_FLAG: '1' },
+            },
+          },
+        }, null, 2),
+        'utf-8'
+      );
+
+      // Discovery finds legacy entry
+      const listBefore = await adapter.listMcpServers({ scope: 'project', projectRoot: testProjectDir });
+      assert.ok(listBefore.includes('legacy-sqlite'));
+
+      // Reading maps legacy entry back
+      const readLegacy = await adapter.readMcpServer('legacy-sqlite', {
+        scope: 'project',
+        projectRoot: testProjectDir,
+      });
+      assert.ok(readLegacy);
+      assert.strictEqual(readLegacy.id, 'legacy-sqlite');
+      assert.strictEqual(readLegacy.type, 'stdio');
+      assert.strictEqual(readLegacy.command, 'uvx');
+      assert.deepStrictEqual(readLegacy.args, ['mcp-server-sqlite']);
+      assert.deepStrictEqual(readLegacy.env, { LEGACY_FLAG: '1' });
+
+      // Installing a new server writes kilo.jsonc, not mcp.json
+      const newServer: CanonicalMcpServer = {
+        id: 'new-server',
+        type: 'stdio',
+        command: 'echo',
+        args: ['hello'],
+      };
+      await adapter.writeMcpServer(newServer, { scope: 'project', projectRoot: testProjectDir });
+      assert.ok(fs.existsSync(path.join(kiloDir, 'kilo.jsonc')));
+
+      // Legacy file still only contains legacy-sqlite, not new-server
+      const legacyRaw = await fs.promises.readFile(legacyPath, 'utf-8');
+      assert.strictEqual(legacyRaw.includes('new-server'), false);
+
+      // Removing legacy entry cleans it from legacy mcp.json
+      await adapter.removeMcpServer('legacy-sqlite', { scope: 'project', projectRoot: testProjectDir });
+      const readLegacyAfter = await adapter.readMcpServer('legacy-sqlite', {
+        scope: 'project',
+        projectRoot: testProjectDir,
+      });
+      assert.strictEqual(readLegacyAfter, null);
+
+      const listAfter = await adapter.listMcpServers({ scope: 'project', projectRoot: testProjectDir });
+      assert.deepStrictEqual(listAfter, ['new-server']);
+    });
+
+    it('removeMcpServer removes only the specified server from kilo.jsonc', async () => {
       const server1: CanonicalMcpServer = { id: 'sqlite', type: 'stdio', command: 'uvx' };
       const server2: CanonicalMcpServer = { id: 'remote-docs', type: 'sse', url: 'https://docs.example.com' };
 
@@ -408,6 +658,72 @@ describe('KiloAdapter', () => {
     it('removeMcpServer on nonexistent server does not throw', async () => {
       await adapter.removeMcpServer('nonexistent', { scope: 'project', projectRoot: testProjectDir });
       assert.ok(true);
+    });
+  });
+
+  describe('Real Kilo smoke test (opt-in)', () => {
+    it('installs through adapter and kilo mcp list lists the server', async (t) => {
+      if (!process.env.AISK_REAL_KILO) {
+        t.skip('Skipped: AISK_REAL_KILO is not set');
+        return;
+      }
+
+      const isolatedHome = path.join(testTempDir, 'real-kilo-home');
+      const isolatedProject = path.join(testTempDir, 'real-kilo-project');
+      await fs.promises.mkdir(isolatedHome, { recursive: true });
+      await fs.promises.mkdir(isolatedProject, { recursive: true });
+
+      const realAdapter = new KiloAdapter(() => isolatedHome);
+
+      // Global scope install
+      await realAdapter.writeMcpServer(
+        {
+          id: 'swk-global-smoke',
+          type: 'stdio',
+          command: 'echo',
+          args: ['global-smoke'],
+        },
+        { scope: 'global' }
+      );
+
+      // Project scope install
+      await realAdapter.writeMcpServer(
+        {
+          id: 'swk-proj-smoke',
+          type: 'stdio',
+          command: 'echo',
+          args: ['proj-smoke'],
+        },
+        { scope: 'project', projectRoot: isolatedProject }
+      );
+
+      const env = {
+        ...process.env,
+        HOME: isolatedHome,
+        XDG_CONFIG_HOME: path.join(isolatedHome, '.config'),
+      };
+
+      // Check global listing from Kilo CLI
+      const globalOutput = execSync('kilo mcp list', {
+        env,
+        cwd: isolatedHome,
+        encoding: 'utf-8',
+      });
+      assert.ok(
+        globalOutput.includes('swk-global-smoke'),
+        `Expected "swk-global-smoke" in kilo mcp list output:\n${globalOutput}`
+      );
+
+      // Check project listing from Kilo CLI
+      const projectOutput = execSync('kilo mcp list', {
+        env,
+        cwd: isolatedProject,
+        encoding: 'utf-8',
+      });
+      assert.ok(
+        projectOutput.includes('swk-proj-smoke'),
+        `Expected "swk-proj-smoke" in project kilo mcp list output:\n${projectOutput}`
+      );
     });
   });
 
