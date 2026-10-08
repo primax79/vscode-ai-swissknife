@@ -182,6 +182,7 @@ hands-on testing round.
 | 42       | 42  | [Item actions, Tier 1 remainder](42-item-actions-tier1/plan.md)                            | planned (5 tasks, no open questions) | 39.2, 40 | M    |
 | 43       | 43  | [Disabled state for installed items](43-disabled-state/plan.md)                              | spike 43.1 ready; 43.2-43.4 outlined, specified after the spike | 40, 42 | L    |
 | 44       | 44  | [Hardening and fixes from the kilocode-dev cross-check](44-hardening-from-kilocode-dev/plan.md) | planned (5 tasks; 44.1 and 44.3 are P1) | 36.1, 38.1 | M    |
+| 45       | 45  | [Claude Code plugins, native management](45-claude-plugins/plan.md)                          | P3, after the rest: spike 45.1 paused (partial findings); CP-Q3/Q5 assumptions unconfirmed | 40, 42 | L    |
 
 ## Next up
 

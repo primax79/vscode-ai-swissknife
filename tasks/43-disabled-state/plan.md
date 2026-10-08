@@ -7,6 +7,8 @@
 
 ## Locked-in decisions
 
+- **Claude plugins are out of this initiative** (owner, 2026-10-08, initiative 45): they have a native disable (`claude plugin disable`), so no `_disabled` folder is used for them.
+
 - Disable and enable are a single `rename` (move, never copy); enable returns the item to the exact original path; nothing is overwritten on enable (name collision -> ask).
 - User-facing vocabulary: states "Disabled" / "Enabled"; scope "Workspace" / "Global" (CONTEXT.md).
 - Managed items keep their record: state gets a `disabled` flag and the updated `path` (state `schemaVersion` bump + migration); unmanaged items are self-described by the folder layout.

@@ -2,6 +2,16 @@
 
 All notable changes to the "AI Swissknife" extension are documented in this file.
 
+## [0.4.0] - 2026-10-08
+
+- Changed: the Dashboard item detail panel now shows a header (kind, assistant,
+  scope), the state in words, a computed origin (it no longer says "no known
+  origin" for items that match a registered source), the file location and a
+  single action bar with labelled buttons; Diff moved into the bar (39.4).
+- Security hardening: git sources now validate the URL, branch/tag/commit and
+  cache id before running git, use `--` separators and a protocol allow-list
+  (44.1).
+
 ## [0.3.0] - 2026-10-08
 
 - Changed: Add Source wizard reordered to type, scope, location, then id and
