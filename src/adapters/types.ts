@@ -1,4 +1,4 @@
-import type { AssistantId, Scope } from '../domain/types';
+import type { AssistantId, Scope, ItemKind } from '../domain/types';
 
 export interface CanonicalSkillFile {
   path: string;
@@ -62,6 +62,8 @@ export interface CanonicalRule {
   content: string;
 }
 
+export type DisableSupport = 'verified' | 'unverified' | 'unsupported';
+
 export interface LocationRef {
   scope: Scope;
   projectRoot?: string;
@@ -71,6 +73,9 @@ export interface Adapter {
   readonly assistant: AssistantId;
   readonly displayName: string;
   readonly iconId: string;
+  readonly disableSupport: DisableSupport;
+
+  getDisabledPath(kind: ItemKind, name: string, loc: LocationRef): string | undefined;
 
   skillDir(name: string, loc: LocationRef): string;
   skillPath(name: string, loc: LocationRef): string;

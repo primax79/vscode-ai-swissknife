@@ -122,6 +122,19 @@ export async function planUpdate(
   source: Source,
   options?: PlanUpdateOptions
 ): Promise<PreparedInstall> {
+  if (inst.disabled) {
+    return {
+      supported: false,
+      plan: {
+        supported: false,
+        sourceId: source.id,
+        packageId: inst.packageId ?? `${source.id}:${inst.name}`,
+        artifactId: inst.artifactId ?? `${source.id}:${inst.name}`,
+        reason: `Cannot update disabled item "${inst.name}". Enable the item before updating.`,
+      },
+    };
+  }
+
   let targetPkg: Package | undefined;
   let targetArt: Artifact | undefined;
 
@@ -268,6 +281,15 @@ export async function planUpdateAll(params: PlanUpdateAllParams): Promise<PlanUp
       if (filter.assistant !== undefined && inst.assistant !== filter.assistant) continue;
       if (filter.sourceId !== undefined && inst.sourceId !== filter.sourceId) continue;
       if (filter.kind !== undefined && inst.kind !== filter.kind) continue;
+    }
+
+    // 1.5. Check if disabled
+    if (inst.disabled) {
+      cannotUpdate.push({
+        installation: inst,
+        reason: `Cannot update disabled item "${inst.name}". Enable the item before updating.`,
+      });
+      continue;
     }
 
     // 2. Check sourceId

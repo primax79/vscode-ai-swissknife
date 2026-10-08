@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as jsonc from 'jsonc-parser';
-import type { AssistantId } from '../domain/types';
+import type { AssistantId, ItemKind } from '../domain/types';
 import type {
   Adapter,
   CanonicalRule,
@@ -12,6 +12,7 @@ import type {
   CanonicalMcpServer,
   CanonicalHook,
   LocationRef,
+  DisableSupport,
 } from './types';
 import { readSkill as codecReadSkill, writeSkill as codecWriteSkill } from './codec';
 import { parseYamlValue, serializeYamlValue } from './claude';
@@ -614,6 +615,32 @@ export class KiloAdapter implements Adapter {
   readonly assistant: AssistantId = 'kilo-code';
   readonly displayName: string = 'Kilo Code';
   readonly iconId: string = 'ai-swissknife-kilo-code';
+  readonly disableSupport: DisableSupport = 'verified';
+
+  getDisabledPath(kind: ItemKind, name: string, loc: LocationRef): string | undefined {
+    if (kind === 'skill') {
+      const activeFile = this.skillPath(name, loc);
+      const skillDir = path.dirname(activeFile);
+      const activeDir = path.dirname(skillDir);
+      const assistantRoot = path.dirname(activeDir);
+      return path.join(assistantRoot, '_disabled', path.basename(activeDir), name);
+    }
+    if (kind === 'agent') {
+      const activeFile = this.agentPath(name, loc);
+      const activeDir = path.dirname(activeFile);
+      const assistantRoot = path.dirname(activeDir);
+      const fileName = path.basename(activeFile);
+      return path.join(assistantRoot, '_disabled', path.basename(activeDir), fileName);
+    }
+    if (kind === 'command') {
+      const activeFile = this.commandPath(name, loc);
+      const activeDir = path.dirname(activeFile);
+      const assistantRoot = path.dirname(activeDir);
+      const fileName = path.basename(activeFile);
+      return path.join(assistantRoot, '_disabled', path.basename(activeDir), fileName);
+    }
+    return undefined;
+  }
 
   constructor(private readonly getHomedir: () => string = os.homedir) {}
 

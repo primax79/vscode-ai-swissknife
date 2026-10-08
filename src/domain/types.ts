@@ -104,6 +104,7 @@ export interface ManagedInstallation {
   sourceRevision?: ResolvedRevision;
   installedAt: string;
   contentHash?: string;
+  disabled?: boolean;
 }
 
 export type ConversionDiagnostic =
