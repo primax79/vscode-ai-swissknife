@@ -48,8 +48,14 @@ let mockConfigGetResult: any = undefined;
 let mockCustomShowQuickPick: ((items: any, options?: any) => Promise<any>) | undefined = undefined;
 let mockCustomShowInputBox: ((options?: any) => Promise<any>) | undefined = undefined;
 let mockCustomShowOpenDialog: ((options?: any) => Promise<any>) | undefined = undefined;
+let mockCustomShowInformationMessage: ((msg: string, ...args: any[]) => Promise<any>) | undefined = undefined;
 
 const mockVscode = {
+  ProgressLocation: {
+    SourceControl: 1,
+    Window: 10,
+    Notification: 15,
+  },
   StatusBarAlignment: {
     Left: 1,
     Right: 2,
@@ -110,12 +116,25 @@ const mockVscode = {
     One: 1,
   },
   window: {
-    showInformationMessage: async (msg: string, ...actions: string[]) => {
+    showInformationMessage: async (msg: string, ...actions: any[]) => {
       mockShowInformationMessageCalls.push({ msg, actions });
+      if (mockCustomShowInformationMessage) return mockCustomShowInformationMessage(msg, ...actions);
       return mockShowInformationMessageResult;
     },
     showWarningMessage: async (msg: string) => { mockLastWarningMessage = msg; return undefined; },
     showErrorMessage: async () => undefined,
+    createOutputChannel: (name: string) => ({
+      name,
+      append: () => {},
+      appendLine: () => {},
+      clear: () => {},
+      show: () => {},
+      hide: () => {},
+      dispose: () => {},
+    }),
+    withProgress: async (_options: any, task: (progress: any) => Promise<any>) => {
+      return await task({ report: () => {} });
+    },
     showQuickPick: async (items: any, options?: any) => {
       if (mockCustomShowQuickPick) return mockCustomShowQuickPick(items, options);
       return mockQuickPickResult;
@@ -128,17 +147,25 @@ const mockVscode = {
       if (mockCustomShowOpenDialog) return mockCustomShowOpenDialog(options);
       return undefined;
     },
-    createWebviewPanel: () => ({
-      reveal: () => {},
-      dispose: () => {},
-      onDidDispose: () => ({ dispose: () => {} }),
-      webview: {
-        html: '',
-        asWebviewUri: (uri: any) => 'vscode-webview-resource://' + uri.fsPath,
-        onDidReceiveMessage: () => ({ dispose: () => {} }),
-        postMessage: async () => {},
-      },
-    }),
+    createWebviewPanel: () => {
+      let msgListener: ((msg: any) => Promise<any>) | undefined;
+      return {
+        reveal: () => {},
+        dispose: () => {},
+        onDidDispose: () => ({ dispose: () => {} }),
+        webview: {
+          html: '',
+          asWebviewUri: (uri: any) => 'vscode-webview-resource://' + uri.fsPath,
+          onDidReceiveMessage: (listener: any) => {
+            msgListener = listener;
+            return { dispose: () => {} };
+          },
+          postMessage: async (msg: any) => {
+            if (msgListener) await msgListener(msg);
+          },
+        },
+      };
+    },
     registerTreeDataProvider: () => ({ dispose: () => {} }),
     createTreeView: () => ({
       onDidChangeSelection: () => ({ dispose: () => {} }),
@@ -174,7 +201,13 @@ const mockVscode = {
       mockRegisteredCommands.set(command, callback);
       return { dispose: () => {} };
     },
-    executeCommand: async () => {},
+    executeCommand: async (command: string, ...args: any[]) => {
+      const handler = mockRegisteredCommands.get(command);
+      if (handler) {
+        return await handler(...args);
+      }
+      return undefined;
+    },
   },
   Uri: {
     joinPath: (base: any, ...segments: string[]) => ({ fsPath: [base.fsPath, ...segments].join('/') }),
@@ -209,6 +242,9 @@ import { FormEditorPanel } from './formEditor';
 import { handleRecommendForWorkspace, handleUnrecommendForWorkspace } from '../extension';
 import { RecommendedGroupItem, RecommendedBrokenItem } from './availableView';
 import type { DesiredInstallation } from '../domain/registry';
+import * as extensionModule from '../extension';
+import * as driftModule from '../engine/drift';
+import * as updateModule from '../engine/update';
 
 describe('UI TreeDataProviders', () => {
   let testTempDir: string;
@@ -2550,6 +2586,411 @@ describe('UI TreeDataProviders', () => {
       await handler();
 
       assert.strictEqual(mockConfigUpdates.length, 0);
+    });
+  });
+
+  describe('Update all (47.2)', () => {
+    it('package.json check: aiSwissknife.updateAll and per-environment view/title entries', async () => {
+      const pkgPath = path.join(__dirname, '../../package.json');
+      const pkgJson = JSON.parse(await fs.promises.readFile(pkgPath, 'utf8'));
+
+      // 1. Palette entry for aiSwissknife.updateAll
+      const cmds = pkgJson.contributes.commands;
+      const updateAllCmd = cmds.find((c: any) => c.command === 'aiSwissknife.updateAll');
+      assert.ok(updateAllCmd, 'aiSwissknife.updateAll must be in contributes.commands');
+      assert.strictEqual(updateAllCmd.title, 'Update All...');
+      assert.strictEqual(updateAllCmd.icon, '$(arrow-circle-up)');
+
+      // 2. Per-environment view/title entry exists with when per assistant view
+      const viewTitleMenus = pkgJson.contributes.menus['view/title'];
+      assert.ok(Array.isArray(viewTitleMenus));
+
+      const expectedAssistants = ['claude-code', 'kilo-code', 'github-copilot', 'codex-cli', 'gemini-cli'];
+      for (const assistant of expectedAssistants) {
+        const entry = viewTitleMenus.find(
+          (m: any) =>
+            m.command === 'aiSwissknife.updateAll' &&
+            m.when.includes(`aiSwissknife.installed.${assistant}`)
+        );
+        assert.ok(
+          entry,
+          `view/title must have an entry for aiSwissknife.installed.${assistant}`
+        );
+      }
+    });
+
+    it('command with no argument covers all environments, with an id only that one', async () => {
+      const fakeContext = { subscriptions: [], extensionUri: { fsPath: '/test/ext' } } as any;
+      mockRegisteredCommands.clear();
+      extensionModule.activate(fakeContext);
+
+      const updateAllHandler = mockRegisteredCommands.get('aiSwissknife.updateAll');
+      assert.ok(updateAllHandler, 'aiSwissknife.updateAll command must be registered');
+
+      const provider = new InstalledTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+      let capturedFilter: any = 'NOT_CALLED';
+      provider.doUpdateAll = async (f?: any) => {
+        capturedFilter = f;
+      };
+
+      // When called with no argument
+      await mockVscode.commands.registerCommand('aiSwissknife.updateAll', async (arg?: any) => {
+        let filter: any;
+        if (typeof arg === 'string') filter = { assistant: arg };
+        else if (arg && typeof arg === 'object') filter = arg;
+        await provider.doUpdateAll(filter);
+      });
+
+      await mockVscode.commands.executeCommand('aiSwissknife.updateAll');
+      assert.strictEqual(capturedFilter, undefined, 'no argument covers all environments');
+
+      // When called with an assistant id
+      await mockVscode.commands.executeCommand('aiSwissknife.updateAll', 'kilo-code');
+      assert.deepStrictEqual(capturedFilter, { assistant: 'kilo-code' }, 'assistant id covers that one environment');
+    });
+
+    it('summary modal text for N/M/K and button options', async () => {
+      const provider = new InstalledTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+
+      const installations: ManagedInstallation[] = [];
+      for (let i = 1; i <= 12; i++) {
+        installations.push({
+          assistant: 'claude-code',
+          scope: 'project',
+          projectPath: testTempDir,
+          kind: 'skill',
+          name: `item-${String(i).padStart(2, '0')}`,
+          sourceId: 'src1',
+          path: path.join(testTempDir, `item-${i}`),
+          installedAt: new Date().toISOString(),
+          contentHash: 'hash',
+        });
+      }
+      installations.push({
+        assistant: 'claude-code',
+        scope: 'project',
+        projectPath: testTempDir,
+        kind: 'skill',
+        name: 'modified-item-1',
+        sourceId: 'src1',
+        path: path.join(testTempDir, 'mod-1'),
+        installedAt: new Date().toISOString(),
+        contentHash: 'hash',
+      });
+      installations.push({
+        assistant: 'claude-code',
+        scope: 'project',
+        projectPath: testTempDir,
+        kind: 'skill',
+        name: 'modified-item-2',
+        sourceId: 'src1',
+        path: path.join(testTempDir, 'mod-2'),
+        installedAt: new Date().toISOString(),
+        contentHash: 'hash',
+      });
+      installations.push({
+        assistant: 'claude-code',
+        scope: 'project',
+        projectPath: testTempDir,
+        kind: 'skill',
+        name: 'cannot-item-1',
+        sourceId: 'nonexistent-source',
+        path: path.join(testTempDir, 'cannot-1'),
+        installedAt: new Date().toISOString(),
+        contentHash: 'hash',
+      });
+
+      await writeState('project', { schemaVersion: SCHEMA_VERSION, installations }, testTempDir);
+      await writeManifest('project', { schemaVersion: SCHEMA_VERSION, sources: [{ id: 'src1', name: 'Src 1', type: 'local-folder', localPath: testTempDir, scope: 'project' }], desiredInstallations: [] }, testTempDir);
+
+      mockShowInformationMessageCalls = [];
+      mockShowInformationMessageResult = 'Cancel';
+
+      const origCheckDriftForAll = driftModule.checkDriftForAll;
+      (driftModule as any).checkDriftForAll = async () => [];
+
+      const origPlanUpdateAll = updateModule.planUpdateAll;
+      (updateModule as any).planUpdateAll = async () => ({
+        toUpdate: installations.filter(i => i.name.startsWith('item-')).map(inst => ({
+          installation: inst,
+          source: { id: 'src1' },
+          prepared: {}
+        })),
+        skippedModified: installations.filter(i => i.name.startsWith('modified-item')).map(inst => ({
+          installation: inst,
+          status: 'modified-locally',
+          reason: 'Modified locally'
+        })),
+        cannotUpdate: [
+          { installation: installations.find(i => i.name === 'cannot-item-1')!, reason: 'Source not found in manifest' }
+        ],
+        upToDate: [],
+        buckets: { toUpdate: [], skippedModified: [], cannotUpdate: [], upToDate: [] },
+        counts: { toUpdate: 12, skippedModified: 2, cannotUpdate: 1, upToDate: 0, total: 15 }
+      });
+
+      try {
+        await provider.doUpdateAll();
+
+        assert.ok(mockShowInformationMessageCalls.length >= 1);
+        const modalCall = mockShowInformationMessageCalls[0];
+        assert.ok(modalCall.msg.includes('12 update(s) will be applied'));
+        assert.ok(modalCall.msg.includes('and 2 more'));
+        assert.ok(modalCall.msg.includes('2 item(s) are modified locally and will be skipped (they would lose your edits)'));
+        assert.ok(modalCall.msg.includes('1 item(s) cannot be updated'));
+
+        assert.ok(modalCall.actions.includes('Update 12'));
+        assert.ok(modalCall.actions.some((a: string) => typeof a === 'string' && a.includes('Update 12 + 2 modified (your version is saved to the trash first)')));
+        assert.ok(modalCall.actions.includes('Cancel'));
+      } finally {
+        (driftModule as any).checkDriftForAll = origCheckDriftForAll;
+        (updateModule as any).planUpdateAll = origPlanUpdateAll;
+      }
+    });
+
+    it('choosing plain button never touches modified items, other button passes includeModified', async () => {
+      const provider = new InstalledTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+
+      const instUp: ManagedInstallation = {
+        assistant: 'claude-code',
+        scope: 'project',
+        projectPath: testTempDir,
+        kind: 'skill',
+        name: 'item-update',
+        sourceId: 'src1',
+        path: path.join(testTempDir, 'item-update'),
+        installedAt: new Date().toISOString(),
+        contentHash: 'hash',
+      };
+      const instMod: ManagedInstallation = {
+        assistant: 'claude-code',
+        scope: 'project',
+        projectPath: testTempDir,
+        kind: 'skill',
+        name: 'item-modified',
+        sourceId: 'src1',
+        path: path.join(testTempDir, 'item-modified'),
+        installedAt: new Date().toISOString(),
+        contentHash: 'hash',
+      };
+
+      await writeState('project', { schemaVersion: SCHEMA_VERSION, installations: [instUp, instMod] }, testTempDir);
+      await writeManifest('project', { schemaVersion: SCHEMA_VERSION, sources: [{ id: 'src1', name: 'Src 1', type: 'local-folder', localPath: testTempDir, scope: 'project' }], desiredInstallations: [] }, testTempDir);
+
+      const origCheckDriftForAll = driftModule.checkDriftForAll;
+      (driftModule as any).checkDriftForAll = async () => [
+        { installation: instUp, status: 'update-available', sourceHash: 'newhash' },
+        { installation: instMod, status: 'modified-locally', sourceHash: 'newhash' },
+      ];
+
+      const origPlanUpdateAll = updateModule.planUpdateAll;
+      const origApplyUpdateAll = updateModule.applyUpdateAll;
+
+      (updateModule as any).planUpdateAll = async (params: any) => {
+        if (params.includeModified) {
+          return {
+            toUpdate: [
+              { installation: instUp, source: { id: 'src1' }, prepared: {} },
+              { installation: instMod, source: { id: 'src1' }, prepared: {} },
+            ],
+            skippedModified: [],
+            cannotUpdate: [],
+            upToDate: [],
+            buckets: { toUpdate: [], skippedModified: [], cannotUpdate: [], upToDate: [] },
+            counts: { toUpdate: 2, skippedModified: 0, cannotUpdate: 0, upToDate: 0, total: 2 },
+          };
+        } else {
+          return {
+            toUpdate: [
+              { installation: instUp, source: { id: 'src1' }, prepared: {} },
+            ],
+            skippedModified: [
+              { installation: instMod, status: 'modified-locally', reason: 'Modified locally' },
+            ],
+            cannotUpdate: [],
+            upToDate: [],
+            buckets: { toUpdate: [], skippedModified: [], cannotUpdate: [], upToDate: [] },
+            counts: { toUpdate: 1, skippedModified: 1, cannotUpdate: 0, upToDate: 0, total: 2 },
+          };
+        }
+      };
+
+      let appliedItems: any[] = [];
+      (updateModule as any).applyUpdateAll = async (plan: any) => {
+        appliedItems = (Array.isArray(plan) ? plan : plan.toUpdate).map((p: any) => p.installation.name);
+        return [{ installation: instUp, status: 'applied' }];
+      };
+
+      try {
+        // 1. Choose plain button: 'Update 1'
+        mockShowInformationMessageCalls = [];
+        mockCustomShowInformationMessage = async (msg: string) => {
+          if (msg.includes('update(s) will be applied')) {
+            return 'Update 1';
+          }
+          return undefined;
+        };
+
+        await provider.doUpdateAll();
+        assert.deepStrictEqual(appliedItems, ['item-update'], 'Plain button must only update non-modified item');
+
+        // 2. Choose modified button: 'Update 1 + 1 modified...'
+        appliedItems = [];
+        mockShowInformationMessageCalls = [];
+        mockCustomShowInformationMessage = async (msg: string, ...actions: any[]) => {
+          if (msg.includes('update(s) will be applied')) {
+            const modBtn = actions.find((a: any) => typeof a === 'string' && a.includes('modified (your version is saved to the trash first)'));
+            return modBtn;
+          }
+          return undefined;
+        };
+
+        await provider.doUpdateAll();
+        assert.ok(appliedItems.includes('item-modified'), 'Modified button must include modified item');
+        assert.ok(appliedItems.includes('item-update'));
+      } finally {
+        (driftModule as any).checkDriftForAll = origCheckDriftForAll;
+        (updateModule as any).planUpdateAll = origPlanUpdateAll;
+        (updateModule as any).applyUpdateAll = origApplyUpdateAll;
+        mockCustomShowInformationMessage = undefined;
+      }
+    });
+
+    it('exactly one drift check and one refresh per run (spies)', async () => {
+      const provider = new InstalledTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+
+      const inst: ManagedInstallation = {
+        assistant: 'claude-code',
+        scope: 'project',
+        projectPath: testTempDir,
+        kind: 'skill',
+        name: 'single-item',
+        sourceId: 'src1',
+        path: path.join(testTempDir, 'single-item'),
+        installedAt: new Date().toISOString(),
+        contentHash: 'hash',
+      };
+      await writeState('project', { schemaVersion: SCHEMA_VERSION, installations: [inst] }, testTempDir);
+      await writeManifest('project', { schemaVersion: SCHEMA_VERSION, sources: [{ id: 'src1', name: 'Src 1', type: 'local-folder', localPath: testTempDir, scope: 'project' }], desiredInstallations: [] }, testTempDir);
+
+      const origCheckDriftForAll = driftModule.checkDriftForAll;
+      let driftCheckCount = 0;
+      (driftModule as any).checkDriftForAll = async () => {
+        driftCheckCount++;
+        return [{ installation: inst, status: 'update-available', sourceHash: 'new' }];
+      };
+
+      let refreshCount = 0;
+      const origRefresh = provider.refresh.bind(provider);
+      provider.refresh = () => {
+        refreshCount++;
+        origRefresh();
+      };
+
+      const origPlanUpdateAll = updateModule.planUpdateAll;
+      const origApplyUpdateAll = updateModule.applyUpdateAll;
+      (updateModule as any).planUpdateAll = async () => ({
+        toUpdate: [{ installation: inst, source: { id: 'src1' }, prepared: {} }],
+        skippedModified: [],
+        cannotUpdate: [],
+        upToDate: [],
+        buckets: { toUpdate: [], skippedModified: [], cannotUpdate: [], upToDate: [] },
+        counts: { toUpdate: 1, skippedModified: 0, cannotUpdate: 0, upToDate: 0, total: 1 },
+      });
+      (updateModule as any).applyUpdateAll = async () => [
+        { installation: inst, status: 'applied' }
+      ];
+
+      mockCustomShowInformationMessage = async (msg: string) => {
+        if (msg.includes('update(s) will be applied')) return 'Update 1';
+        return undefined;
+      };
+
+      try {
+        await provider.doUpdateAll();
+        assert.strictEqual(driftCheckCount, 1, 'drift check must be called exactly once');
+        assert.strictEqual(refreshCount, 1, 'refresh must be called exactly once');
+      } finally {
+        (driftModule as any).checkDriftForAll = origCheckDriftForAll;
+        (updateModule as any).planUpdateAll = origPlanUpdateAll;
+        (updateModule as any).applyUpdateAll = origApplyUpdateAll;
+        provider.refresh = origRefresh;
+        mockCustomShowInformationMessage = undefined;
+      }
+    });
+
+    it('Dashboard button posts the current filter and is disabled at 0', async () => {
+      const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any, {} as any, {} as any, {} as any, () => {});
+      const htmlZero = (panel as any).getInstalledSectionHtml([], [], [], [], false, 0, 0, 0, 0, 0, '', { managedRowsHtml: '', observedRowsHtml: '' });
+      assert.ok(htmlZero.includes('id="updateAllBtn"'));
+      assert.ok(htmlZero.includes('title="Update all (0)"'));
+      assert.ok(htmlZero.includes('disabled'));
+      assert.ok(htmlZero.includes('onclick="triggerUpdateAll()"'));
+
+      const htmlTwo = (panel as any).getInstalledSectionHtml([], [], [], [], false, 2, 0, 2, 0, 0, '', { managedRowsHtml: '', observedRowsHtml: '' });
+      assert.ok(htmlTwo.includes('title="Update all (2)"'));
+      assert.ok(!htmlTwo.includes('title="Update all (2)" disabled'));
+
+      let receivedFilter: any = undefined;
+      const fakeProvider = {
+        doUpdateAll: async (f: any) => { receivedFilter = f; },
+        refresh: () => {}
+      };
+      (panel as any)._provider = fakeProvider;
+      (panel as any)._refreshCallback = () => {};
+      (panel as any).update = async () => {};
+
+      await (panel as any)._panel.webview.postMessage({ command: 'updateAll', filter: { assistant: 'kilo-code', scope: 'project', kind: 'skill' } });
+      assert.deepStrictEqual(receivedFilter, { assistant: 'kilo-code', scope: 'project', kind: 'skill' });
+    });
+
+    it('single-item doUpdateInstallation gains locally-modified warning in modal text', async () => {
+      const provider = new InstalledTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+      const inst: ManagedInstallation = {
+        assistant: 'claude-code',
+        scope: 'project',
+        projectPath: testTempDir,
+        kind: 'skill',
+        name: 'test-single',
+        sourceId: 'src1',
+        path: path.join(testTempDir, 'test-single'),
+        installedAt: new Date().toISOString(),
+        contentHash: 'hash',
+      };
+
+      await writeState('project', { schemaVersion: SCHEMA_VERSION, installations: [inst] }, testTempDir);
+      await writeManifest('project', { schemaVersion: SCHEMA_VERSION, sources: [{ id: 'src1', name: 'Src 1', type: 'local-folder', localPath: testTempDir, scope: 'project' }], desiredInstallations: [] }, testTempDir);
+
+      const origPlanUpdate = updateModule.planUpdate;
+      (updateModule as any).planUpdate = async () => ({ supported: true, plan: { reason: '' } });
+
+      const origAnalyze = driftModule.analyzeLocalDrift;
+
+      // 1. Not modified
+      (driftModule as any).analyzeLocalDrift = async () => ({ status: 'update-available' });
+      mockShowInformationMessageCalls = [];
+      mockShowInformationMessageResult = 'Cancel';
+
+      try {
+        await provider.doUpdateInstallation(inst);
+        assert.ok(mockShowInformationMessageCalls.length >= 1);
+        const normalMsg = mockShowInformationMessageCalls[0].msg;
+        assert.ok(!normalMsg.includes('modified locally'));
+        assert.ok(!normalMsg.includes('lose your edits'));
+
+        // 2. Modified locally
+        (driftModule as any).analyzeLocalDrift = async () => ({ status: 'modified-locally' });
+        mockShowInformationMessageCalls = [];
+
+        await provider.doUpdateInstallation(inst);
+        assert.ok(mockShowInformationMessageCalls.length >= 1);
+        const warningMsg = mockShowInformationMessageCalls[0].msg;
+        assert.ok(warningMsg.includes('modified locally'));
+        assert.ok(warningMsg.includes('lose your edits'));
+      } finally {
+        (updateModule as any).planUpdate = origPlanUpdate;
+        (driftModule as any).analyzeLocalDrift = origAnalyze;
+      }
     });
   });
 });

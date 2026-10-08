@@ -4,14 +4,20 @@ import * as fs from 'fs';
 import * as crypto from 'crypto';
 import type { ManagedInstallation, ObservedArtifact, Source, AssistantId, Scope, ItemKind } from '../domain/types';
 import { readState, writeState, readManifest, fromDesiredSource, withStateLock } from '../domain/registry';
-import { analyzeLocalDrift, checkForUpstreamUpdate, checkDriftForAll } from '../engine/drift';
+import { analyzeLocalDrift, checkDriftForAll } from '../engine/drift';
 import { scanInstalledInventory, promoteObservedArtifact } from '../engine/discovery';
-import { planInstall } from '../engine/plan';
 import { planSync } from '../engine/sync';
 import { applyInstall } from '../engine/apply';
-import { planUpdate } from '../engine/update';
+import {
+  planUpdate,
+  planUpdateAll,
+  applyUpdateAll,
+  type UpdateFilter,
+  type UpdateItemOutcome,
+} from '../engine/update';
 import { softDeletePath } from '../engine/softDelete';
-import { getAdapter, getEnabledAdapters } from '../adapters/registry';
+import { getAdapter, getEnabledAdapters, ALL_ADAPTERS } from '../adapters/registry';
+import { getScopeLabel } from './scopeLabel';
 import type { DriftReport } from '../engine/types';
 import { getWorkspaceRoot } from './workspacePicker';
 import { getKindIconName } from './kindIcons';
@@ -125,8 +131,39 @@ function groupByKind<T extends InstalledInstallationItem | ObservedArtifactItem>
 
 export class InstalledTreeDataProvider {
   constructor(
-    private readonly extensionUri: vscode.Uri
+    private readonly extensionUri: vscode.Uri,
+    private readonly homeRoot?: string
   ) {}
+
+  private outputChannel?: vscode.OutputChannel;
+
+  private getOutputChannel(): vscode.OutputChannel {
+    if (!this.outputChannel) {
+      this.outputChannel = vscode.window.createOutputChannel('AI Swissknife');
+    }
+    return this.outputChannel;
+  }
+
+  updateContextKeys(reports?: DriftReport[]): void {
+    const effectiveReports = reports ?? Array.from(this.driftReports.values());
+    for (const adapter of ALL_ADAPTERS) {
+      const hasUpdates = effectiveReports.some(
+        (r) =>
+          r.installation.assistant === adapter.assistant &&
+          (r.status === 'update-available' || r.status === 'modified-and-update-available')
+      );
+      vscode.commands.executeCommand(
+        'setContext',
+        `aiSwissknife.updatesAvailable.${adapter.assistant}`,
+        hasUpdates
+      );
+      vscode.commands.executeCommand(
+        'setContext',
+        `aiSwissknife.hasUpdates.${adapter.assistant}`,
+        hasUpdates
+      );
+    }
+  }
 
   private _onDidChangeTreeData = new vscode.EventEmitter<
     InstalledTreeItem | undefined | null | void
@@ -413,9 +450,9 @@ export class InstalledTreeDataProvider {
     const allSources: Source[] = [];
 
     try {
-      const gState = await readState('global');
+      const gState = await readState('global', undefined, this.homeRoot);
       allInstallations.push(...gState.installations);
-      const gManifest = await readManifest('global');
+      const gManifest = await readManifest('global', undefined, this.homeRoot);
       allSources.push(...gManifest.sources.map((d) => fromDesiredSource(d)));
     } catch {
       // ignore
@@ -425,9 +462,9 @@ export class InstalledTreeDataProvider {
     if (folders && folders.length > 0) {
       const projectRoot = folders[0].uri.fsPath;
       try {
-        const pState = await readState('project', projectRoot);
+        const pState = await readState('project', projectRoot, this.homeRoot);
         allInstallations.push(...pState.installations);
-        const pManifest = await readManifest('project', projectRoot);
+        const pManifest = await readManifest('project', projectRoot, this.homeRoot);
         allSources.push(...pManifest.sources.map((d) => fromDesiredSource(d, projectRoot)));
       } catch {
         // ignore
@@ -438,7 +475,7 @@ export class InstalledTreeDataProvider {
     let updateCount = 0;
     let missingCount = 0;
 
-    const reports = await checkDriftForAll(allInstallations, allSources);
+    const reports = await checkDriftForAll(allInstallations, allSources, this.homeRoot);
 
     for (const report of reports) {
       this.driftReports.set(this.getInstallKey(report.installation), report);
@@ -448,6 +485,7 @@ export class InstalledTreeDataProvider {
       if (report.status === 'missing-on-disk') missingCount++;
     }
 
+    this.updateContextKeys(reports);
     this.refresh();
 
     vscode.window.showInformationMessage(
@@ -476,12 +514,12 @@ export class InstalledTreeDataProvider {
     if (inst.scope === 'project') {
       projectRoot = inst.projectPath ?? (await getWorkspaceRoot());
       if (projectRoot) {
-        const pManifest = await readManifest('project', projectRoot);
+        const pManifest = await readManifest('project', projectRoot, this.homeRoot);
         const desired = pManifest.sources.find((s) => s.id === inst.sourceId);
         if (desired) source = fromDesiredSource(desired, projectRoot);
       }
     } else {
-      const gManifest = await readManifest('global');
+      const gManifest = await readManifest('global', undefined, this.homeRoot);
       const desired = gManifest.sources.find((s) => s.id === inst.sourceId);
       if (desired) source = fromDesiredSource(desired);
     }
@@ -491,27 +529,235 @@ export class InstalledTreeDataProvider {
       return;
     }
 
-    const prepared = await planUpdate(inst, source);
+    const prepared = await planUpdate(inst, source, { homeRoot: this.homeRoot });
 
     if (!prepared.supported) {
       vscode.window.showErrorMessage(`Failed to plan update for ${inst.name}: ${prepared.plan.reason}`);
       return;
     }
 
+    const report = this.driftReports.get(this.getInstallKey(inst)) ?? (await analyzeLocalDrift(inst, this.homeRoot));
+    const isModified =
+      report?.status === 'modified-locally' ||
+      report?.status === 'modified-and-update-available';
+
+    let confirmMsg = `Update ${inst.kind} "${inst.name}" to latest version from source "${source.id}"?`;
+    if (isModified) {
+      confirmMsg += ` This item is modified locally (it will lose your edits).`;
+    }
+
     const confirm = await vscode.window.showInformationMessage(
-      `Update ${inst.kind} "${inst.name}" to latest version from source "${source.id}"?`,
+      confirmMsg,
       { modal: true },
       'Update'
     );
     if (confirm !== 'Update') return;
 
-    const outcome = await applyInstall(prepared);
+    const outcome = await applyInstall(prepared, this.homeRoot);
     if (outcome.status === 'applied') {
       vscode.window.showInformationMessage(`Successfully updated "${inst.name}".`);
       await this.checkDrift();
     } else {
       vscode.window.showErrorMessage(`Update failed: ${outcome.reason}`);
     }
+  }
+
+  async doUpdateAll(filterOrAssistant?: UpdateFilter | AssistantId): Promise<void> {
+    let filter: UpdateFilter | undefined;
+    if (typeof filterOrAssistant === 'string') {
+      filter = { assistant: filterOrAssistant };
+    } else if (filterOrAssistant && typeof filterOrAssistant === 'object') {
+      filter = filterOrAssistant;
+    }
+
+    const allInstallations: ManagedInstallation[] = [];
+    const allSources: Source[] = [];
+
+    try {
+      const gState = await readState('global', undefined, this.homeRoot);
+      allInstallations.push(...gState.installations);
+      const gManifest = await readManifest('global', undefined, this.homeRoot);
+      allSources.push(...gManifest.sources.map((d) => fromDesiredSource(d)));
+    } catch {
+      // ignore
+    }
+
+    const folders = vscode.workspace.workspaceFolders;
+    let projectRoot: string | undefined;
+    if (folders && folders.length > 0) {
+      projectRoot = folders[0].uri.fsPath;
+      try {
+        const pState = await readState('project', projectRoot, this.homeRoot);
+        allInstallations.push(...pState.installations);
+        const pManifest = await readManifest('project', projectRoot, this.homeRoot);
+        allSources.push(...pManifest.sources.map((d) => fromDesiredSource(d, projectRoot)));
+      } catch {
+        // ignore
+      }
+    }
+
+    // 1. Drift check once
+    const reports = await checkDriftForAll(allInstallations, allSources, this.homeRoot);
+    for (const report of reports) {
+      this.driftReports.set(this.getInstallKey(report.installation), report);
+    }
+    this.updateContextKeys(reports);
+
+    // 2. Plan update all
+    const plan = await planUpdateAll({
+      installations: allInstallations,
+      sources: allSources,
+      reports,
+      filter,
+      homeRoot: this.homeRoot,
+      projectRoot,
+    });
+
+    const N = plan.counts.toUpdate;
+    const M = plan.counts.skippedModified;
+    const K = plan.counts.cannotUpdate;
+
+    if (N === 0 && M === 0) {
+      if (K > 0) {
+        vscode.window.showInformationMessage(
+          `No updates can be applied (${K} item(s) cannot be updated).`
+        );
+      } else {
+        vscode.window.showInformationMessage('All items are up to date.');
+      }
+      return;
+    }
+
+    // 3. Modal summary
+    const names = plan.toUpdate.map((i) => i.installation.name);
+    const namesStr = names.length > 10
+      ? `${names.slice(0, 10).join(', ')}, and ${names.length - 10} more`
+      : names.join(', ');
+
+    const lines: string[] = [
+      `${N} update(s) will be applied (${namesStr}).`
+    ];
+
+    if (M > 0) {
+      lines.push(`${M} item(s) are modified locally and will be skipped (they would lose your edits).`);
+    }
+
+    if (K > 0) {
+      const reasonCounts = new Map<string, number>();
+      for (const item of plan.cannotUpdate) {
+        reasonCounts.set(item.reason, (reasonCounts.get(item.reason) ?? 0) + 1);
+      }
+      const reasonStr = Array.from(reasonCounts.entries())
+        .map(([reason, count]) => `${count} ${reason}`)
+        .join(', ');
+      lines.push(`${K} item(s) cannot be updated (${reasonStr}).`);
+    }
+
+    const message = lines.join('\n\n');
+
+    const btnPlain = `Update ${N}`;
+    const btnModified = `Update ${N} + ${M} modified (your version is saved to the trash first)`;
+    const actions: string[] = [btnPlain];
+    if (M > 0) {
+      actions.push(btnModified);
+    }
+    actions.push('Cancel');
+
+    const choice = await vscode.window.showInformationMessage(
+      message,
+      { modal: true },
+      ...actions
+    );
+
+    if (!choice || choice === 'Cancel') {
+      return;
+    }
+
+    // 4. Determine final plan
+    let finalPlan = plan;
+    if (choice === btnModified) {
+      finalPlan = await planUpdateAll({
+        installations: allInstallations,
+        sources: allSources,
+        reports,
+        filter,
+        includeModified: true,
+        homeRoot: this.homeRoot,
+        projectRoot,
+      });
+    }
+
+    // 5. Apply with progress
+    let outcomes: UpdateItemOutcome[] = [];
+    if (typeof vscode.window.withProgress === 'function') {
+      await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: 'Updating artifacts...',
+          cancellable: false,
+        },
+        async (progress) => {
+          outcomes = await applyUpdateAll(finalPlan, {
+            homeRoot: this.homeRoot,
+            onProgress: (item) => {
+              progress.report({ message: item.installation.name });
+            },
+          });
+        }
+      );
+    } else {
+      outcomes = await applyUpdateAll(finalPlan, {
+        homeRoot: this.homeRoot,
+      });
+    }
+
+    // 6. Compute outcome counts and final message
+    const X = outcomes.filter((o) => o.status === 'applied').length;
+    const Y = finalPlan.counts.skippedModified + outcomes.filter((o) => o.status === 'refused').length;
+    const Z = outcomes.filter((o) => o.status === 'failed' || o.status === 'rolled-back' || o.status === 'manual-recovery-required').length + finalPlan.counts.cannotUpdate;
+
+    const finalChoice = await vscode.window.showInformationMessage(
+      `Updated ${X}, skipped ${Y}, failed ${Z}`,
+      'Show details'
+    );
+
+    if (finalChoice === 'Show details') {
+      const channel = this.getOutputChannel();
+      channel.clear();
+      channel.appendLine(`=== AI Swissknife Update Details ===`);
+      channel.appendLine(`Updated: ${X}, Skipped: ${Y}, Failed: ${Z}\n`);
+      for (const o of outcomes) {
+        const scopeLabel = getScopeLabel(o.installation.scope);
+        if (o.status === 'applied') {
+          channel.appendLine(`✓ [APPLIED] ${o.installation.name} (${o.installation.assistant}, ${scopeLabel})`);
+          if (o.backupPath) {
+            channel.appendLine(`  Backup saved to: ${o.backupPath}`);
+          }
+          if (o.warnings && o.warnings.length > 0) {
+            channel.appendLine(`  Warnings: ${o.warnings.join(', ')}`);
+          }
+        } else if (o.status === 'refused') {
+          channel.appendLine(`- [SKIPPED] ${o.installation.name} (${o.installation.assistant}, ${scopeLabel}): ${o.reason ?? 'refused'}`);
+        } else {
+          channel.appendLine(`✗ [FAILED] ${o.installation.name} (${o.installation.assistant}, ${scopeLabel}): ${o.reason ?? o.status}`);
+          if (o.backupPath) {
+            channel.appendLine(`  Backup saved to: ${o.backupPath}`);
+          }
+        }
+      }
+      for (const item of finalPlan.skippedModified) {
+        const scopeLabel = getScopeLabel(item.installation.scope);
+        channel.appendLine(`- [SKIPPED] ${item.installation.name} (${item.installation.assistant}, ${scopeLabel}): ${item.reason ?? 'modified locally'}`);
+      }
+      for (const item of finalPlan.cannotUpdate) {
+        const scopeLabel = getScopeLabel(item.installation.scope);
+        channel.appendLine(`✗ [CANNOT UPDATE] ${item.installation.name} (${item.installation.assistant}, ${scopeLabel}): ${item.reason}`);
+      }
+      channel.show();
+    }
+
+    // 7. ONE refresh at the end
+    this.refresh();
   }
 
   async syncItem(item?: InstalledInstallationItem | ObservedArtifactItem): Promise<void> {

@@ -211,6 +211,12 @@
         "category": "AI Swissknife"
       },
       {
+        "command": "aiSwissknife.updateAll",
+        "title": "Update All...",
+        "icon": "$(arrow-circle-up)",
+        "category": "AI Swissknife"
+      },
+      {
         "command": "aiSwissknife.updateItem",
         "title": "Update to Latest Version",
         "icon": "$(arrow-circle-up)",
@@ -330,6 +336,31 @@
           "command": "aiSwissknife.importConfig",
           "when": "view == aiSwissknife.sources",
           "group": "navigation@6"
+        },
+        {
+          "command": "aiSwissknife.updateAll",
+          "when": "view == aiSwissknife.installed.claude-code && aiSwissknife.updatesAvailable.claude-code",
+          "group": "navigation@0"
+        },
+        {
+          "command": "aiSwissknife.updateAll",
+          "when": "view == aiSwissknife.installed.kilo-code && aiSwissknife.updatesAvailable.kilo-code",
+          "group": "navigation@0"
+        },
+        {
+          "command": "aiSwissknife.updateAll",
+          "when": "view == aiSwissknife.installed.github-copilot && aiSwissknife.updatesAvailable.github-copilot",
+          "group": "navigation@0"
+        },
+        {
+          "command": "aiSwissknife.updateAll",
+          "when": "view == aiSwissknife.installed.codex-cli && aiSwissknife.updatesAvailable.codex-cli",
+          "group": "navigation@0"
+        },
+        {
+          "command": "aiSwissknife.updateAll",
+          "when": "view == aiSwissknife.installed.gemini-cli && aiSwissknife.updatesAvailable.gemini-cli",
+          "group": "navigation@0"
         },
         {
           "command": "aiSwissknife.createArtifact",
