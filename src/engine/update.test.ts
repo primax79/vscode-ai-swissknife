@@ -426,6 +426,54 @@ describe('update engine — planUpdate, planUpdateAll, applyUpdateAll', () => {
       }
     });
 
+    it('planUpdateAll without reports resolves the shared source once across drift check and planning', async () => {
+      const source = await createLocalSource('src-shared-noreports', [
+        { name: 'skill-x', kind: 'skill', content: 'Content X' },
+        { name: 'skill-y', kind: 'skill', content: 'Content Y' },
+      ]);
+
+      const instX = await installItem(source, 'skill-x', 'skill');
+      const instY = await installItem(source, 'skill-y', 'skill');
+
+      // Update upstream source
+      await fs.promises.writeFile(
+        path.join(source.localPath!, 'skill-x', 'SKILL.md'),
+        '---\nname: skill-x\ndescription: v2\n---\n# Updated X',
+        'utf-8'
+      );
+      await fs.promises.writeFile(
+        path.join(source.localPath!, 'skill-y', 'SKILL.md'),
+        '---\nname: skill-y\ndescription: v2\n---\n# Updated Y',
+        'utf-8'
+      );
+
+      // Spy on localFolderResolver.resolve
+      const resolver = getSourceResolver('local-folder');
+      const originalResolve = resolver.resolve;
+      let resolveCallCount = 0;
+
+      resolver.resolve = async function (src, opts) {
+        if (src.id === 'src-shared-noreports') {
+          resolveCallCount++;
+        }
+        return originalResolve.call(resolver, src, opts);
+      };
+
+      try {
+        const plan = await planUpdateAll({
+          installations: [instX, instY],
+          sources: [source],
+          homeRoot: testHomeDir,
+          projectRoot: testTempDir,
+        });
+
+        assert.strictEqual(plan.toUpdate.length, 2);
+        assert.strictEqual(resolveCallCount, 1, 'Source resolver should be called exactly once across drift check and planUpdateAll');
+      } finally {
+        resolver.resolve = originalResolve;
+      }
+    });
+
     it('filter by scope, assistant, sourceId, and kind works', async () => {
       const source1 = await createLocalSource('src-filter-1', [
         { name: 'skill-one', kind: 'skill', content: 'Skill One' },

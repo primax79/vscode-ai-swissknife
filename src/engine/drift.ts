@@ -21,6 +21,32 @@ import { getAdapter, getAdapterWithHomeRoot } from '../adapters/registry';
 import { getSourceResolver } from '../sources/registry';
 import { resolveAndTranslate } from './plan';
 import type { DriftReport } from './types';
+import type { SourceResolution } from '../sources/types';
+
+export interface SourceResolutionCache {
+  get(source: Source | string): Promise<SourceResolution | undefined> | SourceResolution | undefined;
+  set?(source: Source | string, res: SourceResolution): void;
+}
+
+export interface CheckForUpstreamUpdateOptions {
+  resolution?: SourceResolution;
+  resolutionError?: unknown;
+  cache?: SourceResolutionCache | Map<string, SourceResolution>;
+  resolverOpts?: { cacheDir?: string };
+}
+
+export type CheckForUpstreamUpdateOpts =
+  | SourceResolution
+  | SourceResolutionCache
+  | Map<string, SourceResolution>
+  | CheckForUpstreamUpdateOptions;
+
+export interface CheckDriftForAllOptions {
+  homeRoot?: string;
+  concurrency?: number;
+  resolverOpts?: { cacheDir?: string };
+  resolutions?: Map<string, { resolution?: SourceResolution; error?: Error }>;
+}
 
 /**
  * Analyzes whether an installed item has drifted on the local disk relative to its recorded contentHash in state.json.
@@ -125,27 +151,103 @@ export async function analyzeLocalDrift(
 
 /**
  * Checks whether an installed item has a newer version available from its upstream source.
+ * Accepts an optional pre-resolved SourceResolution (or a per-run cache object) to avoid re-resolving.
  */
 export async function checkForUpstreamUpdate(
   installation: ManagedInstallation,
   source: Source,
-  homeRoot?: string
+  homeRoot?: string | CheckForUpstreamUpdateOpts,
+  opts?: CheckForUpstreamUpdateOpts
 ): Promise<DriftReport> {
-  const localReport = await analyzeLocalDrift(installation, homeRoot);
+  let effectiveHomeRoot: string | undefined;
+  let effectiveOpts: CheckForUpstreamUpdateOpts | undefined;
+
+  if (typeof homeRoot === 'string') {
+    effectiveHomeRoot = homeRoot;
+    effectiveOpts = opts;
+  } else if (homeRoot !== undefined && homeRoot !== null) {
+    effectiveHomeRoot = undefined;
+    effectiveOpts = homeRoot;
+  } else {
+    effectiveHomeRoot = undefined;
+    effectiveOpts = opts;
+  }
+
+  const localReport = await analyzeLocalDrift(installation, effectiveHomeRoot);
   if (localReport.status === 'missing-on-disk') {
     return localReport;
   }
 
-  let resolution;
-  try {
-    const resolver = getSourceResolver(source.type);
-    resolution = await resolver.resolve(source, { homeRoot });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
+  let resolution: SourceResolution | undefined;
+  let resolutionError: unknown | undefined;
+
+  if (effectiveOpts) {
+    if ('packages' in effectiveOpts && Array.isArray((effectiveOpts as SourceResolution).packages)) {
+      resolution = effectiveOpts as SourceResolution;
+    } else if ('resolution' in effectiveOpts && (effectiveOpts as CheckForUpstreamUpdateOptions).resolution) {
+      resolution = (effectiveOpts as CheckForUpstreamUpdateOptions).resolution;
+    } else if (
+      'resolutionError' in effectiveOpts &&
+      (effectiveOpts as CheckForUpstreamUpdateOptions).resolutionError !== undefined
+    ) {
+      resolutionError = (effectiveOpts as CheckForUpstreamUpdateOptions).resolutionError;
+    } else if (typeof (effectiveOpts as any).get === 'function') {
+      try {
+        const cache = effectiveOpts as SourceResolutionCache;
+        const val = cache.get(source) ?? cache.get(source.id);
+        resolution = val instanceof Promise ? await val : val;
+      } catch (err) {
+        resolutionError = err;
+      }
+    } else if (
+      'cache' in effectiveOpts &&
+      effectiveOpts.cache &&
+      typeof (effectiveOpts.cache as any).get === 'function'
+    ) {
+      try {
+        const cache = effectiveOpts.cache as SourceResolutionCache;
+        const val = cache.get(source) ?? cache.get(source.id);
+        resolution = val instanceof Promise ? await val : val;
+      } catch (err) {
+        resolutionError = err;
+      }
+    }
+  }
+
+  if (resolutionError !== undefined) {
+    const msg = resolutionError instanceof Error ? resolutionError.message : String(resolutionError);
     return {
       ...localReport,
       details: `Failed to resolve upstream source: ${msg}`,
     };
+  }
+
+  if (!resolution) {
+    try {
+      const resolver = getSourceResolver(source.type);
+      const cacheDir =
+        effectiveOpts && 'resolverOpts' in effectiveOpts
+          ? (effectiveOpts as CheckForUpstreamUpdateOptions).resolverOpts?.cacheDir
+          : undefined;
+      resolution = await resolver.resolve(source, { homeRoot: effectiveHomeRoot, cacheDir });
+
+      if (effectiveOpts && typeof (effectiveOpts as any).set === 'function') {
+        (effectiveOpts as any).set(source, resolution);
+      } else if (
+        effectiveOpts &&
+        'cache' in effectiveOpts &&
+        effectiveOpts.cache &&
+        typeof (effectiveOpts.cache as any).set === 'function'
+      ) {
+        (effectiveOpts.cache as any).set(source, resolution);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        ...localReport,
+        details: `Failed to resolve upstream source: ${msg}`,
+      };
+    }
   }
 
   // Find matching package & artifact in resolution
@@ -172,7 +274,17 @@ export async function checkForUpstreamUpdate(
 
   let sourceHash: string | undefined;
   try {
-    const result = await resolveAndTranslate(source, foundPkg, foundArt, installation.assistant);
+    const cacheDir =
+      effectiveOpts && 'resolverOpts' in effectiveOpts
+        ? (effectiveOpts as CheckForUpstreamUpdateOptions).resolverOpts?.cacheDir
+        : undefined;
+    const result = await resolveAndTranslate(
+      source,
+      foundPkg,
+      foundArt,
+      installation.assistant,
+      cacheDir ? { cacheDir } : undefined
+    );
 
     if (foundArt.kind === 'skill') {
       sourceHash = canonicalSkillHash(result.translated as CanonicalSkill);
@@ -214,4 +326,107 @@ export async function checkForUpstreamUpdate(
     ...localReport,
     sourceHash,
   };
+}
+
+function findSourceInSources(
+  sources: Source[] | ReadonlyMap<string, Source> | Map<string, Source>,
+  sourceId: string
+): Source | undefined {
+  if (Array.isArray(sources)) {
+    return sources.find((s) => s.id === sourceId);
+  }
+  if (sources && typeof (sources as any).get === 'function') {
+    return (sources as Map<string, Source>).get(sourceId);
+  }
+  return undefined;
+}
+
+/**
+ * Checks drift for all given installations against the provided sources.
+ * Resolves each source ONCE per run (with concurrency 1 per source, and sources running
+ * in parallel up to a bound of 4).
+ * A failing source marks only its own installations as failed, never aborting the run.
+ */
+export async function checkDriftForAll(
+  installations: ManagedInstallation[],
+  sources: Source[] | ReadonlyMap<string, Source> | Map<string, Source>,
+  homeRootOrOptions?: string | CheckDriftForAllOptions,
+  options?: CheckDriftForAllOptions
+): Promise<DriftReport[]> {
+  let homeRoot: string | undefined;
+  let opts: CheckDriftForAllOptions | undefined;
+
+  if (typeof homeRootOrOptions === 'string') {
+    homeRoot = homeRootOrOptions;
+    opts = options;
+  } else if (homeRootOrOptions && typeof homeRootOrOptions === 'object') {
+    opts = homeRootOrOptions;
+    homeRoot = opts.homeRoot;
+  } else {
+    opts = options;
+    homeRoot = opts?.homeRoot;
+  }
+
+  const concurrency = opts?.concurrency ?? 4;
+  const resolutions = opts?.resolutions ?? new Map<string, { resolution?: SourceResolution; error?: Error }>();
+
+  // 1. Identify unique sources needed by the installations
+  const neededSources = new Map<string, Source>();
+  for (const inst of installations) {
+    if (inst.sourceId && !neededSources.has(inst.sourceId)) {
+      const src = findSourceInSources(sources, inst.sourceId);
+      if (src) {
+        neededSources.set(inst.sourceId, src);
+      }
+    }
+  }
+
+  // 2. Resolve each source once, with concurrency up to 4
+  const sourcesToResolve: Source[] = [];
+  for (const src of neededSources.values()) {
+    if (!resolutions.has(src.id)) {
+      sourcesToResolve.push(src);
+    }
+  }
+
+  let nextIdx = 0;
+  const workers = Array.from(
+    { length: Math.min(concurrency, sourcesToResolve.length) },
+    async () => {
+      while (nextIdx < sourcesToResolve.length) {
+        const src = sourcesToResolve[nextIdx++];
+        try {
+          const resolver = getSourceResolver(src.type);
+          const resolution = await resolver.resolve(src, {
+            homeRoot,
+            cacheDir: opts?.resolverOpts?.cacheDir,
+          });
+          resolutions.set(src.id, { resolution });
+        } catch (err: unknown) {
+          const error = err instanceof Error ? err : new Error(String(err));
+          resolutions.set(src.id, { error });
+        }
+      }
+    }
+  );
+
+  await Promise.all(workers);
+
+  // 3. Check drift for each installation
+  const reports = await Promise.all(
+    installations.map(async (inst) => {
+      const src = inst.sourceId ? neededSources.get(inst.sourceId) : undefined;
+      if (!src) {
+        return analyzeLocalDrift(inst, homeRoot);
+      }
+      const resEntry = resolutions.get(src.id);
+      return checkForUpstreamUpdate(inst, src, homeRoot, {
+        resolution: resEntry?.resolution,
+        resolutionError: resEntry?.error,
+        resolverOpts: opts?.resolverOpts,
+      });
+    })
+  );
+
+  return reports;
 }

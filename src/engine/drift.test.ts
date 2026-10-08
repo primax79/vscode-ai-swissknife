@@ -7,7 +7,8 @@ import type { ManagedInstallation, Source } from '../domain/types';
 import { ClaudeAdapter } from '../adapters/claude';
 import { KiloAdapter } from '../adapters/kilo';
 import { canonicalHookHash, canonicalRuleHash } from '../adapters/codec';
-import { analyzeLocalDrift, checkForUpstreamUpdate } from './drift';
+import { analyzeLocalDrift, checkForUpstreamUpdate, checkDriftForAll } from './drift';
+import { getSourceResolver } from '../sources/registry';
 import { planInstall } from './plan';
 import { applyInstall } from './apply';
 
@@ -183,5 +184,222 @@ describe('drift analyzer — analyzeLocalDrift & checkForUpstreamUpdate', () => 
     };
     const reportRule = await analyzeLocalDrift(instRule, testHomeDir);
     assert.strictEqual(reportRule.status, 'up-to-date');
+  });
+
+  describe('checkDriftForAll & resolution deduplication', () => {
+    async function createLocalSource(
+      sourceId: string,
+      skills: { name: string; content?: string }[]
+    ): Promise<Source> {
+      const sourcePath = path.join(testTempDir, 'sources', sourceId);
+      for (const skill of skills) {
+        const skillDir = path.join(sourcePath, skill.name);
+        await fs.promises.mkdir(skillDir, { recursive: true });
+        await fs.promises.writeFile(
+          path.join(skillDir, 'SKILL.md'),
+          `---\nname: ${skill.name}\ndescription: test skill\n---\n${skill.content ?? '# Content'}`,
+          'utf-8'
+        );
+      }
+      return {
+        id: sourceId,
+        type: 'local-folder',
+        scope: 'project',
+        localPath: sourcePath,
+      };
+    }
+
+    async function installSkill(
+      source: Source,
+      name: string,
+      assistant: 'claude-code' | 'kilo-code' = 'claude-code'
+    ): Promise<ManagedInstallation> {
+      const pkg = {
+        id: `${source.id}:${name}`,
+        sourceId: source.id,
+        nativeFormat: 'claude-skill' as const,
+        artifacts: [],
+      };
+      const artifact = {
+        id: `${source.id}:${name}:${name}`,
+        packageId: pkg.id,
+        kind: 'skill' as const,
+        name,
+        nativeFormat: 'claude-skill' as const,
+      };
+      const adapter = assistant === 'claude-code' ? claudeAdapter : kiloAdapter;
+      const prepared = await planInstall({
+        source,
+        pkg,
+        artifact,
+        targetAdapter: adapter,
+        targetScope: 'project',
+        projectRoot: testTempDir,
+      });
+      const outcome = await applyInstall(prepared, testHomeDir);
+      if (outcome.status !== 'applied') throw new Error(`Install failed: ${outcome.status}`);
+      return outcome.installation;
+    }
+
+    it('5 installations of one source -> resolver spy called ONCE (was 5)', async () => {
+      const source = await createLocalSource('src-single', [
+        { name: 'skill-1' },
+        { name: 'skill-2' },
+        { name: 'skill-3' },
+        { name: 'skill-4' },
+        { name: 'skill-5' },
+      ]);
+
+      const insts = [
+        await installSkill(source, 'skill-1'),
+        await installSkill(source, 'skill-2'),
+        await installSkill(source, 'skill-3'),
+        await installSkill(source, 'skill-4'),
+        await installSkill(source, 'skill-5'),
+      ];
+
+      const resolver = getSourceResolver('local-folder');
+      const originalResolve = resolver.resolve;
+      let resolveCallCount = 0;
+      resolver.resolve = async (src, opts) => {
+        resolveCallCount++;
+        return originalResolve.call(resolver, src, opts);
+      };
+
+      try {
+        const reports = await checkDriftForAll(insts, [source], testHomeDir);
+        assert.strictEqual(reports.length, 5);
+        assert.strictEqual(resolveCallCount, 1, 'Resolver should be called exactly once for 5 installations of the same source');
+        assert.ok(reports.every((r) => r.status === 'up-to-date'));
+      } finally {
+        resolver.resolve = originalResolve;
+      }
+    });
+
+    it('two sources -> resolver spy called twice (once per source)', async () => {
+      const source1 = await createLocalSource('src-first', [
+        { name: 'skill-a1' },
+        { name: 'skill-a2' },
+        { name: 'skill-a3' },
+      ]);
+      const source2 = await createLocalSource('src-second', [
+        { name: 'skill-b1' },
+        { name: 'skill-b2' },
+      ]);
+
+      const insts = [
+        await installSkill(source1, 'skill-a1'),
+        await installSkill(source1, 'skill-a2'),
+        await installSkill(source1, 'skill-a3'),
+        await installSkill(source2, 'skill-b1'),
+        await installSkill(source2, 'skill-b2'),
+      ];
+
+      const resolver = getSourceResolver('local-folder');
+      const originalResolve = resolver.resolve;
+      let resolveCallCount = 0;
+      resolver.resolve = async (src, opts) => {
+        resolveCallCount++;
+        return originalResolve.call(resolver, src, opts);
+      };
+
+      try {
+        const reports = await checkDriftForAll(insts, [source1, source2], testHomeDir);
+        assert.strictEqual(reports.length, 5);
+        assert.strictEqual(resolveCallCount, 2, 'Resolver should be called exactly twice (once per distinct source)');
+        assert.ok(reports.every((r) => r.status === 'up-to-date'));
+      } finally {
+        resolver.resolve = originalResolve;
+      }
+    });
+
+    it('one failing source does not stop the other and its items report the failure', async () => {
+      const sourceGood = await createLocalSource('src-good', [{ name: 'good-skill' }]);
+      const sourceBad = await createLocalSource('src-bad', [{ name: 'bad-skill' }]);
+
+      const instGood = await installSkill(sourceGood, 'good-skill');
+      const instBad = await installSkill(sourceBad, 'bad-skill');
+
+      const resolver = getSourceResolver('local-folder');
+      const originalResolve = resolver.resolve;
+      resolver.resolve = async (src, opts) => {
+        if (src.id === sourceBad.id) {
+          throw new Error('Network error connecting to git upstream');
+        }
+        return originalResolve.call(resolver, src, opts);
+      };
+
+      try {
+        const reports = await checkDriftForAll([instGood, instBad], [sourceGood, sourceBad], testHomeDir);
+        assert.strictEqual(reports.length, 2);
+
+        const goodReport = reports.find((r) => r.installation.name === 'good-skill');
+        const badReport = reports.find((r) => r.installation.name === 'bad-skill');
+
+        assert.ok(goodReport, 'Report for good-skill should exist');
+        assert.strictEqual(goodReport.status, 'up-to-date');
+
+        assert.ok(badReport, 'Report for bad-skill should exist');
+        assert.ok(
+          badReport.details?.includes('Failed to resolve upstream source: Network error connecting to git upstream'),
+          `bad-skill should report failure details, got: ${badReport.details}`
+        );
+      } finally {
+        resolver.resolve = originalResolve;
+      }
+    });
+
+    it('checkForUpstreamUpdate accepts optional pre-resolved SourceResolution or cache object', async () => {
+      const source = await createLocalSource('src-preresolved', [{ name: 'cached-skill' }]);
+      const inst = await installSkill(source, 'cached-skill');
+
+      const resolver = getSourceResolver('local-folder');
+      const originalResolve = resolver.resolve;
+      const resolution = await resolver.resolve(source, { homeRoot: testHomeDir });
+
+      let resolveCount = 0;
+      resolver.resolve = async (src, opts) => {
+        resolveCount++;
+        return originalResolve.call(resolver, src, opts);
+      };
+
+      try {
+        // 1. Direct SourceResolution
+        const report1 = await checkForUpstreamUpdate(inst, source, testHomeDir, resolution);
+        assert.strictEqual(resolveCount, 0, 'Should not call resolver when resolution is passed');
+        assert.strictEqual(report1.status, 'up-to-date');
+
+        // 2. Options object with resolution
+        const report2 = await checkForUpstreamUpdate(inst, source, testHomeDir, { resolution });
+        assert.strictEqual(resolveCount, 0, 'Should not call resolver when { resolution } is passed');
+        assert.strictEqual(report2.status, 'up-to-date');
+
+        // 3. Cache object with get(source)
+        const cache = {
+          get: (src: Source | string) => {
+            const id = typeof src === 'string' ? src : src.id;
+            return id === source.id ? resolution : undefined;
+          },
+        };
+        const report3 = await checkForUpstreamUpdate(inst, source, testHomeDir, cache);
+        assert.strictEqual(resolveCount, 0, 'Should not call resolver when cache hit occurs');
+        assert.strictEqual(report3.status, 'up-to-date');
+
+        // 4. Cache miss calls resolver and sets cache
+        let setCalled = false;
+        const cacheWithSet = {
+          get: () => undefined,
+          set: () => {
+            setCalled = true;
+          },
+        };
+        const report4 = await checkForUpstreamUpdate(inst, source, testHomeDir, cacheWithSet);
+        assert.strictEqual(resolveCount, 1, 'Should call resolver on cache miss');
+        assert.strictEqual(setCalled, true, 'Should call cache.set on cache miss resolution');
+        assert.strictEqual(report4.status, 'up-to-date');
+      } finally {
+        resolver.resolve = originalResolve;
+      }
+    });
   });
 });

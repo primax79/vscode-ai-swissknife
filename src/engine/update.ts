@@ -14,7 +14,7 @@ import { getAdapter, getAdapterWithHomeRoot } from '../adapters/registry';
 import { getSourceResolver } from '../sources/registry';
 import { planInstall } from './plan';
 import { applyInstall } from './apply';
-import { checkForUpstreamUpdate, analyzeLocalDrift } from './drift';
+import { checkForUpstreamUpdate, analyzeLocalDrift, checkDriftForAll } from './drift';
 import { manifestPath } from '../domain/registry';
 import type { DriftReport, PreparedInstall } from './types';
 import type { SourceResolution } from '../sources/types';
@@ -250,6 +250,16 @@ export async function planUpdateAll(params: PlanUpdateAllParams): Promise<PlanUp
     { resolution?: SourceResolution; error?: Error }
   >();
 
+  // If reports were not supplied, resolve each source once via checkDriftForAll
+  let effectiveReports = reports;
+  if (!effectiveReports) {
+    effectiveReports = await checkDriftForAll(installations, sources, {
+      homeRoot,
+      resolverOpts,
+      resolutions: sourceResolutions,
+    });
+  }
+
   for (const inst of installations) {
     // 1. Filter
     if (filter) {
@@ -279,10 +289,15 @@ export async function planUpdateAll(params: PlanUpdateAllParams): Promise<PlanUp
     }
 
     // 4. Drift report
-    let report = findReport(reports, inst);
+    let report = findReport(effectiveReports, inst);
     if (!report) {
       try {
-        report = await checkForUpstreamUpdate(inst, source, homeRoot);
+        const resEntry = sourceResolutions.get(source.id);
+        report = await checkForUpstreamUpdate(inst, source, homeRoot, {
+          resolution: resEntry?.resolution,
+          resolutionError: resEntry?.error,
+          resolverOpts,
+        });
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         cannotUpdate.push({
