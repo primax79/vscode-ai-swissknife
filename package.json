@@ -494,7 +494,8 @@
     "test": "node esbuild.config.js && tsc && node --test out"
   },
   "dependencies": {
-    "commander": "^12.1.0"
+    "commander": "^12.1.0",
+    "jsonc-parser": "^3.3.1"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
@@ -507,8 +508,5 @@
     "eslint": "^8.54.0",
     "fantasticon": "^3.0.0",
     "typescript": "^5.3.0"
-  },
-  "dependencies": {
-    "jsonc-parser": "^3.3.1"
   }
 }

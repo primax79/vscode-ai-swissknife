@@ -10,6 +10,9 @@ const extensionConfig = {
   external: ['vscode'],
   format: 'cjs',
   platform: 'node',
+  // Prefer ESM entry points: jsonc-parser's UMD main does `require('./impl/...')` through a
+  // wrapper parameter that esbuild cannot bundle, which fails at runtime.
+  mainFields: ['module', 'main'],
   target: 'node18',
   sourcemap: true,
   minify: !watch,
@@ -40,6 +43,7 @@ const cliConfig = {
   plugins: [noVscodePlugin],
   format: 'cjs',
   platform: 'node',
+  mainFields: ['module', 'main'],
   target: 'node18',
   sourcemap: true,
   minify: !watch,
@@ -65,6 +69,18 @@ function verifyVscodeFree(filePath) {
   }
 }
 
+/**
+ * A bundle must be self-contained: a relative require left in the output (typically a UMD
+ * package esbuild could not bundle) throws at runtime, i.e. at extension activation.
+ */
+function verifyNoRelativeRequires(filePath) {
+  const content = fs.readFileSync(filePath, 'utf-8');
+  const match = content.match(/require\s*\(\s*["']\.{1,2}\/[^"']*["']\s*\)/);
+  if (match) {
+    throw new Error(`Build verification failed: ${filePath} contains an unbundled relative require: ${match[0]}`);
+  }
+}
+
 async function build() {
   try {
     if (watch) {
@@ -78,6 +94,8 @@ async function build() {
         esbuild.build(cliConfig),
       ]);
       verifyVscodeFree('./dist/cli.js');
+      verifyNoRelativeRequires('./dist/extension.js');
+      verifyNoRelativeRequires('./dist/cli.js');
       try {
         fs.chmodSync('./dist/cli.js', 0o755);
       } catch {
