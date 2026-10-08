@@ -3,6 +3,7 @@ import type { AssistantId, Scope, ItemKind } from '../domain/types';
 import { getEnabledAdapters } from '../adapters/registry';
 import { getWorkspaceRoot } from './workspacePicker';
 import { FormEditorPanel } from './formEditor';
+import { getScopeQuickPickItems } from './scopeIcons';
 
 export async function handleCreateArtifact(refreshCallback: () => void) {
   const kindPick = await vscode.window.showQuickPick(['skill', 'agent', 'command', 'mcp-server'], {
@@ -18,13 +19,14 @@ export async function handleCreateArtifact(refreshCallback: () => void) {
   );
   if (!assistantPick) return;
 
-  const scopePick = await vscode.window.showQuickPick(['project', 'global'], {
-    placeHolder: 'Select scope (project or global)',
+  const scopePick = await vscode.window.showQuickPick(getScopeQuickPickItems(), {
+    placeHolder: 'Select scope',
   });
   if (!scopePick) return;
+  const targetScope = (typeof scopePick === 'string' ? scopePick : scopePick.value) as Scope;
 
   let projectRoot: string | undefined;
-  if (scopePick === 'project') {
+  if (targetScope === 'project') {
     projectRoot = await getWorkspaceRoot();
     if (!projectRoot) return;
   }
@@ -33,7 +35,7 @@ export async function handleCreateArtifact(refreshCallback: () => void) {
     {
       mode: 'create',
       assistant: assistantPick as AssistantId,
-      scope: scopePick as Scope,
+      scope: targetScope,
       projectRoot,
       kind: kindPick as ItemKind,
     },

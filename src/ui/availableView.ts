@@ -10,6 +10,7 @@ import { applyInstall } from '../engine/apply';
 import type { PreparedInstall } from '../engine/types';
 import { getWorkspaceRoot } from './workspacePicker';
 import { getKindIconName } from './kindIcons';
+import { getScopeQuickPickItems } from './scopeIcons';
 import { previewProvider } from './previewProvider';
 import type { SourceItem } from './sourcesView';
 import {
@@ -773,11 +774,11 @@ export class AvailableTreeDataProvider
     const targetAssistant = assistantPick.label as AssistantId;
     const targetAdapter = getAdapter(targetAssistant);
 
-    const scopePick = await vscode.window.showQuickPick(['project', 'global'], {
-      placeHolder: 'Select installation scope (project or global)',
+    const scopePick = await vscode.window.showQuickPick(getScopeQuickPickItems(), {
+      placeHolder: 'Select installation scope',
     });
     if (!scopePick) return;
-    const targetScope = scopePick as Scope;
+    const targetScope = (typeof scopePick === 'string' ? scopePick : scopePick.value) as Scope;
 
     let projectRoot: string | undefined;
     if (targetScope === 'project') {
@@ -1011,11 +1012,11 @@ export class AvailableTreeDataProvider
     const targetAssistant = assistantPick.label as AssistantId;
     const targetAdapter = getAdapter(targetAssistant);
 
-    const scopePick = await vscode.window.showQuickPick(['project', 'global'], {
-      placeHolder: 'Select installation scope (project or global)',
+    const scopePick = await vscode.window.showQuickPick(getScopeQuickPickItems(), {
+      placeHolder: 'Select installation scope',
     });
     if (!scopePick) return;
-    const targetScope = scopePick as Scope;
+    const targetScope = (typeof scopePick === 'string' ? scopePick : scopePick.value) as Scope;
 
     let projectRoot: string | undefined;
     if (targetScope === 'project') {

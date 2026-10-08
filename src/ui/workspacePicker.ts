@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 export async function getWorkspaceRoot(): Promise<string | undefined> {
   const folders = vscode.workspace.workspaceFolders;
   if (!folders || folders.length === 0) {
-    vscode.window.showWarningMessage('No workspace folder open. Open a folder to use project-scope features.');
+    vscode.window.showWarningMessage('No workspace folder open. Open a folder to use workspace-scope features.');
     return undefined;
   }
 

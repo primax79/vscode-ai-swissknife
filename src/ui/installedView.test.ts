@@ -19,7 +19,7 @@ Module.prototype.require = function (id: string, ...rest: unknown[]) {
       TreeItem: class {},
       TreeItemCollapsibleState: { None: 0 },
       EventEmitter: class { event = () => ({}); fire = () => {} },
-      ThemeIcon: class {},
+      ThemeIcon: class { constructor(public id?: string) {} },
       workspace: {
         get workspaceFolders() { return [{ uri: { fsPath: (globalThis as any).testWorkspaceRoot } }]; },
         getConfiguration: () => ({ get: () => undefined })
@@ -99,7 +99,7 @@ describe('InstalledTreeDataProvider - moveItem', () => {
     // Mock UI selections
     mockQuickPickResponses = [
       { label: 'kilo-code' }, // Assistant
-      'project' // Scope
+      { label: 'Workspace', value: 'project' } // Scope
     ];
     mockShowInformationMessageResult = 'Move';
 

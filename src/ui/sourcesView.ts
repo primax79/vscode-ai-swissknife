@@ -29,6 +29,7 @@ import {
 } from '../engine/configTransfer';
 import { ALL_SOURCE_RESOLVERS, getSourceResolver } from '../sources/registry';
 import { deriveSourceDefaults, validateLocation, validateLocalFolder } from '../sources/sourceDefaults';
+import { getScopeLabel, getScopeIconName, getScopeQuickPickItems } from './scopeIcons';
 
 export type SourceTreeItem =
   | ScopeGroupItem
@@ -124,6 +125,7 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
         vscode.TreeItemCollapsibleState.Expanded
       );
       item.contextValue = `scopeGroup:${element.scope}`;
+      item.iconPath = new vscode.ThemeIcon(getScopeIconName(element.scope));
       return item;
     }
 
@@ -163,7 +165,7 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
       }
       children.push(
         new ScopeGroupItem('global', 'Global Sources'),
-        new ScopeGroupItem('project', 'Project Sources')
+        new ScopeGroupItem('project', 'Workspace Sources')
       );
       return children;
     }
@@ -202,7 +204,7 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
           });
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
-          vscode.window.showErrorMessage(`Failed to read project sources: ${msg}`);
+          vscode.window.showErrorMessage(`Failed to read workspace sources: ${msg}`);
           return [];
         }
       }
@@ -277,7 +279,7 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
       ];
 
       for (const scope of scopes) {
-        const scopeLabel = scope === 'project' ? 'Workspace' : 'Global';
+        const scopeLabel = getScopeLabel(scope);
         const folderChoice = await vscode.window.showQuickPick(folderOptions, {
           placeHolder:
             scopes.length > 1
@@ -404,7 +406,7 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
     for (const scope of scopes) {
       const location = scopeLocations.get(scope)!;
       const root = scope === 'project' ? projectRoot : undefined;
-      const scopeLabel = scope === 'project' ? 'Workspace' : 'Global';
+      const scopeLabel = getScopeLabel(scope);
 
       try {
         const manifest = await readManifest(scope, root);
@@ -448,7 +450,7 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
         const msg = err instanceof Error ? err.message : String(err);
         if (succeededScopes.length > 0) {
           const succeededLabels = succeededScopes
-            .map((s) => (s === 'project' ? 'Workspace' : 'Global'))
+            .map((s) => getScopeLabel(s))
             .join(', ');
           vscode.window.showErrorMessage(
             `Source "${trimmedId}" added to ${succeededLabels} scope, but failed to add to ${scopeLabel} scope: ${msg}`
@@ -525,8 +527,16 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
   async exportConfig(): Promise<void> {
     const choice = await vscode.window.showQuickPick(
       [
-        { label: 'Global sources', value: 'global' as const },
-        { label: 'Project sources', value: 'project' as const },
+        {
+          label: 'Global sources',
+          value: 'global' as const,
+          iconPath: new vscode.ThemeIcon(getScopeIconName('global')),
+        },
+        {
+          label: 'Workspace sources',
+          value: 'project' as const,
+          iconPath: new vscode.ThemeIcon(getScopeIconName('project')),
+        },
         { label: 'Both (combined file)', value: 'both' as const },
       ],
       { placeHolder: 'Which configuration do you want to export?' }
@@ -627,11 +637,11 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
           payload.source.type === 'local-folder'
             ? ' Note: this is a local-folder source — verify its path resolves correctly here.'
             : '';
-        const scopePick = await vscode.window.showQuickPick(['project', 'global'], {
+        const scopePick = await vscode.window.showQuickPick(getScopeQuickPickItems(), {
           placeHolder: `Import source "${payload.source.id}" into which scope?${localFolderNote}`,
         });
         if (!scopePick) return;
-        const scope = scopePick as Scope;
+        const scope = (typeof scopePick === 'string' ? scopePick : scopePick.value) as Scope;
 
         let projectRoot: string | undefined;
         if (scope === 'project') {
@@ -643,7 +653,7 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
         await this.availableProvider.refreshCatalog();
         this.refresh();
         vscode.window.showInformationMessage(
-          `Source "${payload.source.id}" ${result.sourcesAdded > 0 ? 'added' : 'updated'} in ${scope} scope.`
+          `Source "${payload.source.id}" ${result.sourcesAdded > 0 ? 'added' : 'updated'} in ${getScopeLabel(scope)} scope.`
         );
         return;
       }
@@ -672,7 +682,7 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
           const projectRoot = await getWorkspaceRoot();
           if (projectRoot) {
             const confirmProject = await vscode.window.showInformationMessage(
-              `This file contains ${payload.project.sources.length} project source(s). Merge into the current workspace?`,
+              `This file contains ${payload.project.sources.length} workspace source(s). Merge into the current workspace?`,
               { modal: true },
               'Import'
             );

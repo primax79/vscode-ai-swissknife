@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import type { Artifact, Package, Source, AssistantId, Scope, ItemKind, ManagedInstallation } from '../domain/types';
 import { readManifest, writeManifest, readState, fromDesiredSource, withStateLock, type DesiredSource } from '../domain/registry';
 import { getWorkspaceRoot } from './workspacePicker';
+import { getScopeLabel } from './scopeIcons';
 import { getSourceResolver } from '../sources/registry';
 import { resolveRecommendations, SourceResolutionAttempt } from '../engine/recommendations';
 import { getAdapter, getEnabledAdapters } from '../adapters/registry';
@@ -235,7 +236,7 @@ async function ensureRecommendableSource(
     }
 
     const choice = await vscode.window.showInformationMessage(
-      `Source "${existingSourceId}" is only registered globally on this machine. To make this recommendation work for anyone who opens the project, it also needs to be registered as a project source.`,
+      `Source "${existingSourceId}" is only registered globally on this machine. To make this recommendation work for anyone who opens the workspace, it also needs to be registered as a workspace source.`,
       { modal: true },
       'Add & Continue'
     );
@@ -263,7 +264,7 @@ async function ensureRecommendableSource(
       { label: ADD_NEW },
       ...Array.from(bySourceId.values()).map((sc) => ({
         label: sc.desired.name ?? sc.desired.id,
-        description: `${sc.desired.type} (${sc.scope})`,
+        description: `${sc.desired.type} (${getScopeLabel(sc.scope)})`,
         sc,
       })),
     ],
