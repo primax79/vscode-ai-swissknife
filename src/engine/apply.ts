@@ -25,7 +25,7 @@ import {
   parseKiloCommandMarkdown,
 } from '../adapters/kilo';
 import { getAdapter } from '../adapters/registry';
-import { readState, writeState } from '../domain/registry';
+import { readState, writeState, withStateLock } from '../domain/registry';
 import type { PreparedInstall, ApplyOutcome } from './types';
 
 function sha256(data: Uint8Array | string): string {
@@ -154,28 +154,30 @@ export async function applyInstall(
     };
 
     try {
-      const state = await readState(plan.targetScope, plan.projectRoot, homeRoot);
-      const filtered = state.installations.filter(
-        (inst) =>
-          !(
-            inst.assistant === plan.targetAssistant &&
-            inst.scope === plan.targetScope &&
-            inst.projectPath === plan.projectRoot &&
-            inst.path === targetFilePath &&
-            inst.name === installation.name
-          )
-      );
-      filtered.push(installation);
+      await withStateLock(plan.targetScope, plan.projectRoot, homeRoot, async () => {
+        const state = await readState(plan.targetScope, plan.projectRoot, homeRoot);
+        const filtered = state.installations.filter(
+          (inst) =>
+            !(
+              inst.assistant === plan.targetAssistant &&
+              inst.scope === plan.targetScope &&
+              inst.projectPath === plan.projectRoot &&
+              inst.path === targetFilePath &&
+              inst.name === installation.name
+            )
+        );
+        filtered.push(installation);
 
-      await writeState(
-        plan.targetScope,
-        {
-          schemaVersion: state.schemaVersion,
-          installations: filtered,
-        },
-        plan.projectRoot,
-        homeRoot
-      );
+        await writeState(
+          plan.targetScope,
+          {
+            schemaVersion: state.schemaVersion,
+            installations: filtered,
+          },
+          plan.projectRoot,
+          homeRoot
+        );
+      });
     } catch (stateErr: unknown) {
       const msg = stateErr instanceof Error ? stateErr.message : String(stateErr);
       if (backupCreated) {
@@ -276,28 +278,30 @@ export async function applyInstall(
     };
 
     try {
-      const state = await readState(plan.targetScope, plan.projectRoot, homeRoot);
-      const filtered = state.installations.filter(
-        (inst) =>
-          !(
-            inst.assistant === plan.targetAssistant &&
-            inst.scope === plan.targetScope &&
-            inst.projectPath === plan.projectRoot &&
-            inst.path === targetFilePath &&
-            inst.name === hook.name
-          )
-      );
-      filtered.push(installation);
+      await withStateLock(plan.targetScope, plan.projectRoot, homeRoot, async () => {
+        const state = await readState(plan.targetScope, plan.projectRoot, homeRoot);
+        const filtered = state.installations.filter(
+          (inst) =>
+            !(
+              inst.assistant === plan.targetAssistant &&
+              inst.scope === plan.targetScope &&
+              inst.projectPath === plan.projectRoot &&
+              inst.path === targetFilePath &&
+              inst.name === hook.name
+            )
+        );
+        filtered.push(installation);
 
-      await writeState(
-        plan.targetScope,
-        {
-          schemaVersion: state.schemaVersion,
-          installations: filtered,
-        },
-        plan.projectRoot,
-        homeRoot
-      );
+        await writeState(
+          plan.targetScope,
+          {
+            schemaVersion: state.schemaVersion,
+            installations: filtered,
+          },
+          plan.projectRoot,
+          homeRoot
+        );
+      });
     } catch (stateErr: unknown) {
       const msg = stateErr instanceof Error ? stateErr.message : String(stateErr);
       if (backupCreated) {
@@ -416,28 +420,30 @@ export async function applyInstall(
     };
 
     try {
-      const state = await readState(plan.targetScope, plan.projectRoot, homeRoot);
-      const filtered = state.installations.filter(
-        (inst) =>
-          !(
-            inst.assistant === plan.targetAssistant &&
-            inst.scope === plan.targetScope &&
-            inst.projectPath === plan.projectRoot &&
-            inst.path === targetFilePath &&
-            inst.name === mcp.id
-          )
-      );
-      filtered.push(installation);
+      await withStateLock(plan.targetScope, plan.projectRoot, homeRoot, async () => {
+        const state = await readState(plan.targetScope, plan.projectRoot, homeRoot);
+        const filtered = state.installations.filter(
+          (inst) =>
+            !(
+              inst.assistant === plan.targetAssistant &&
+              inst.scope === plan.targetScope &&
+              inst.projectPath === plan.projectRoot &&
+              inst.path === targetFilePath &&
+              inst.name === mcp.id
+            )
+        );
+        filtered.push(installation);
 
-      await writeState(
-        plan.targetScope,
-        {
-          schemaVersion: state.schemaVersion,
-          installations: filtered,
-        },
-        plan.projectRoot,
-        homeRoot
-      );
+        await writeState(
+          plan.targetScope,
+          {
+            schemaVersion: state.schemaVersion,
+            installations: filtered,
+          },
+          plan.projectRoot,
+          homeRoot
+        );
+      });
     } catch (stateErr: unknown) {
       const msg = stateErr instanceof Error ? stateErr.message : String(stateErr);
       if (backupCreated) {
@@ -649,28 +655,30 @@ export async function applyInstall(
     };
 
     try {
-      const state = await readState(plan.targetScope, plan.projectRoot, homeRoot);
-      const filtered = state.installations.filter(
-        (inst) =>
-          !(
-            inst.assistant === plan.targetAssistant &&
-            inst.scope === plan.targetScope &&
-            inst.projectPath === plan.projectRoot &&
-            inst.path === targetFilePath &&
-            inst.name === cmd.name
-          )
-      );
-      filtered.push(installation);
+      await withStateLock(plan.targetScope, plan.projectRoot, homeRoot, async () => {
+        const state = await readState(plan.targetScope, plan.projectRoot, homeRoot);
+        const filtered = state.installations.filter(
+          (inst) =>
+            !(
+              inst.assistant === plan.targetAssistant &&
+              inst.scope === plan.targetScope &&
+              inst.projectPath === plan.projectRoot &&
+              inst.path === targetFilePath &&
+              inst.name === cmd.name
+            )
+        );
+        filtered.push(installation);
 
-      await writeState(
-        plan.targetScope,
-        {
-          schemaVersion: state.schemaVersion,
-          installations: filtered,
-        },
-        plan.projectRoot,
-        homeRoot
-      );
+        await writeState(
+          plan.targetScope,
+          {
+            schemaVersion: state.schemaVersion,
+            installations: filtered,
+          },
+          plan.projectRoot,
+          homeRoot
+        );
+      });
     } catch (stateErr: unknown) {
       const msg = stateErr instanceof Error ? stateErr.message : String(stateErr);
       try {
@@ -886,28 +894,30 @@ export async function applyInstall(
     };
 
     try {
-      const state = await readState(plan.targetScope, plan.projectRoot, homeRoot);
-      const filtered = state.installations.filter(
-        (inst) =>
-          !(
-            inst.assistant === plan.targetAssistant &&
-            inst.scope === plan.targetScope &&
-            inst.projectPath === plan.projectRoot &&
-            inst.path === targetFilePath &&
-            inst.name === agent.name
-          )
-      );
-      filtered.push(installation);
+      await withStateLock(plan.targetScope, plan.projectRoot, homeRoot, async () => {
+        const state = await readState(plan.targetScope, plan.projectRoot, homeRoot);
+        const filtered = state.installations.filter(
+          (inst) =>
+            !(
+              inst.assistant === plan.targetAssistant &&
+              inst.scope === plan.targetScope &&
+              inst.projectPath === plan.projectRoot &&
+              inst.path === targetFilePath &&
+              inst.name === agent.name
+            )
+        );
+        filtered.push(installation);
 
-      await writeState(
-        plan.targetScope,
-        {
-          schemaVersion: state.schemaVersion,
-          installations: filtered,
-        },
-        plan.projectRoot,
-        homeRoot
-      );
+        await writeState(
+          plan.targetScope,
+          {
+            schemaVersion: state.schemaVersion,
+            installations: filtered,
+          },
+          plan.projectRoot,
+          homeRoot
+        );
+      });
     } catch (stateErr: unknown) {
       const msg = stateErr instanceof Error ? stateErr.message : String(stateErr);
       try {
@@ -1178,28 +1188,30 @@ export async function applyInstall(
   };
 
   try {
-    const state = await readState(plan.targetScope, plan.projectRoot, homeRoot);
-    const filteredInstallations = state.installations.filter(
-      (inst) =>
-        !(
-          inst.assistant === plan.targetAssistant &&
-          inst.scope === plan.targetScope &&
-          inst.projectPath === plan.projectRoot &&
-          inst.path === plan.targetDir &&
-          inst.name === content.name
-        )
-    );
-    filteredInstallations.push(installation);
+    await withStateLock(plan.targetScope, plan.projectRoot, homeRoot, async () => {
+      const state = await readState(plan.targetScope, plan.projectRoot, homeRoot);
+      const filteredInstallations = state.installations.filter(
+        (inst) =>
+          !(
+            inst.assistant === plan.targetAssistant &&
+            inst.scope === plan.targetScope &&
+            inst.projectPath === plan.projectRoot &&
+            inst.path === plan.targetDir &&
+            inst.name === content.name
+          )
+      );
+      filteredInstallations.push(installation);
 
-    await writeState(
-      plan.targetScope,
-      {
-        schemaVersion: state.schemaVersion,
-        installations: filteredInstallations,
-      },
-      plan.projectRoot,
-      homeRoot
-    );
+      await writeState(
+        plan.targetScope,
+        {
+          schemaVersion: state.schemaVersion,
+          installations: filteredInstallations,
+        },
+        plan.projectRoot,
+        homeRoot
+      );
+    });
   } catch (stateErr: unknown) {
     const msg = stateErr instanceof Error ? stateErr.message : String(stateErr);
 

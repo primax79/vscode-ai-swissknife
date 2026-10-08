@@ -5,6 +5,12 @@ import type { Scope, AssistantId, Source, ManagedInstallation } from './types';
 import { ensureStateIgnored } from './gitignore';
 
 export { ensureStateIgnored } from './gitignore';
+export {
+  withStateLock,
+  stateLockPath,
+  StateLockTimeoutError,
+  StateLockOptions,
+} from './stateLock';
 
 export const SCHEMA_VERSION = 1;
 

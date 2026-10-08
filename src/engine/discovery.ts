@@ -15,7 +15,7 @@ import type {
   CanonicalHook,
   CanonicalRule,
 } from '../adapters/types';
-import { readState, writeState, readManifest, fromDesiredSource } from '../domain/registry';
+import { readState, writeState, readManifest, fromDesiredSource, withStateLock } from '../domain/registry';
 import {
   canonicalSkillHash,
   canonicalAgentHash,
@@ -346,28 +346,30 @@ export async function promoteObservedArtifact(
     contentHash,
   };
 
-  const state = await readState(observed.scope, observed.projectPath, homeRoot);
-  const filtered = state.installations.filter(
-    (i) =>
-      !(
-        i.assistant === observed.assistant &&
-        i.scope === observed.scope &&
-        i.projectPath === observed.projectPath &&
-        i.kind === observed.kind &&
-        i.name === observed.name
-      )
-  );
-  filtered.push(installation);
+  await withStateLock(observed.scope, observed.projectPath, homeRoot, async () => {
+    const state = await readState(observed.scope, observed.projectPath, homeRoot);
+    const filtered = state.installations.filter(
+      (i) =>
+        !(
+          i.assistant === observed.assistant &&
+          i.scope === observed.scope &&
+          i.projectPath === observed.projectPath &&
+          i.kind === observed.kind &&
+          i.name === observed.name
+        )
+    );
+    filtered.push(installation);
 
-  await writeState(
-    observed.scope,
-    {
-      schemaVersion: state.schemaVersion,
-      installations: filtered,
-    },
-    observed.projectPath,
-    homeRoot
-  );
+    await writeState(
+      observed.scope,
+      {
+        schemaVersion: state.schemaVersion,
+        installations: filtered,
+      },
+      observed.projectPath,
+      homeRoot
+    );
+  });
 
   return installation;
 }
