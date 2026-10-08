@@ -47,8 +47,8 @@ Mechanism choice inside C: **call the CLI, do not edit Claude's JSON files by ha
 
 - **CP-Q1** ~~scope of support~~ **answered (owner, 2026-10-08): C, native management** (install, update, enable/disable, uninstall, all through the `claude plugin` CLI). Built incrementally: read-only listing first inside the plan, then each action.
 - **CP-Q2** ~~mechanism~~ **answered: call the CLI**, never edit Claude's JSON files.
-- **CP-Q3** where plugins appear: **working assumption, not yet confirmed**: inside the Installed tree of the Claude environment (parent = plugin, children = components, token cost on the parent).
+- **CP-Q3** where plugins appear: **decided by the architect (delegated by the owner, 2026-10-08)**: inside the Installed tree of the Claude environment (parent = plugin, children = components, token cost on the parent).
 - **CP-Q4** Claude's `local` scope: ~~working assumption~~ **answered a (owner, 2026-10-08)**: shown as "Workspace (private)" with a distinct badge; `user` = Global, `project` = Workspace (shared with the team).
-- **CP-Q5** default install mode for Claude targets: **working assumption**: as a native plugin for Claude, loose artifacts for the other assistants.
+- **CP-Q5** default install mode for Claude targets: **decided by the architect (delegated)**: as a native plugin for Claude, loose artifacts for the other assistants.
 
 Captured in initiative 45.
