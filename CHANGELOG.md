@@ -2,6 +2,13 @@
 
 All notable changes to the "AI Swissknife" extension are documented in this file.
 
+## [0.2.0] - 2026-10-08
+
+- Fixed: the Dashboard Installed tab showed `[object Object]` after a data
+  refresh, and the Unmanaged table was not refreshed (39.1).
+- Internal: pure helper to validate a source location and derive its id/name
+  (36.1, not yet wired into the Add Source flow).
+
 ## [0.1.0] - 2026-10-08
 
 - Internal: engine helper to plan and apply an install across several
