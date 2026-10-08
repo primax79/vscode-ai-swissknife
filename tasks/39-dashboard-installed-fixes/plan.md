@@ -23,15 +23,15 @@
 
 ## Open questions (resolve with the owner)
 
-- Q1. **Removal of unmanaged items**: you asked for Uninstall; today nothing deletes an unmanaged item (the engine has `src/engine/softDelete.ts`). Proposal: add "Delete (move to trash)" for unmanaged rows using soft-delete, with a modal confirmation, in both Dashboard and sidebar. Alternative: Dashboard parity only, no deletion of unmanaged.
-- ~~Q3~~ resolved (owner, 2026-10-08): icon-only applies to the compact tree rows (collapsed object rows, chips, row buttons); the detail panel keeps icon **and** short text label on its actions, because it is where the user asks "what does this do?".
-- Q2. **Status vocabulary** (for 39.3). Proposal: *identical* → green "Identical to <source>" with a ✓; *differs* → neutral/info (not yellow) "Custom · differs from <source>" with a one-click Diff; reserve yellow for "modified locally" of managed items. Alternative: keep colors, only improve contrast/labels.
+- ~~39-Q1~~ resolved (owner, 2026-10-08): unmanaged items can be removed, with **both** modes: *soft* (move to the trash `_deleted/`, recoverable, the default) and *hard* (permanent deletion, irreversible). Same two modes offered for managed Uninstall (consistency; confirm with the owner if unwanted). Both in sidebar and Dashboard.
+- ~~39-Q3~~ resolved (owner, 2026-10-08): icon-only applies to the compact tree rows (collapsed object rows, chips, row buttons); the detail panel keeps icon **and** short text label on its actions, because it is where the user asks "what does this do?".
+- ~~39-Q2~~ resolved (owner, 2026-10-08): identical = green "✓ Identical to <source>"; differs = neutral/info "Custom · differs from <source>" (not yellow) with a one-click Diff; yellow stays for managed "modified locally".
 
 ## Tasks
 
 | Task | Title | Depends on | Size |
 | --- | --- | --- | --- |
 | [39.1](39.1-fix-inventory-rows.md) | Fix `[object Object]` and keep the Unmanaged table in sync | - | S |
-| [39.2](39.2-action-parity.md) | Dashboard action parity with the sidebar (preview, diff, sync, recommend, edit, delete) | 39.1, 39.4, 40.2, Q1 | M |
+| [39.2](39.2-action-parity.md) | Dashboard action parity with the sidebar (preview, diff, sync, recommend, edit, delete) | 39.1, 39.4, 40.2 | M |
 | [39.4](39.4-detail-panel.md) | Detail panel: computed origin, state in words, location, one labeled action bar | 39.1 | M |
-| [39.3](39.3-status-clarity.md) | Verify "differs" data, then clarify identical/differs badges | 39.1, 40.2, Q2 | S |
+| [39.3](39.3-status-clarity.md) | Verify "differs" data, then clarify identical/differs badges | 39.1, 40.2 | S |

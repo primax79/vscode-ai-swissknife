@@ -25,14 +25,14 @@
 
 ## Open questions (resolve with the owner before dispatching 37.2)
 
-- Q1. **Meaning of "Overwrite at the end".** Proposal: the final modal offers `Install` (new targets only, existing ones skipped) and `Overwrite` (also replaces existing ones); with no conflicts only `Install` is shown. Alternative: only a single confirm with a checkbox.
-- ~~Q2~~ resolved (owner, 2026-10-08): whether a workspace is open is known before the scope step, so with no workspace the scope step offers only Global (Workspace and Both are not shown, with a one-line hint "open a folder to enable workspace scope"). No fallback or skip logic after the choice.
-- ~~Q3~~ resolved (owner, 2026-10-08): no preselection and no persisted "last used" state; the multi-select starts with nothing checked.
+- ~~37-Q1~~ resolved (owner, 2026-10-08): the final modal offers `Preview` / `Install` (new targets only, existing ones skipped) / `Overwrite` (also replaces existing ones); with no conflicts only `Install` (plus `Preview`) is shown.
+- ~~37-Q2~~ resolved (owner, 2026-10-08): whether a workspace is open is known before the scope step, so with no workspace the scope step offers only Global (Workspace and Both are not shown, with a one-line hint "open a folder to enable workspace scope"). No fallback or skip logic after the choice.
+- ~~37-Q3~~ resolved (owner, 2026-10-08): no preselection and no persisted "last used" state; the multi-select starts with nothing checked.
 
 ## Tasks
 
 | Task | Title | Depends on | Size |
 | --- | --- | --- | --- |
 | [37.1](37.1-target-matrix.md) | Engine helper: plan the assistant × scope matrix and summarize it | - | M |
-| [37.2](37.2-multi-select-flow.md) | Unified multi-select install flow in `availableView.ts` | 37.1, Q1-Q3 | M |
+| [37.2](37.2-multi-select-flow.md) | Unified multi-select install flow in `availableView.ts` | 37.1 | M |
 | [37.3](37.3-result-reporting.md) | Per-target outcome reporting and partial-failure handling | 37.2 | S |

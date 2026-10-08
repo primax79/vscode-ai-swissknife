@@ -33,10 +33,10 @@ the least-informative questions (id, name) first and the most-informative one
 
 ## Open questions (resolve with the owner before 36.2/36.3 are dispatched)
 
-- ~~Q1 ("Both" + `local-folder`)~~ resolved: scope(s) asked up front, path asked independently per scope.
-- ~~Q2~~ resolved (owner, 2026-10-08): branch/tag pin is out of the main flow; default branch is assumed; pinning is an optional "Advanced: pin to branch/tag" step.
-- ~~Q3~~ resolved (owner, 2026-10-08): same id already in a chosen scope → modal "Replace?" per scope instead of the silent overwrite at `src/ui/sourcesView.ts:268`; answering No skips that scope only.
-- ~~Q4~~ resolved (owner, 2026-10-08, revised): the workspace is known before the scope step, so with no workspace the scope multi-select offers only Global (Workspace not shown, with a one-line hint). No drop-after-selection logic.
+- ~~36-Q1 ("Both" + `local-folder`)~~ resolved: scope(s) asked up front, path asked independently per scope.
+- ~~36-Q2~~ resolved (owner, 2026-10-08): branch/tag pin is out of the main flow; default branch is assumed; pinning is an optional "Advanced: pin to branch/tag" step.
+- ~~36-Q3~~ resolved (owner, 2026-10-08): same id already in a chosen scope → modal "Replace?" per scope instead of the silent overwrite at `src/ui/sourcesView.ts:268`; answering No skips that scope only.
+- ~~36-Q4~~ resolved (owner, 2026-10-08, revised): the workspace is known before the scope step, so with no workspace the scope multi-select offers only Global (Workspace not shown, with a one-line hint). No drop-after-selection logic.
 
 ## Tasks
 

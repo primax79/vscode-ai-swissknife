@@ -31,7 +31,7 @@ An icon-only button **"Install to other environments"** (`+`-style, tooltip, 35.
 
 ## Open questions
 
-- ~~Q1~~ resolved (owner, 2026-10-08): an unmanaged item that differs from its source is installed from the **source's version**; the picker title states "from <source>"; the local version stays available via `Copy to...`.
+- ~~41-Q1~~ resolved (owner, 2026-10-08): an unmanaged item that differs from its source is installed from the **source's version**; the picker title states "from <source>"; the local version stays available via `Copy to...`.
 
 ## Tasks
 
