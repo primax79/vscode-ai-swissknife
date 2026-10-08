@@ -471,7 +471,7 @@
     "generate-icon-font": "fantasticon resources/icon-font/svg -o resources/icon-font -n ai-swissknife-icons -t woff -g json --normalize true",
     "lint": "eslint src --ext ts",
     "typecheck": "tsc --noEmit",
-    "test": "tsc && node --test out"
+    "test": "node esbuild.config.js && tsc && node --test out"
   },
   "dependencies": {
     "commander": "^12.1.0"
