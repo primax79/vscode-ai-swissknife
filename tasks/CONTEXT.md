@@ -256,6 +256,15 @@ review, `_inbox/analyzed/codex-analysis-2.md` — don't let it drift again).
   must re-apply this rule at the new site, it does not travel
   automatically with a copy-paste/relocation.
 
+- **User-facing name of the `project` scope is "Workspace"** (owner,
+  2026-10-08) — never "Project" or "Local" in any UI string, tooltip,
+  QuickPick, message or `package.json` title; the other scope is "Global".
+  The domain/manifest value stays `project` (no schema or migration
+  change). All labels come from `getScopeLabel` in `src/ui/scopeIcons.ts`
+  (initiative 40.4) rather than inline literals. *Why:* the extension
+  already says "workspace" everywhere else (workspace folder, workspace
+  recommendations), and "project / local" were used inconsistently.
+
 ## Conventions
 
 - All code, identifiers, comments, commit messages, and doc files
