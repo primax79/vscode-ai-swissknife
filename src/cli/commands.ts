@@ -90,6 +90,7 @@ function validateScope(scope?: string): Scope | undefined {
   return scope as Scope;
 }
 
+export { runDescribe } from './definitions';
 export async function runSources(opts: GlobalCliOptions): Promise<CliSource[]> {
   const { homeRoot, workspaceRoot } = resolveRoots(opts);
   const sources: CliSource[] = [];

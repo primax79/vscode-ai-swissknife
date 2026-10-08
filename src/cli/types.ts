@@ -21,6 +21,31 @@ export interface GlobalCliOptions {
   assistants?: string;
 }
 
+export interface CliOptionDefinition {
+  flags: string;
+  description: string;
+  required?: boolean;
+}
+
+export interface CliArgumentDefinition {
+  name: string;
+  required?: boolean;
+  description?: string;
+}
+
+export interface CliCommandDescription {
+  name: string;
+  description: string;
+  arguments?: CliArgumentDefinition[];
+  options: CliOptionDefinition[];
+  outputShape: Record<string, unknown>;
+}
+
+export interface CliCommandDefinition extends CliCommandDescription {
+  examples?: string[];
+  run: (args: Record<string, any>, globalOpts: GlobalCliOptions) => Promise<unknown>;
+}
+
 export interface CliSource {
   id: string;
   type: string;
