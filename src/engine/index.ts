@@ -28,3 +28,14 @@ export {
   type ExportedConfigFile,
   type MergeResult,
 } from './configTransfer';
+export {
+  planInstallMatrix,
+  applyInstallMatrix,
+  type MatrixItem,
+  type MatrixTarget,
+  type MatrixSummary,
+  type MatrixTargetOutcome,
+  type PlanInstallMatrixParams,
+  type PlanInstallMatrixResult,
+  type ApplyInstallMatrixOptions,
+} from './installMatrix';
