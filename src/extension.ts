@@ -21,6 +21,8 @@ import { handleCreateArtifact } from './ui/createArtifact';
 
 import { ALL_ADAPTERS, getEnabledAdapters } from './adapters/registry';
 import { handleInstallRecommended } from './ui/recommendations';
+import type { UpdateFilter } from './engine/update';
+import type { AssistantId } from './domain/types';
 import {
   computePendingCounts,
   formatStatusBarLabel,
@@ -121,6 +123,19 @@ export function activate(context: vscode.ExtensionContext) {
   };
 
   updateEnabledContext();
+
+  for (const adapter of ALL_ADAPTERS) {
+    vscode.commands.executeCommand(
+      'setContext',
+      `aiSwissknife.updatesAvailable.${adapter.assistant}`,
+      true
+    );
+    vscode.commands.executeCommand(
+      'setContext',
+      `aiSwissknife.hasUpdates.${adapter.assistant}`,
+      true
+    );
+  }
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
@@ -273,6 +288,24 @@ export function activate(context: vscode.ExtensionContext) {
       await installedProvider.checkDrift();
       updateStatusBar().catch(() => {});
     }),
+    vscode.commands.registerCommand('aiSwissknife.updateAll', async (arg?: unknown) => {
+      let filter: UpdateFilter | undefined;
+      if (typeof arg === 'string') {
+        filter = { assistant: arg as AssistantId };
+      } else if (arg && typeof arg === 'object') {
+        if ('assistant' in arg || 'scope' in arg || 'kind' in arg || 'sourceId' in arg) {
+          filter = arg as UpdateFilter;
+        }
+      }
+      await installedProvider.doUpdateAll(filter);
+      updateStatusBar().catch(() => {});
+    }),
+    ...ALL_ADAPTERS.map((adapter) =>
+      vscode.commands.registerCommand(`aiSwissknife.updateAll.${adapter.assistant}`, async () => {
+        await installedProvider.doUpdateAll({ assistant: adapter.assistant });
+        updateStatusBar().catch(() => {});
+      })
+    ),
     vscode.commands.registerCommand('aiSwissknife.updateItem', (item?: InstalledInstallationItem) =>
       installedProvider.updateInstallation(item)
     ),

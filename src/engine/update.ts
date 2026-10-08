@@ -95,6 +95,7 @@ export interface PlanUpdateAllResult {
 export interface ApplyUpdateAllOptions {
   backupModified?: boolean;
   homeRoot?: string;
+  onProgress?: (item: UpdatePlanItem, index: number, total: number) => void;
 }
 
 export type UpdateItemOutcomeStatus =
@@ -514,7 +515,9 @@ export async function applyUpdateAll(
   const items = Array.isArray(plan) ? plan : plan.toUpdate;
   const outcomes: UpdateItemOutcome[] = [];
 
-  for (const item of items) {
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    options?.onProgress?.(item, i, items.length);
     let backupPath: string | undefined;
     try {
       let isModified =

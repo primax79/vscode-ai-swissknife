@@ -13,10 +13,9 @@ import { findRelatedInstallations, groupByIdentityAndScope } from '../engine/cro
 import { ALL_ADAPTERS } from '../adapters/registry';
 import { resolveArtifactPreviewPath } from './artifactFileTree';
 import { handleInstallRecommended, installResolvedArtifacts, unrecommendArtifactForWorkspace } from './recommendations';
+import { getScopeLabel } from './scopeLabel';
 
-export function getScopeLabel(scope: string): string {
-  return scope === 'project' ? 'Workspace' : 'Global';
-}
+export { getScopeLabel };
 
 export function getScopeIconSvg(scope: string): string {
   if (scope === 'project') {
@@ -412,6 +411,12 @@ export class DashboardPanel {
                 await this.update();
               }
             }
+            break;
+          }
+          case 'updateAll': {
+            await this._provider.doUpdateAll(message.filter);
+            this._refreshCallback();
+            await this.update();
             break;
           }
           case 'installRecommended':
@@ -995,7 +1000,7 @@ export class DashboardPanel {
           <span class="stat-num" id="overview-stat-managed">${totalInstalled}</span>
           <span class="stat-label">Managed Installations</span>
         </div>
-        <div class="stat-chip stat-info">
+        <div class="stat-chip stat-info" style="cursor: pointer;" onclick="triggerUpdateAll()">
           <span class="stat-num" id="overview-stat-updates">${updatesAvailable}</span>
           <span class="stat-label">Updates Available</span>
         </div>
@@ -1269,7 +1274,7 @@ export class DashboardPanel {
       <span class="stat-num" id="stat-managed">${totalInstalled}</span>
       <span class="stat-label">Managed Installations</span>
     </div>
-    <div class="stat-chip stat-info">
+    <div class="stat-chip stat-info" style="cursor: pointer;" onclick="triggerUpdateAll()">
       <span class="stat-num" id="stat-updates-available">${updatesAvailable}</span>
       <span class="stat-label">Updates Available</span>
     </div>
@@ -1297,7 +1302,7 @@ export class DashboardPanel {
       <select class="filter-select" id="scopeFilter" onchange="setScopeFilter(this.value)">
         <option value="all">Scope: All</option>
         <option value="global">Scope: Global</option>
-        <option value="project">Scope: Project</option>
+        <option value="project">Scope: Workspace</option>
       </select>
     </div>
     <div class="filter-group">
@@ -1309,6 +1314,9 @@ export class DashboardPanel {
     </div>
     <div class="filter-group" style="flex: 1;">
       <input type="text" class="search-input" id="searchBox" placeholder="Filter by name..." oninput="filterTable()">
+    </div>
+    <div class="filter-group">
+      <button class="btn btn-sm btn-primary update-all-btn" id="updateAllBtn" title="Update all (${updatesAvailable})" ${updatesAvailable === 0 ? 'disabled' : ''} onclick="triggerUpdateAll()">⟳</button>
     </div>
   </div>
   
@@ -2132,6 +2140,14 @@ export class DashboardPanel {
       }
     }
 
+    function triggerUpdateAll() {
+      const filter = {};
+      if (currentEnv !== 'all') filter.assistant = currentEnv;
+      if (currentScope !== 'all') filter.scope = currentScope;
+      if (currentKind !== 'all') filter.kind = currentKind;
+      vscode.postMessage({ command: 'updateAll', filter });
+    }
+
     function refreshState() {
       vscode.postMessage({ command: 'refresh' });
     }
@@ -2323,6 +2339,12 @@ export class DashboardPanel {
       if (overviewUnmanStat) overviewUnmanStat.textContent = visUnmanaged;
       const unmanLbl = document.getElementById('stat-unmanaged-lbl');
       if (unmanLbl) unmanLbl.textContent = \`Unmanaged Discovered (\${visUnmanagedIdentical} identical, \${visUnmanaged - visUnmanagedIdentical} custom)\`;
+
+      const updateAllBtn = document.getElementById('updateAllBtn');
+      if (updateAllBtn) {
+        updateAllBtn.title = 'Update all (' + visUpdates + ')';
+        updateAllBtn.disabled = visUpdates === 0;
+      }
     }
 
     window.addEventListener('message', (event) => {
