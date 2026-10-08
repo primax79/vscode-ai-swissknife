@@ -22,5 +22,6 @@ Updating is one item at a time: `InstalledTreeDataProvider.doUpdateInstallation`
 | Task | Title | Depends on | Size |
 | --- | --- | --- | --- |
 | [47.1](47.1-engine-update-all.md) | Engine: `planUpdate` extracted from the UI, `planUpdateAll` / `applyUpdateAll` | 37.1 | M |
+| [47.4](47.4-drift-resolve-once.md) | Drift check resolves each source once (was once per item: N git fetches) | 47.1 | S |
 | [47.3](47.3-hold.md) | Hold an item out of Update all (flag, engine bucket, UI toggle and marker) | 47.1, 47.2 | S |
 | [47.2](47.2-ui-update-all.md) | UI: command, per-environment sidebar button, Dashboard button on the filtered selection, summary modal and result report | 47.1 | M |

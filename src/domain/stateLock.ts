@@ -24,6 +24,9 @@ export class StateLockTimeoutError extends Error {
   }
 }
 
+/** Minimum age before a lock whose holder process is still alive is considered stale (pid reuse after a crash). */
+export const ALIVE_HOLDER_STALE_MS = 5 * 60_000;
+
 export interface StateLockOptions {
   /** Maximum time in milliseconds to wait for the lock before timing out. Default: 10000ms. */
   timeoutMs?: number;
@@ -212,8 +215,13 @@ async function tryTakeoverStaleLock(
         : 0;
 
     const pid = parsed?.pid;
-    const isDeadPid = typeof pid === 'number' && pid > 0 && !isPidAlive(pid);
-    const isExpired = Date.now() - timestamp > staleThresholdMs;
+    const hasPid = typeof pid === 'number' && pid > 0;
+    const isDeadPid = hasPid && !isPidAlive(pid);
+    // A lock held by a LIVE process is only taken over after a much longer age
+    // (the pid may have been reused after a crash): taking it at the normal
+    // threshold would let a second writer in while a slow holder is still running.
+    const ageThresholdMs = hasPid && !isDeadPid ? Math.max(staleThresholdMs, ALIVE_HOLDER_STALE_MS) : staleThresholdMs;
+    const isExpired = Date.now() - timestamp > ageThresholdMs;
 
     if (isDeadPid || isExpired) {
       // Stale lock detected. Re-verify content before unlinking to avoid

@@ -11,6 +11,7 @@ import {
   formatLockContent,
   parseLockContent,
   isPidAlive,
+  ALIVE_HOLDER_STALE_MS,
 } from './stateLock';
 import { manifestPath } from './registry';
 
@@ -251,27 +252,47 @@ describe('stateLock (cross-process & in-process lock)', () => {
       assert.strictEqual(fs.existsSync(lockPath), false);
     });
 
-    it('takes over a stale lock whose age exceeds staleThresholdMs even if pid is alive', async () => {
+    it('does NOT take over a lock held by a live pid just because it exceeds staleThresholdMs', async () => {
       const lockPath = stateLockPath('project', testTempDir);
       await fs.promises.mkdir(path.dirname(lockPath), { recursive: true });
 
-      // Write lock file with current process PID, but created 100 seconds ago
-      const expiredTimestamp = Date.now() - 100_000;
-      await fs.promises.writeFile(lockPath, formatLockContent(process.pid, expiredTimestamp), 'utf-8');
+      // Live holder (this process), lock 100 seconds old: older than staleThresholdMs but far below
+      // the live-holder threshold, so a second writer must wait and time out instead of barging in.
+      const oldTimestamp = Date.now() - 100_000;
+      await fs.promises.writeFile(lockPath, formatLockContent(process.pid, oldTimestamp), 'utf-8');
 
       let executed = false;
+      await assert.rejects(
+        withStateLock(
+          'project',
+          testTempDir,
+          async () => {
+            executed = true;
+          },
+          { staleThresholdMs: 500, timeoutMs: 400, pollIntervalMs: 10 }
+        ),
+        (err: unknown) => err instanceof StateLockTimeoutError
+      );
+      assert.strictEqual(executed, false);
+      // The live holder's lock file is untouched
+      assert.strictEqual(fs.existsSync(lockPath), true);
+    });
+
+    it('takes over a lock held by a live pid once it is older than the live-holder threshold (pid reuse)', async () => {
+      const lockPath = stateLockPath('project', testTempDir);
+      await fs.promises.mkdir(path.dirname(lockPath), { recursive: true });
+
+      const veryOldTimestamp = Date.now() - (ALIVE_HOLDER_STALE_MS + 60_000);
+      await fs.promises.writeFile(lockPath, formatLockContent(process.pid, veryOldTimestamp), 'utf-8');
+
       const result = await withStateLock(
         'project',
         testTempDir,
-        async () => {
-          executed = true;
-          return 'expired-takeover-success';
-        },
+        async () => 'live-holder-expired-takeover',
         { staleThresholdMs: 500 }
       );
 
-      assert.strictEqual(executed, true);
-      assert.strictEqual(result, 'expired-takeover-success');
+      assert.strictEqual(result, 'live-holder-expired-takeover');
       assert.strictEqual(fs.existsSync(lockPath), false);
     });
   });
