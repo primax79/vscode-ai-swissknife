@@ -361,6 +361,255 @@ export function kiloToCanonicalMcp(id: string, raw: Record<string, unknown>): Ca
   };
 }
 
+function detectIndentation(content: string): string {
+  const lines = content.split(/\r?\n/);
+  for (const line of lines) {
+    if (/^\t/.test(line)) {
+      return '\t';
+    }
+  }
+  let indent2 = 0;
+  let indent4 = 0;
+  for (const line of lines) {
+    const match = line.match(/^( +)\S/);
+    if (match) {
+      const len = match[1].length;
+      if (len % 4 === 0) {
+        indent4++;
+      } else if (len % 2 === 0) {
+        indent2++;
+      }
+    }
+  }
+  if (indent4 > 0 && indent2 === 0) {
+    return '    ';
+  }
+  return '  ';
+}
+
+function detectEol(content: string): string {
+  return content.includes('\r\n') ? '\r\n' : '\n';
+}
+
+function getLineIndent(content: string, offset: number): string {
+  const lineStart = content.lastIndexOf('\n', offset - 1) + 1;
+  const match = content.slice(lineStart).match(/^[ \t]*/);
+  return match ? match[0] : '';
+}
+
+function formatValue(val: unknown, baseIndent: string, indentStep: string, eol: string): string {
+  const json = JSON.stringify(val, null, indentStep);
+  const lines = json.split('\n');
+  const result: string[] = [];
+  result.push('{');
+  for (let i = 1; i < lines.length - 1; i++) {
+    result.push(`${baseIndent}${lines[i]}`);
+  }
+  result.push(`${baseIndent}}`);
+  return result.join(eol);
+}
+
+function formatEntry(id: string, val: unknown, baseIndent: string, indentStep: string, eol: string): string {
+  const json = JSON.stringify(val, null, indentStep);
+  const lines = json.split('\n');
+  const result: string[] = [];
+  result.push(`${baseIndent}"${id}": {`);
+  for (let i = 1; i < lines.length - 1; i++) {
+    result.push(`${baseIndent}${lines[i]}`);
+  }
+  result.push(`${baseIndent}}`);
+  return result.join(eol);
+}
+
+function findObjectProperty(objNode: jsonc.Node | undefined, propName: string): jsonc.Node | null {
+  if (!objNode || !objNode.children) {
+    return null;
+  }
+  for (const child of objNode.children) {
+    if (child.type === 'property' && child.children?.[0]?.value === propName) {
+      return child;
+    }
+  }
+  return null;
+}
+
+export function writeKiloJsoncMcp(
+  content: string,
+  serverId: string,
+  kiloEntry: Record<string, unknown>
+): string {
+  let text = content;
+  if (!text.trim()) {
+    text = '{\n}\n';
+  }
+  const tree = jsonc.parseTree(text);
+  if (!tree || tree.type !== 'object') {
+    text = '{\n}\n';
+    return writeKiloJsoncMcp(text, serverId, kiloEntry);
+  }
+
+  const indentStep = detectIndentation(text);
+  const eol = detectEol(text);
+
+  const mcpProp = findObjectProperty(tree, 'mcp') || findObjectProperty(tree, 'mcpServers');
+
+  if (!mcpProp) {
+    const rootProps = tree.children || [];
+    if (rootProps.length === 0) {
+      const openBrace = tree.offset;
+      const closeBrace = tree.offset + tree.length - 1;
+      const entryText = formatEntry(serverId, kiloEntry, indentStep + indentStep, indentStep, eol);
+      const inserted = `${eol}${indentStep}"mcp": {${eol}${entryText},${eol}${indentStep}}${eol}`;
+      return text.slice(0, openBrace + 1) + inserted + text.slice(closeBrace);
+    } else {
+      const lastRootProp = rootProps[rootProps.length - 1];
+      const propEnd = lastRootProp.offset + lastRootProp.length;
+      const scanner = jsonc.createScanner(text, false);
+      scanner.setPosition(propEnd);
+      let token: jsonc.SyntaxKind;
+      let hasComma = false;
+      let nextLineOffset = -1;
+
+      while ((token = scanner.scan()) !== jsonc.SyntaxKind.EOF) {
+        if (token === jsonc.SyntaxKind.CommaToken) {
+          hasComma = true;
+        }
+        if (token === jsonc.SyntaxKind.LineBreakTrivia) {
+          nextLineOffset = scanner.getTokenOffset() + scanner.getTokenLength();
+          break;
+        }
+        if (token === jsonc.SyntaxKind.CloseBraceToken) {
+          nextLineOffset = scanner.getTokenOffset();
+          break;
+        }
+      }
+      if (nextLineOffset === -1) {
+        nextLineOffset = propEnd;
+      }
+
+      const rootPropIndent = getLineIndent(text, lastRootProp.offset);
+      const mcpIndent = rootPropIndent;
+      const entryIndent = mcpIndent + indentStep;
+      const entryText = formatEntry(serverId, kiloEntry, entryIndent, indentStep, eol);
+      const mcpBlock = `${mcpIndent}"mcp": {${eol}${entryText},${eol}${mcpIndent}},${eol}`;
+
+      let updated = text;
+      updated = updated.slice(0, nextLineOffset) + mcpBlock + updated.slice(nextLineOffset);
+      if (!hasComma) {
+        updated = updated.slice(0, propEnd) + ',' + updated.slice(propEnd);
+      }
+      return updated;
+    }
+  }
+
+  const mcpNode = mcpProp.children?.[1];
+  if (!mcpNode || mcpNode.type !== 'object') {
+    return text;
+  }
+
+  const existingProp = findObjectProperty(mcpNode, serverId);
+  if (existingProp) {
+    const valNode = existingProp.children?.[1];
+    if (valNode) {
+      const propIndent = getLineIndent(text, existingProp.offset);
+      const newValText = formatValue(kiloEntry, propIndent, indentStep, eol);
+      return text.slice(0, valNode.offset) + newValText + text.slice(valNode.offset + valNode.length);
+    }
+  }
+
+  const mcpProps = mcpNode.children || [];
+  if (mcpProps.length === 0) {
+    const mcpIndent = getLineIndent(text, mcpProp.offset);
+    const childIndent = mcpIndent + indentStep;
+    const entryText = formatEntry(serverId, kiloEntry, childIndent, indentStep, eol);
+    const openBrace = mcpNode.offset;
+    const closeBrace = mcpNode.offset + mcpNode.length - 1;
+    const inserted = `${eol}${entryText},${eol}${mcpIndent}`;
+    return text.slice(0, openBrace + 1) + inserted + text.slice(closeBrace);
+  }
+
+  const lastProp = mcpProps[mcpProps.length - 1];
+  const propEnd = lastProp.offset + lastProp.length;
+  const scanner = jsonc.createScanner(text, false);
+  scanner.setPosition(propEnd);
+  let token: jsonc.SyntaxKind;
+  let hasComma = false;
+  let nextLineOffset = -1;
+
+  while ((token = scanner.scan()) !== jsonc.SyntaxKind.EOF) {
+    if (token === jsonc.SyntaxKind.CommaToken) {
+      hasComma = true;
+    }
+    if (token === jsonc.SyntaxKind.LineBreakTrivia) {
+      nextLineOffset = scanner.getTokenOffset() + scanner.getTokenLength();
+      break;
+    }
+    if (token === jsonc.SyntaxKind.CloseBraceToken) {
+      nextLineOffset = scanner.getTokenOffset();
+      break;
+    }
+  }
+  if (nextLineOffset === -1) {
+    nextLineOffset = propEnd;
+  }
+
+  const childIndent = getLineIndent(text, lastProp.offset);
+  const entryText = formatEntry(serverId, kiloEntry, childIndent, indentStep, eol);
+
+  let updated = text;
+  const toInsert = `${entryText},${eol}`;
+  updated = updated.slice(0, nextLineOffset) + toInsert + updated.slice(nextLineOffset);
+  if (!hasComma) {
+    updated = updated.slice(0, propEnd) + ',' + updated.slice(propEnd);
+  }
+  return updated;
+}
+
+export function removeKiloJsoncMcp(content: string, serverId: string): string {
+  const tree = jsonc.parseTree(content);
+  if (!tree || tree.type !== 'object') {
+    return content;
+  }
+
+  const mcpProp = findObjectProperty(tree, 'mcp') || findObjectProperty(tree, 'mcpServers');
+  if (!mcpProp || !mcpProp.children?.[1]) {
+    return content;
+  }
+
+  const mcpNode = mcpProp.children[1];
+  const targetProp = findObjectProperty(mcpNode, serverId);
+  if (!targetProp) {
+    return content;
+  }
+
+  const lineStart = content.lastIndexOf('\n', targetProp.offset - 1) + 1;
+  const textBefore = content.slice(lineStart, targetProp.offset);
+  const isAloneOnLine = /^[ \t]*$/.test(textBefore);
+
+  const propEnd = targetProp.offset + targetProp.length;
+  const scanner = jsonc.createScanner(content, false);
+  scanner.setPosition(propEnd);
+  let token: jsonc.SyntaxKind;
+  let nextLineOffset = propEnd;
+
+  while ((token = scanner.scan()) !== jsonc.SyntaxKind.EOF) {
+    if (token === jsonc.SyntaxKind.LineBreakTrivia) {
+      nextLineOffset = scanner.getTokenOffset() + scanner.getTokenLength();
+      break;
+    }
+    if (token === jsonc.SyntaxKind.CloseBraceToken) {
+      nextLineOffset = scanner.getTokenOffset();
+      break;
+    }
+  }
+
+  if (isAloneOnLine) {
+    return content.slice(0, lineStart) + content.slice(nextLineOffset);
+  } else {
+    return content.slice(0, targetProp.offset) + content.slice(nextLineOffset);
+  }
+}
+
 export class KiloAdapter implements Adapter {
   readonly assistant: AssistantId = 'kilo-code';
   readonly displayName: string = 'Kilo Code';
@@ -692,15 +941,8 @@ export class KiloAdapter implements Adapter {
       content = '';
     }
 
-    if (!content.trim()) {
-      content = '{\n}\n';
-    }
-
     const kiloEntry = canonicalToKiloMcp(server);
-    const edits = jsonc.modify(content, ['mcp', server.id], kiloEntry, {
-      formattingOptions: { insertSpaces: true, tabSize: 2 },
-    });
-    const updated = jsonc.applyEdits(content, edits);
+    const updated = writeKiloJsoncMcp(content, server.id, kiloEntry);
     await fs.promises.writeFile(filePath, updated, 'utf-8');
   }
 
@@ -708,21 +950,9 @@ export class KiloAdapter implements Adapter {
     const filePath = this.mcpConfigPath(loc);
     try {
       const content = await fs.promises.readFile(filePath, 'utf-8');
-      const parsed = jsonc.parse(content);
-      if (parsed && typeof parsed === 'object') {
-        if (parsed.mcp && typeof parsed.mcp === 'object' && id in parsed.mcp) {
-          const edits = jsonc.modify(content, ['mcp', id], undefined, {
-            formattingOptions: { insertSpaces: true, tabSize: 2 },
-          });
-          const updated = jsonc.applyEdits(content, edits);
-          await fs.promises.writeFile(filePath, updated, 'utf-8');
-        } else if (parsed.mcpServers && typeof parsed.mcpServers === 'object' && id in parsed.mcpServers) {
-          const edits = jsonc.modify(content, ['mcpServers', id], undefined, {
-            formattingOptions: { insertSpaces: true, tabSize: 2 },
-          });
-          const updated = jsonc.applyEdits(content, edits);
-          await fs.promises.writeFile(filePath, updated, 'utf-8');
-        }
+      const updated = removeKiloJsoncMcp(content, id);
+      if (updated !== content) {
+        await fs.promises.writeFile(filePath, updated, 'utf-8');
       }
     } catch {
       // ignore
