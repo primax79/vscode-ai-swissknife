@@ -44,6 +44,10 @@ const mockRegisteredCommands = new Map<string, (...args: any[]) => any>();
 let mockConfigUpdates: { section: string, value: any, target: any }[] = [];
 let mockConfigGetResult: any = undefined;
 
+let mockCustomShowQuickPick: ((items: any, options?: any) => Promise<any>) | undefined = undefined;
+let mockCustomShowInputBox: ((options?: any) => Promise<any>) | undefined = undefined;
+let mockCustomShowOpenDialog: ((options?: any) => Promise<any>) | undefined = undefined;
+
 Module.prototype.require = function (id: string, ...rest: unknown[]) {
   if (id === 'vscode') {
     return {
@@ -113,8 +117,18 @@ Module.prototype.require = function (id: string, ...rest: unknown[]) {
         },
         showWarningMessage: async (msg: string) => { mockLastWarningMessage = msg; return undefined; },
         showErrorMessage: async () => undefined,
-        showQuickPick: async () => mockQuickPickResult,
-        showInputBox: async () => undefined,
+        showQuickPick: async (items: any, options?: any) => {
+          if (mockCustomShowQuickPick) return mockCustomShowQuickPick(items, options);
+          return mockQuickPickResult;
+        },
+        showInputBox: async (options?: any) => {
+          if (mockCustomShowInputBox) return mockCustomShowInputBox(options);
+          return undefined;
+        },
+        showOpenDialog: async (options?: any) => {
+          if (mockCustomShowOpenDialog) return mockCustomShowOpenDialog(options);
+          return undefined;
+        },
         createWebviewPanel: () => ({
           reveal: () => {},
           dispose: () => {},
@@ -171,7 +185,7 @@ import {
   writeState,
   SCHEMA_VERSION,
 } from '../domain/registry';
-import { SourcesTreeDataProvider, ScopeGroupItem, SourceItem } from './sourcesView';
+import { SourcesTreeDataProvider, ScopeGroupItem, SourceItem, promptScope } from './sourcesView';
 import { AvailableTreeDataProvider, AvailableFolderItem, AvailableArtifactItem, buildHierarchy, AvailableSourceGroupItem } from './availableView';
 import { ArtifactFileItem } from './artifactFileTree';
 import { InstalledTreeDataProvider, ScopeGroupItem as InstalledScopeGroupItem, InstalledInstallationItem, KindGroupItem } from './installedView';
@@ -192,6 +206,9 @@ describe('UI TreeDataProviders', () => {
     testHomeDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'ai-swissknife-ui-home-'));
     (globalThis as any).mockWorkspaceFolders = [{ uri: { fsPath: testTempDir } }];
     mockQuickPickResult = undefined;
+    mockCustomShowQuickPick = undefined;
+    mockCustomShowInputBox = undefined;
+    mockCustomShowOpenDialog = undefined;
     mockLastWarningMessage = undefined;
     mockShowInformationMessageResult = undefined;
     mockShowInformationMessageCalls = [];
@@ -251,6 +268,430 @@ describe('UI TreeDataProviders', () => {
       const globalGroup = new ScopeGroupItem('global', 'Global Sources');
       const items = await provider.getChildren(globalGroup);
       assert.ok(Array.isArray(items));
+    });
+
+    describe('addSource wizard flow', () => {
+      function createTestSourcesProvider() {
+        const availableProvider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+        availableProvider.refreshCatalog = async () => {};
+        const provider = new SourcesTreeDataProvider(availableProvider);
+        return { provider, availableProvider };
+      }
+
+      it('follows prompt order: type -> scope -> location -> id -> name -> pin for git types', async () => {
+        const { provider, availableProvider } = createTestSourcesProvider();
+        let catalogRefreshed = false;
+        availableProvider.refreshCatalog = async () => { catalogRefreshed = true; };
+
+        const promptSequence: string[] = [];
+
+        mockCustomShowQuickPick = async (items: any[], options?: any) => {
+          if (options?.placeHolder?.includes('source type')) {
+            promptSequence.push('quickPick:type');
+            assert.strictEqual(items.length, 5);
+            // Verify items use resolver displayName and icon
+            const customGit = items.find((i) => i.type === 'git-custom');
+            assert.ok(customGit);
+            assert.ok(customGit.label.includes('Git (custom)'));
+            assert.ok(customGit.iconPath);
+            return customGit;
+          }
+          if (options?.placeHolder?.includes('source scope')) {
+            promptSequence.push('quickPick:scope');
+            assert.strictEqual(items.length, 2);
+            assert.strictEqual(items[0].label, 'Global');
+            assert.strictEqual(items[1].label, 'Workspace');
+            return items[1]; // Workspace ('project')
+          }
+          if (options?.placeHolder?.includes('Pin to a branch')) {
+            promptSequence.push('quickPick:pin');
+            assert.strictEqual(items[0].label, 'Default branch');
+            assert.strictEqual(items[1].label, 'Advanced: pin to branch/tag');
+            return items[0]; // Default branch
+          }
+          throw new Error(`Unexpected QuickPick: ${options?.placeHolder}`);
+        };
+
+        mockCustomShowInputBox = async (options?: any) => {
+          if (options?.prompt?.includes('Git repository URL')) {
+            promptSequence.push('inputBox:location');
+            return 'https://github.com/org/team-skills.git';
+          }
+          if (options?.prompt?.includes('unique identifier')) {
+            promptSequence.push('inputBox:id');
+            return options.value;
+          }
+          if (options?.prompt?.includes('display name')) {
+            promptSequence.push('inputBox:name');
+            return options.value;
+          }
+          throw new Error(`Unexpected InputBox: ${options?.prompt}`);
+        };
+
+        const result = await provider.addSource();
+        assert.ok(result);
+        assert.strictEqual(catalogRefreshed, true);
+        assert.deepStrictEqual(promptSequence, [
+          'quickPick:type',
+          'quickPick:scope',
+          'inputBox:location',
+          'inputBox:id',
+          'inputBox:name',
+          'quickPick:pin',
+        ]);
+        assert.strictEqual(result.id, 'team-skills');
+        assert.strictEqual(result.name, 'Team skills');
+        assert.strictEqual(result.scope, 'project');
+        assert.strictEqual(result.url, 'https://github.com/org/team-skills.git');
+      });
+
+      it('prefills id and name from https://github.com/org/team-skills.git', async () => {
+        const { provider } = createTestSourcesProvider();
+
+        let prefilledId: string | undefined;
+        let prefilledName: string | undefined;
+
+        mockCustomShowQuickPick = async (items: any[], options?: any) => {
+          if (options?.placeHolder?.includes('source type')) {
+            return items.find((i) => i.type === 'git-custom');
+          }
+          if (options?.placeHolder?.includes('source scope')) {
+            return items.find((i) => i.scope === 'project');
+          }
+          if (options?.placeHolder?.includes('Pin to a branch')) {
+            return items[0];
+          }
+          return undefined;
+        };
+
+        mockCustomShowInputBox = async (options?: any) => {
+          if (options?.prompt?.includes('Git repository URL')) {
+            return 'https://github.com/org/team-skills.git';
+          }
+          if (options?.prompt?.includes('unique identifier')) {
+            prefilledId = options.value;
+            return options.value;
+          }
+          if (options?.prompt?.includes('display name')) {
+            prefilledName = options.value;
+            return options.value;
+          }
+          return undefined;
+        };
+
+        const result = await provider.addSource();
+        assert.ok(result);
+        assert.strictEqual(prefilledId, 'team-skills');
+        assert.strictEqual(prefilledName, 'Team skills');
+        assert.strictEqual(result.id, 'team-skills');
+        assert.strictEqual(result.name, 'Team skills');
+      });
+
+      it('forceScope skips the scope prompt', async () => {
+        const { provider } = createTestSourcesProvider();
+
+        const promptTypes: string[] = [];
+
+        mockCustomShowQuickPick = async (items: any[], options?: any) => {
+          if (options?.placeHolder?.includes('source type')) {
+            promptTypes.push('type');
+            return items.find((i) => i.type === 'git-custom');
+          }
+          if (options?.placeHolder?.includes('source scope')) {
+            promptTypes.push('scope');
+            return items[0];
+          }
+          if (options?.placeHolder?.includes('Pin to a branch')) {
+            promptTypes.push('pin');
+            return items[0];
+          }
+          return undefined;
+        };
+
+        mockCustomShowInputBox = async (options?: any) => {
+          if (options?.prompt?.includes('Git repository URL')) {
+            promptTypes.push('location');
+            return 'https://github.com/org/team-skills.git';
+          }
+          if (options?.prompt?.includes('unique identifier')) {
+            promptTypes.push('id');
+            return options.value;
+          }
+          if (options?.prompt?.includes('display name')) {
+            promptTypes.push('name');
+            return options.value;
+          }
+          return undefined;
+        };
+
+        const result = await provider.addSource('project');
+        assert.ok(result);
+        assert.strictEqual(result.scope, 'project');
+        // Assert scope prompt was never called
+        assert.ok(!promptTypes.includes('scope'));
+        assert.deepStrictEqual(promptTypes, ['type', 'location', 'id', 'name', 'pin']);
+      });
+
+      it('no workspace -> only Global offered with a one-line hint', async () => {
+        (globalThis as any).mockWorkspaceFolders = [];
+
+        let offeredItems: any[] = [];
+        mockCustomShowQuickPick = async (items: any[], options?: any) => {
+          if (options?.placeHolder?.includes('source scope')) {
+            offeredItems = items;
+            return items[0];
+          }
+          return undefined;
+        };
+
+        const scopes = await promptScope();
+        assert.deepStrictEqual(scopes, ['global']);
+        assert.strictEqual(offeredItems.length, 1);
+        assert.strictEqual(offeredItems[0].label, 'Global');
+        assert.strictEqual(offeredItems[0].scope, 'global');
+        assert.ok(offeredItems[0].description, 'Expected one-line hint description');
+        assert.ok(
+          offeredItems[0].description.toLowerCase().includes('workspace') ||
+          offeredItems[0].description.toLowerCase().includes('open')
+        );
+      });
+
+      it('Esc at each step writes nothing and returns undefined', async () => {
+        const { provider } = createTestSourcesProvider();
+
+        // Steps: 0: cancel type, 1: cancel scope, 2: cancel location, 3: cancel id, 4: cancel name, 5: cancel pin
+        for (let cancelStep = 0; cancelStep <= 7; cancelStep++) {
+          mockCustomShowQuickPick = async (items: any[], options?: any) => {
+            if (options?.placeHolder?.includes('source type')) {
+              if (cancelStep === 0) return undefined;
+              return items.find((i) => i.type === 'git-custom');
+            }
+            if (options?.placeHolder?.includes('source scope')) {
+              if (cancelStep === 1) return undefined;
+              return items.find((i) => i.scope === 'project');
+            }
+            if (options?.placeHolder?.includes('Pin to a branch')) {
+              if (cancelStep === 5) return undefined;
+              if (cancelStep === 6 || cancelStep === 7) return items[1]; // Advanced: pin to branch/tag
+              return items[0];
+            }
+            if (options?.placeHolder?.includes('Pin to a specific branch')) {
+              if (cancelStep === 6) return undefined;
+              return 'Specific branch';
+            }
+            return undefined;
+          };
+
+          mockCustomShowInputBox = async (options?: any) => {
+            if (options?.prompt?.includes('Git repository URL')) {
+              if (cancelStep === 2) return undefined;
+              return 'https://github.com/org/team-skills.git';
+            }
+            if (options?.prompt?.includes('unique identifier')) {
+              if (cancelStep === 3) return undefined;
+              return options.value;
+            }
+            if (options?.prompt?.includes('display name')) {
+              if (cancelStep === 4) return undefined;
+              return options.value;
+            }
+            if (options?.prompt?.includes('Branch name')) {
+              if (cancelStep === 7) return undefined;
+              return 'main';
+            }
+            return undefined;
+          };
+
+          const res = await provider.addSource();
+          assert.strictEqual(res, undefined, `Expected undefined on cancelStep ${cancelStep}`);
+
+          const manifest = await readManifest('project', testTempDir);
+          assert.strictEqual(manifest.sources.length, 0, `Expected 0 sources in manifest on cancelStep ${cancelStep}`);
+        }
+      });
+
+      it('written DesiredSource equals what the old flow produced for the same answers', async () => {
+        const { provider } = createTestSourcesProvider();
+
+        // 1. Default branch source
+        mockCustomShowQuickPick = async (items: any[], options?: any) => {
+          if (options?.placeHolder?.includes('source type')) return items.find((i) => i.type === 'git-custom');
+          if (options?.placeHolder?.includes('source scope')) return items.find((i) => i.scope === 'project');
+          if (options?.placeHolder?.includes('Pin to a branch')) return items[0]; // Default branch
+          return undefined;
+        };
+        mockCustomShowInputBox = async (options?: any) => {
+          if (options?.prompt?.includes('Git repository URL')) return 'https://github.com/org/team-skills.git';
+          if (options?.prompt?.includes('unique identifier')) return 'team-skills';
+          if (options?.prompt?.includes('display name')) return 'Team skills';
+          return undefined;
+        };
+
+        const res1 = await provider.addSource();
+        assert.ok(res1);
+
+        let manifest = await readManifest('project', testTempDir);
+        assert.strictEqual(manifest.sources.length, 1);
+        const source1 = manifest.sources[0];
+        assert.deepStrictEqual(source1, {
+          id: 'team-skills',
+          type: 'git-custom',
+          scope: 'project',
+          name: 'Team skills',
+          url: 'https://github.com/org/team-skills.git',
+        });
+
+        // 2. Advanced pin branch source
+        mockCustomShowQuickPick = async (items: any[], options?: any) => {
+          if (options?.placeHolder?.includes('source type')) return items.find((i) => i.type === 'git-custom');
+          if (options?.placeHolder?.includes('source scope')) return items.find((i) => i.scope === 'project');
+          if (options?.placeHolder?.includes('Pin to a branch')) return items[1]; // Advanced: pin to branch/tag
+          if (options?.placeHolder?.includes('Pin to a specific branch')) return 'Specific branch';
+          return undefined;
+        };
+        mockCustomShowInputBox = async (options?: any) => {
+          if (options?.prompt?.includes('Git repository URL')) return 'https://github.com/org/team-skills.git';
+          if (options?.prompt?.includes('unique identifier')) return 'team-skills-pinned';
+          if (options?.prompt?.includes('display name')) return 'Team Skills Pinned';
+          if (options?.prompt?.includes('Branch name')) return 'feature-branch';
+          return undefined;
+        };
+
+        const res2 = await provider.addSource();
+        assert.ok(res2);
+
+        manifest = await readManifest('project', testTempDir);
+        const source2 = manifest.sources.find((s) => s.id === 'team-skills-pinned');
+        assert.ok(source2);
+        assert.deepStrictEqual(source2, {
+          id: 'team-skills-pinned',
+          type: 'git-custom',
+          scope: 'project',
+          name: 'Team Skills Pinned',
+          url: 'https://github.com/org/team-skills.git',
+          branch: 'feature-branch',
+        });
+
+        // 3. Tag pin source
+        mockCustomShowQuickPick = async (items: any[], options?: any) => {
+          if (options?.placeHolder?.includes('source type')) return items.find((i) => i.type === 'git-custom');
+          if (options?.placeHolder?.includes('source scope')) return items.find((i) => i.scope === 'project');
+          if (options?.placeHolder?.includes('Pin to a branch')) return items[1]; // Advanced
+          if (options?.placeHolder?.includes('Pin to a specific branch')) return 'Specific tag';
+          return undefined;
+        };
+        mockCustomShowInputBox = async (options?: any) => {
+          if (options?.prompt?.includes('Git repository URL')) return 'https://github.com/org/team-skills.git';
+          if (options?.prompt?.includes('unique identifier')) return 'team-skills-tag';
+          if (options?.prompt?.includes('display name')) return 'Team Skills Tag';
+          if (options?.prompt?.includes('Tag name')) return 'v1.2.3';
+          return undefined;
+        };
+
+        const res3 = await provider.addSource();
+        assert.ok(res3);
+
+        manifest = await readManifest('project', testTempDir);
+        const source3 = manifest.sources.find((s) => s.id === 'team-skills-tag');
+        assert.ok(source3);
+        assert.deepStrictEqual(source3, {
+          id: 'team-skills-tag',
+          type: 'git-custom',
+          scope: 'project',
+          name: 'Team Skills Tag',
+          url: 'https://github.com/org/team-skills.git',
+          tag: 'v1.2.3',
+        });
+      });
+
+      it('the pin step is prompted only for git types', async () => {
+        const { provider } = createTestSourcesProvider();
+
+        let pinPromptCalled = false;
+        mockCustomShowQuickPick = async (items: any[], options?: any) => {
+          if (options?.placeHolder?.includes('source type')) return items.find((i) => i.type === 'remote-url');
+          if (options?.placeHolder?.includes('source scope')) return items.find((i) => i.scope === 'project');
+          if (options?.placeHolder?.includes('Pin to a branch')) {
+            pinPromptCalled = true;
+            return items[0];
+          }
+          return undefined;
+        };
+        mockCustomShowInputBox = async (options?: any) => {
+          if (options?.prompt?.includes('artifact URL')) return 'https://example.com/raw/skill.md';
+          if (options?.prompt?.includes('unique identifier')) return options.value;
+          if (options?.prompt?.includes('display name')) return options.value;
+          return undefined;
+        };
+
+        const res = await provider.addSource();
+        assert.ok(res);
+        assert.strictEqual(res.type, 'remote-url');
+        assert.strictEqual(pinPromptCalled, false, 'Pin step should not be called for remote-url');
+      });
+
+      it('supports local-folder via folder picker and typed path', async () => {
+        const { provider } = createTestSourcesProvider();
+
+        // 1. Browse folder picker path
+        let openDialogOptions: any;
+        mockCustomShowQuickPick = async (items: any[], options?: any) => {
+          if (options?.placeHolder?.includes('source type')) return items.find((i) => i.type === 'local-folder');
+          if (options?.placeHolder?.includes('source scope')) return items.find((i) => i.scope === 'project');
+          if (options?.placeHolder?.includes('Select folder or enter path')) {
+            return items.find((i) => i.action === 'browse' || i.label.includes('Browse'));
+          }
+          return undefined;
+        };
+        mockCustomShowOpenDialog = async (options?: any) => {
+          openDialogOptions = options;
+          return [{ fsPath: path.join(testTempDir, 'local-skills') }];
+        };
+        mockCustomShowInputBox = async (options?: any) => {
+          if (options?.prompt?.includes('unique identifier')) {
+            assert.strictEqual(options.value, 'local-skills');
+            return options.value;
+          }
+          if (options?.prompt?.includes('display name')) {
+            assert.strictEqual(options.value, 'Local skills');
+            return options.value;
+          }
+          return undefined;
+        };
+
+        const res1 = await provider.addSource();
+        assert.ok(res1);
+        assert.strictEqual(openDialogOptions.canSelectFolders, true);
+        assert.strictEqual(openDialogOptions.canSelectFiles, false);
+        assert.strictEqual(res1.localPath, path.join(testTempDir, 'local-skills'));
+
+        // 2. Manual path typing with validation
+        let validateFn: ((v: string) => string | null) | undefined;
+        mockCustomShowQuickPick = async (items: any[], options?: any) => {
+          if (options?.placeHolder?.includes('source type')) return items.find((i) => i.type === 'local-folder');
+          if (options?.placeHolder?.includes('source scope')) return items.find((i) => i.scope === 'project');
+          if (options?.placeHolder?.includes('Select folder or enter path')) {
+            return items.find((i) => i.action === 'type' || i.label.includes('Enter path'));
+          }
+          return undefined;
+        };
+        mockCustomShowInputBox = async (options?: any) => {
+          if (options?.prompt?.includes('Local folder path')) {
+            validateFn = options.validateInput;
+            assert.ok(validateFn);
+            assert.strictEqual(validateFn('https://invalid.com'), 'Local folder path cannot be a URL');
+            assert.strictEqual(validateFn('valid/sub/folder'), null);
+            return path.join(testTempDir, 'typed-skills');
+          }
+          if (options?.prompt?.includes('unique identifier')) return 'typed-skills';
+          if (options?.prompt?.includes('display name')) return 'Typed skills';
+          return undefined;
+        };
+
+        const res2 = await provider.addSource();
+        assert.ok(res2);
+        assert.strictEqual(res2.localPath, path.join(testTempDir, 'typed-skills'));
+      });
     });
   });
 
