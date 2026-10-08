@@ -1,0 +1,31 @@
+[
+  {
+    "id": "common-tools@agentic-coding-kit",
+    "version": "0.3.2",
+    "scope": "user",
+    "enabled": false,
+    "installPath": "/tmp/cfg/plugins/cache/agentic-coding-kit/common-tools/0.3.2",
+    "installedAt": "2026-10-08T23:36:10.277Z",
+    "lastUpdated": "2026-10-08T23:36:10.277Z",
+    "projectEnabled": false,
+    "notes": [
+      "Disabled in ~/.claude/settings.json but still loads"
+    ],
+    "noteDetails": [
+      {
+        "type": "ineffective-disable"
+      }
+    ]
+  },
+  {
+    "id": "common-tools@agentic-coding-kit",
+    "version": "0.3.2",
+    "scope": "local",
+    "enabled": true,
+    "installPath": "/tmp/cfg/plugins/cache/agentic-coding-kit/common-tools/0.3.2",
+    "installedAt": "2026-10-08T23:37:59.524Z",
+    "lastUpdated": "2026-10-08T23:37:59.524Z",
+    "projectPath": "/home/user/works/ai-coding-tools/ai-swissknife",
+    "projectEnabled": false
+  }
+]

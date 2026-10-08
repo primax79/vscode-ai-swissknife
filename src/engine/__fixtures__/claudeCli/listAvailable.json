@@ -1,0 +1,50 @@
+{
+  "installed": [
+    {
+      "id": "common-tools@agentic-coding-kit",
+      "version": "0.3.2",
+      "scope": "user",
+      "enabled": true,
+      "installPath": "/tmp/cfg/plugins/cache/agentic-coding-kit/common-tools/0.3.2",
+      "installedAt": "2026-10-08T23:36:10.277Z",
+      "lastUpdated": "2026-10-08T23:36:10.277Z",
+      "projectEnabled": false
+    }
+  ],
+  "available": [
+    {
+      "pluginId": "common-tools@agentic-coding-kit",
+      "name": "common-tools",
+      "description": "Common Utilities Suite - Cross-platform development tools for Claude & Kilo (gitignore, markdown-formatter, macroplan-authoring, agents-md-generator, merge-resolver)",
+      "marketplaceName": "agentic-coding-kit",
+      "version": "0.3.2",
+      "source": {
+        "source": "directory",
+        "path": "/home/user/works/ai-coding-tools/agentic-coding-kit"
+      }
+    },
+    {
+      "pluginId": "agentic-meta@agentic-coding-kit",
+      "name": "agentic-meta",
+      "description": "Meta tools for authoring skills and agents",
+      "marketplaceName": "agentic-coding-kit",
+      "version": "0.1.0",
+      "source": {
+        "source": "directory",
+        "path": "/home/user/works/ai-coding-tools/agentic-coding-kit"
+      }
+    },
+    {
+      "pluginId": "github-tools@anthropic-plugin-directory",
+      "name": "github-tools",
+      "description": "GitHub integration tools for pull requests and issues",
+      "marketplaceName": "anthropic-plugin-directory",
+      "version": "1.0.0",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/example/github-tools.git",
+        "sha": "abcdef123456"
+      }
+    }
+  ]
+}
