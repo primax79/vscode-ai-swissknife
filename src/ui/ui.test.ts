@@ -3,6 +3,7 @@ import * as assert from 'node:assert';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import * as vm from 'vm';
 
 // File-wide HOME sandbox. Several tests below build providers without an
 // explicit homeRoot, so "global" scope falls back to os.homedir(). Without
@@ -851,6 +852,100 @@ describe('UI TreeDataProviders', () => {
       // Should include the data-drift-key
       assert.ok(html.includes('data-drift-key="claude-code:project:skill::demo-skill"'));
       
+      panel.dispose();
+    });
+
+    it('updates unifiedTable and observedTableBody when handling inventoryData message without [object Object]', () => {
+      const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any, {} as any, {} as any, {} as any, () => {});
+      assert.ok(panel);
+
+      const html = panel.getHtml([], [], [], []);
+      const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
+      assert.ok(scriptMatch, 'script tag must be present in dashboard HTML');
+
+      const elements: Record<string, any> = {
+        managedDataJson: { textContent: '[]' },
+        observedDataJson: { textContent: '[]' },
+        sourceFilterJson: { textContent: 'null' },
+        unifiedTable: { innerHTML: 'initial-managed' },
+        observedTableBody: { innerHTML: 'initial-observed' },
+        'stat-managed': { textContent: '' },
+        'stat-unmanaged': { textContent: '' },
+        'stat-unmanaged-lbl': { textContent: '' },
+        'overview-stat-sources': { textContent: '' },
+        'overview-needs-attention': { innerHTML: '' },
+        'section-catalog': { innerHTML: '' },
+        'scan-indicator': { style: { display: '' } },
+        'breadcrumb-chips': { innerHTML: '' },
+        breadcrumb: { style: { display: '' } },
+        searchBox: { value: '' },
+        'stat-updates-available': { textContent: '' },
+        'overview-stat-updates': { textContent: '' },
+        'stat-modified-locally': { textContent: '' },
+        'overview-stat-modified': { textContent: '' },
+        'overview-stat-managed': { textContent: '' },
+        'overview-stat-unmanaged': { textContent: '' },
+      };
+
+      const getEl = (id: string) => {
+        if (!elements[id]) {
+          elements[id] = { innerHTML: '', textContent: '', style: {}, setAttribute: () => {}, getAttribute: () => null };
+        }
+        return elements[id];
+      };
+
+      let messageListener: ((event: any) => void) | undefined;
+      const mockWindow = {
+        addEventListener: (event: string, handler: (e: any) => void) => {
+          if (event === 'message') messageListener = handler;
+        },
+      };
+
+      const mockDocument = {
+        getElementById: (id: string) => getEl(id),
+        querySelector: () => ({ innerHTML: '', classList: { add: () => {} }, querySelector: () => null, insertBefore: () => {} }),
+        querySelectorAll: () => [],
+        createElement: () => ({ className: '', id: '', innerHTML: '', style: {} }),
+      };
+
+      const sandbox = {
+        window: mockWindow,
+        document: mockDocument,
+        acquireVsCodeApi: () => ({ postMessage: () => {} }),
+        console,
+        JSON,
+        Array,
+      };
+
+      vm.createContext(sandbox);
+      vm.runInContext(scriptMatch[1], sandbox);
+
+      assert.ok(messageListener, 'message listener must be registered');
+
+      const managedRowsHtml = '<tr><td>managed-test-row</td></tr>';
+      const observedRowsHtml = '<tr><td>observed-test-row</td></tr>';
+
+      messageListener({
+        data: {
+          command: 'inventoryData',
+          managedData: [],
+          observedData: [],
+          rowsHtml: { managedRowsHtml, observedRowsHtml },
+          totalInstalled: 1,
+          totalUnmanaged: 1,
+          identicalCount: 0,
+          environmentPills: '',
+          scanning: false,
+          sourcesHtml: '',
+          totalSources: 0,
+        },
+      });
+
+      assert.strictEqual(elements.unifiedTable.innerHTML, managedRowsHtml);
+      assert.strictEqual(elements.observedTableBody.innerHTML, observedRowsHtml);
+      assert.ok(!elements.unifiedTable.innerHTML.includes('[object Object]'));
+      assert.ok(!elements.observedTableBody.innerHTML.includes('[object Object]'));
+
       panel.dispose();
     });
   });
