@@ -18,8 +18,8 @@
 
 | Task | Title | Depends on | Size | Executor |
 | --- | --- | --- | --- | --- |
-| [43.1](43.1-discovery-spike.md) | **Spike**: verify per assistant that `_disabled/` as a sibling is not loaded | - | S | self (needs the real CLIs) |
-| 43.2 | Engine: `disableItem` / `enableItem` for file kinds + state flag + migration (outline below) | 43.1 | M | delegated |
+| [43.1](43.1-discovery-spike.md) | **Spike**: verify per assistant that `_disabled/` as a sibling is not loaded | - | S | self; **done 2026-10-09: Kilo verified (layout A works), Claude unverified, others untested** (`notes/43.1-findings.md`) |
+| [43.2](43.2-engine-disable-enable.md) | Engine: `disableItem` / `enableItem` for file kinds + state flag + migration (outline below) | 43.1 | M | delegated |
 | 43.3 | Inventory: scan disabled locations, `disabled` place state, no false `missing-on-disk` (outline) | 43.2, 40.1 | M | delegated |
 | 43.4 | UI: Disable/Enable action (context menu + detail bar), muted badge, "Disabled" filter pill (outline) | 43.2, 43.3, 40.2, 42.3 | M | delegated |
 
