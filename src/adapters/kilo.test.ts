@@ -659,6 +659,211 @@ describe('KiloAdapter', () => {
       await adapter.removeMcpServer('nonexistent', { scope: 'project', projectRoot: testProjectDir });
       assert.ok(true);
     });
+
+    describe('44.6 JSONC preservation and minimal editing', () => {
+      it('exact reproduction file: keeps existing entry single-line, comment unmoved, byte-for-byte restored on uninstall', async () => {
+        const configPath = path.join(testProjectDir, '.kilo', 'kilo.jsonc');
+        await fs.promises.mkdir(path.dirname(configPath), { recursive: true });
+
+        const originalContent = `{
+  // my personal Kilo config
+  "model": "google/gemini-3.8-flash", // keep this
+  "mcp": {
+    "existing": { "type": "remote", "url": "https://example.com/mcp" }, // do not touch
+  },
+  /* block comment */
+  "theme": "dark",
+}
+`;
+        await fs.promises.writeFile(configPath, originalContent, 'utf-8');
+
+        // 1. Install swk-new (stdio)
+        const serverNew: CanonicalMcpServer = {
+          id: 'swk-new',
+          type: 'stdio',
+          command: 'echo',
+          args: ['new'],
+        };
+        await adapter.writeMcpServer(serverNew, { scope: 'project', projectRoot: testProjectDir });
+
+        // 2. Install swk-remote (http)
+        const serverRemote: CanonicalMcpServer = {
+          id: 'swk-remote',
+          type: 'http',
+          url: 'https://remote.example.com',
+        };
+        await adapter.writeMcpServer(serverRemote, { scope: 'project', projectRoot: testProjectDir });
+
+        const updatedContent = await fs.promises.readFile(configPath, 'utf-8');
+
+        // Verify JSONC is parseable
+        const parsed = jsonc.parse(updatedContent);
+        assert.ok(parsed && parsed.mcp);
+        assert.ok(parsed.mcp.existing);
+        assert.ok(parsed.mcp['swk-new']);
+        assert.ok(parsed.mcp['swk-remote']);
+
+        // Verify existing entry was NOT reformatted across multiple lines and comment did NOT move
+        const existingLine = '    "existing": { "type": "remote", "url": "https://example.com/mcp" }, // do not touch';
+        assert.ok(
+          updatedContent.includes(existingLine),
+          'Expected existing entry line with comment to be preserved verbatim'
+        );
+
+        // Verify diff against original contains only added lines for swk-new and swk-remote
+        // Every line of originalContent must still exist in updatedContent
+        const originalLines = originalContent.split('\n');
+        for (const line of originalLines) {
+          assert.ok(
+            updatedContent.includes(line),
+            `Expected updatedContent to retain line: ${line}`
+          );
+        }
+
+        // Verify uninstalling both restores the original file byte for byte
+        await adapter.removeMcpServer('swk-remote', { scope: 'project', projectRoot: testProjectDir });
+        await adapter.removeMcpServer('swk-new', { scope: 'project', projectRoot: testProjectDir });
+
+        const restoredContent = await fs.promises.readFile(configPath, 'utf-8');
+        assert.strictEqual(restoredContent, originalContent, 'Expected original file to be restored byte-for-byte');
+      });
+
+      it('handles previous entry without trailing comma without moving comment', async () => {
+        const configPath = path.join(testProjectDir, '.kilo', 'kilo.jsonc');
+        await fs.promises.mkdir(path.dirname(configPath), { recursive: true });
+
+        const contentNoComma = `{
+  "mcp": {
+    "existing": { "type": "remote", "url": "https://example.com/mcp" } // do not touch
+  }
+}
+`;
+        await fs.promises.writeFile(configPath, contentNoComma, 'utf-8');
+
+        const serverNew: CanonicalMcpServer = {
+          id: 'swk-new',
+          type: 'stdio',
+          command: 'echo',
+          args: ['new'],
+        };
+        await adapter.writeMcpServer(serverNew, { scope: 'project', projectRoot: testProjectDir });
+
+        const updatedContent = await fs.promises.readFile(configPath, 'utf-8');
+        const parsed = jsonc.parse(updatedContent);
+        assert.ok(parsed && parsed.mcp && parsed.mcp['swk-new']);
+
+        // Check that comma was added before comment without moving comment
+        const expectedLine = '    "existing": { "type": "remote", "url": "https://example.com/mcp" }, // do not touch';
+        assert.ok(
+          updatedContent.includes(expectedLine),
+          'Expected comma added to existing line before // do not touch'
+        );
+      });
+
+      it('replacing an id changes only that entry value range', async () => {
+        const configPath = path.join(testProjectDir, '.kilo', 'kilo.jsonc');
+        await fs.promises.mkdir(path.dirname(configPath), { recursive: true });
+
+        const originalContent = `{
+  "mcp": {
+    "existing": { "type": "remote", "url": "https://example.com/mcp" }, // do not touch
+  },
+  "theme": "dark"
+}
+`;
+        await fs.promises.writeFile(configPath, originalContent, 'utf-8');
+
+        const updatedServer: CanonicalMcpServer = {
+          id: 'existing',
+          type: 'http',
+          url: 'https://example.com/updated',
+        };
+        await adapter.writeMcpServer(updatedServer, { scope: 'project', projectRoot: testProjectDir });
+
+        const updatedContent = await fs.promises.readFile(configPath, 'utf-8');
+        const parsed = jsonc.parse(updatedContent);
+        assert.strictEqual(parsed.mcp.existing.url, 'https://example.com/updated');
+
+        // Comment and trailing comma on the closing brace remain preserved
+        assert.ok(updatedContent.includes('// do not touch'));
+        assert.ok(updatedContent.includes('"theme": "dark"'));
+        assert.ok(updatedContent.includes('"existing": '));
+      });
+
+      it('preserves 4-space indentation style', async () => {
+        const configPath = path.join(testProjectDir, '.kilo', 'kilo.jsonc');
+        await fs.promises.mkdir(path.dirname(configPath), { recursive: true });
+
+        const initialContent = `{
+    "mcp": {
+        "existing": { "type": "remote" },
+    }
+}
+`;
+        await fs.promises.writeFile(configPath, initialContent, 'utf-8');
+
+        const serverNew: CanonicalMcpServer = {
+          id: 'swk-new',
+          type: 'stdio',
+          command: 'echo',
+        };
+        await adapter.writeMcpServer(serverNew, { scope: 'project', projectRoot: testProjectDir });
+
+        const updatedContent = await fs.promises.readFile(configPath, 'utf-8');
+        const parsed = jsonc.parse(updatedContent);
+        assert.ok(parsed && parsed.mcp['swk-new']);
+        assert.ok(updatedContent.includes('        "swk-new": {'));
+      });
+
+      it('preserves tab indentation style', async () => {
+        const configPath = path.join(testProjectDir, '.kilo', 'kilo.jsonc');
+        await fs.promises.mkdir(path.dirname(configPath), { recursive: true });
+
+        const initialContent = `{\n\t"mcp": {\n\t\t"existing": { "type": "remote" },\n\t}\n}\n`;
+        await fs.promises.writeFile(configPath, initialContent, 'utf-8');
+
+        const serverNew: CanonicalMcpServer = {
+          id: 'swk-new',
+          type: 'stdio',
+          command: 'echo',
+        };
+        await adapter.writeMcpServer(serverNew, { scope: 'project', projectRoot: testProjectDir });
+
+        const updatedContent = await fs.promises.readFile(configPath, 'utf-8');
+        const parsed = jsonc.parse(updatedContent);
+        assert.ok(parsed && parsed.mcp['swk-new']);
+        assert.ok(updatedContent.includes('\t\t"swk-new": {'));
+      });
+
+      it('handles empty root object {} and file with no mcp key', async () => {
+        // Empty root object {}
+        const configPath1 = path.join(testProjectDir, '.kilo', 'kilo.jsonc');
+        await fs.promises.mkdir(path.dirname(configPath1), { recursive: true });
+        await fs.promises.writeFile(configPath1, '{}', 'utf-8');
+
+        const serverNew: CanonicalMcpServer = {
+          id: 'swk-new',
+          type: 'stdio',
+          command: 'echo',
+        };
+        await adapter.writeMcpServer(serverNew, { scope: 'project', projectRoot: testProjectDir });
+
+        const content1 = await fs.promises.readFile(configPath1, 'utf-8');
+        const parsed1 = jsonc.parse(content1);
+        assert.ok(parsed1 && parsed1.mcp && parsed1.mcp['swk-new']);
+
+        // File with no mcp key
+        const initialNoMcp = `{\n  "model": "google/gemini-3.8-flash"\n}\n`;
+        await fs.promises.writeFile(configPath1, initialNoMcp, 'utf-8');
+        await adapter.writeMcpServer(serverNew, { scope: 'project', projectRoot: testProjectDir });
+
+        const content2 = await fs.promises.readFile(configPath1, 'utf-8');
+        const parsed2 = jsonc.parse(content2);
+        assert.strictEqual(parsed2.model, 'google/gemini-3.8-flash');
+        assert.ok(parsed2.mcp && parsed2.mcp['swk-new']);
+        assert.ok(content2.includes('"model": "google/gemini-3.8-flash"'));
+      });
+    });
   });
 
   describe('Real Kilo smoke test (opt-in)', () => {
