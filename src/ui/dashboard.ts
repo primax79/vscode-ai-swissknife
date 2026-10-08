@@ -2030,8 +2030,19 @@ export class DashboardPanel {
       } else if (msg.command === 'inventoryData') {
         managedData = msg.managedData;
         observedData = msg.observedData;
-        const tbody = document.getElementById('unifiedTable');
-        if (tbody) tbody.innerHTML = msg.rowsHtml;
+        const rows = msg.rowsHtml;
+        if (rows) {
+          const tbody = document.getElementById('unifiedTable');
+          if (tbody) {
+            tbody.innerHTML = typeof rows === 'string'
+              ? rows
+              : (rows.managedRowsHtml ?? '');
+          }
+          const observedTbody = document.getElementById('observedTableBody');
+          if (observedTbody && typeof rows === 'object') {
+            observedTbody.innerHTML = rows.observedRowsHtml ?? '';
+          }
+        }
         const manStat = document.getElementById('stat-managed');
         if (manStat) manStat.textContent = msg.totalInstalled;
         const unmanStat = document.getElementById('stat-unmanaged');
