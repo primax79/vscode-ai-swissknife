@@ -38,132 +38,145 @@ let mockLastWarningMessage: string | undefined = undefined;
 let mockShowInformationMessageResult: string | undefined = undefined;
 let mockShowInformationMessageCalls: { msg: string, actions: string[] }[] = [];
 let mockLastCreatedStatusBarItem: any = undefined;
+let mockLastStatusBarMessage: string | undefined = undefined;
 
 const mockRegisteredCommands = new Map<string, (...args: any[]) => any>();
 
 let mockConfigUpdates: { section: string, value: any, target: any }[] = [];
 let mockConfigGetResult: any = undefined;
 
+const mockVscode = {
+  StatusBarAlignment: {
+    Left: 1,
+    Right: 2,
+  },
+  TreeItem: class {
+    description?: string;
+    contextValue?: string;
+    tooltip?: string;
+    iconPath?: unknown;
+    command?: unknown;
+    constructor(public label: string, public collapsibleState?: number) {}
+  },
+  TreeItemCollapsibleState: {
+    None: 0,
+    Collapsed: 1,
+    Expanded: 2,
+  },
+  EventEmitter: class {
+    private listeners: Array<() => void> = [];
+    event = (listener: () => void) => {
+      this.listeners.push(listener);
+      return { dispose: () => {} };
+    };
+    fire = (_data: unknown) => {
+      for (const l of this.listeners) l();
+    };
+  },
+  ThemeIcon: class {
+    static Folder = { id: 'folder' };
+    static File = { id: 'file' };
+    constructor(public id: string) {}
+  },
+  ConfigurationTarget: {
+    Global: 1,
+    Workspace: 2,
+    WorkspaceFolder: 3
+  },
+  workspace: {
+    get workspaceFolders() {
+      return (globalThis as any).mockWorkspaceFolders || [];
+    },
+    getConfiguration: () => ({ 
+      get: () => mockConfigGetResult,
+      update: async (section: string, value: any, target: any) => {
+        mockConfigUpdates.push({ section, value, target });
+      }
+    }),
+    onDidChangeConfiguration: () => ({ dispose: () => {} }),
+    createFileSystemWatcher: () => ({
+      onDidChange: () => ({ dispose: () => {} }),
+      onDidCreate: () => ({ dispose: () => {} }),
+      onDidDelete: () => ({ dispose: () => {} }),
+      dispose: () => {},
+    }),
+    registerTextDocumentContentProvider: () => ({ dispose: () => {} }),
+  },
+  ViewColumn: {
+    One: 1,
+  },
+  window: {
+    showInformationMessage: async (msg: string, ...actions: string[]) => {
+      mockShowInformationMessageCalls.push({ msg, actions });
+      return mockShowInformationMessageResult;
+    },
+    showWarningMessage: async (msg: string) => { mockLastWarningMessage = msg; return undefined; },
+    showErrorMessage: async () => undefined,
+    showQuickPick: async () => mockQuickPickResult,
+    showInputBox: async () => undefined,
+    createWebviewPanel: () => ({
+      reveal: () => {},
+      dispose: () => {},
+      onDidDispose: () => ({ dispose: () => {} }),
+      webview: {
+        html: '',
+        asWebviewUri: (uri: any) => 'vscode-webview-resource://' + uri.fsPath,
+        onDidReceiveMessage: () => ({ dispose: () => {} }),
+        postMessage: async () => {},
+      },
+    }),
+    registerTreeDataProvider: () => ({ dispose: () => {} }),
+    createTreeView: () => ({
+      onDidChangeSelection: () => ({ dispose: () => {} }),
+      dispose: () => {},
+    }),
+    createStatusBarItem: (alignment?: any, priority?: number) => {
+      const item = {
+        alignment,
+        priority,
+        command: undefined as string | undefined,
+        text: '',
+        tooltip: undefined as string | undefined,
+        show: () => {},
+        hide: () => {},
+        dispose: () => {},
+      };
+      mockLastCreatedStatusBarItem = item;
+      return item;
+    },
+    setStatusBarMessage: (msg: string) => {
+      mockLastStatusBarMessage = msg;
+      return {
+        dispose: () => {
+          if (mockLastStatusBarMessage === msg) {
+            mockLastStatusBarMessage = undefined;
+          }
+        },
+      };
+    },
+  },
+  commands: {
+    registerCommand: (command: string, callback: (...args: any[]) => any) => {
+      mockRegisteredCommands.set(command, callback);
+      return { dispose: () => {} };
+    },
+    executeCommand: async () => {},
+  },
+  Uri: {
+    joinPath: (base: any, ...segments: string[]) => ({ fsPath: [base.fsPath, ...segments].join('/') }),
+    file: (path: string) => ({ fsPath: path }),
+    parse: (value: string) => ({ toString: () => value }),
+  },
+};
+
 Module.prototype.require = function (id: string, ...rest: unknown[]) {
   if (id === 'vscode') {
-    return {
-      StatusBarAlignment: {
-        Left: 1,
-        Right: 2,
-      },
-      TreeItem: class {
-        description?: string;
-        contextValue?: string;
-        tooltip?: string;
-        iconPath?: unknown;
-        command?: unknown;
-        constructor(public label: string, public collapsibleState?: number) {}
-      },
-      TreeItemCollapsibleState: {
-        None: 0,
-        Collapsed: 1,
-        Expanded: 2,
-      },
-      EventEmitter: class {
-        private listeners: Array<() => void> = [];
-        event = (listener: () => void) => {
-          this.listeners.push(listener);
-          return { dispose: () => {} };
-        };
-        fire = (_data: unknown) => {
-          for (const l of this.listeners) l();
-        };
-      },
-      ThemeIcon: class {
-        static Folder = { id: 'folder' };
-        static File = { id: 'file' };
-        constructor(public id: string) {}
-      },
-      ConfigurationTarget: {
-        Global: 1,
-        Workspace: 2,
-        WorkspaceFolder: 3
-      },
-      workspace: {
-        get workspaceFolders() {
-          return (globalThis as any).mockWorkspaceFolders || [];
-        },
-        getConfiguration: () => ({ 
-          get: () => mockConfigGetResult,
-          update: async (section: string, value: any, target: any) => {
-            mockConfigUpdates.push({ section, value, target });
-          }
-        }),
-        onDidChangeConfiguration: () => ({ dispose: () => {} }),
-        createFileSystemWatcher: () => ({
-          onDidChange: () => ({ dispose: () => {} }),
-          onDidCreate: () => ({ dispose: () => {} }),
-          onDidDelete: () => ({ dispose: () => {} }),
-          dispose: () => {},
-        }),
-        registerTextDocumentContentProvider: () => ({ dispose: () => {} }),
-      },
-      ViewColumn: {
-        One: 1,
-      },
-      window: {
-        showInformationMessage: async (msg: string, ...actions: string[]) => {
-          mockShowInformationMessageCalls.push({ msg, actions });
-          return mockShowInformationMessageResult;
-        },
-        showWarningMessage: async (msg: string) => { mockLastWarningMessage = msg; return undefined; },
-        showErrorMessage: async () => undefined,
-        showQuickPick: async () => mockQuickPickResult,
-        showInputBox: async () => undefined,
-        createWebviewPanel: () => ({
-          reveal: () => {},
-          dispose: () => {},
-          onDidDispose: () => ({ dispose: () => {} }),
-          webview: {
-            html: '',
-            asWebviewUri: (uri: any) => 'vscode-webview-resource://' + uri.fsPath,
-            onDidReceiveMessage: () => ({ dispose: () => {} }),
-            postMessage: async () => {},
-          },
-        }),
-        registerTreeDataProvider: () => ({ dispose: () => {} }),
-        createTreeView: () => ({
-          onDidChangeSelection: () => ({ dispose: () => {} }),
-          dispose: () => {},
-        }),
-        createStatusBarItem: (alignment?: any, priority?: number) => {
-          const item = {
-            alignment,
-            priority,
-            command: undefined as string | undefined,
-            text: '',
-            tooltip: undefined as string | undefined,
-            show: () => {},
-            hide: () => {},
-            dispose: () => {},
-          };
-          mockLastCreatedStatusBarItem = item;
-          return item;
-        },
-      },
-      commands: {
-        registerCommand: (command: string, callback: (...args: any[]) => any) => {
-          mockRegisteredCommands.set(command, callback);
-          return { dispose: () => {} };
-        },
-        executeCommand: async () => {},
-      },
-      Uri: {
-        joinPath: (base: any, ...segments: string[]) => ({ fsPath: [base.fsPath, ...segments].join('/') }),
-        file: (path: string) => ({ fsPath: path }),
-        parse: (value: string) => ({ toString: () => value }),
-      },
-    };
+    return mockVscode;
   }
   return originalRequire.apply(this, [id, ...rest]);
 };
 
-import type { ManagedInstallation, Source, Package, Artifact } from '../domain/types';
+import type { ManagedInstallation, Source, Package, Artifact, Scope } from '../domain/types';
 import {
   readManifest,
   writeManifest,
@@ -195,6 +208,7 @@ describe('UI TreeDataProviders', () => {
     mockLastWarningMessage = undefined;
     mockShowInformationMessageResult = undefined;
     mockShowInformationMessageCalls = [];
+    mockLastStatusBarMessage = undefined;
   });
 
   afterEach(async () => {
@@ -576,6 +590,469 @@ describe('UI TreeDataProviders', () => {
       mockLastWarningMessage = undefined as string | undefined;
       await provider.doInstallFolder('s1', 'project', 'nonexistent/folder');
       assert.ok((mockLastWarningMessage as string | undefined)?.includes('Folder "nonexistent/folder" not found'), 'Should warn if folder is missing');
+    });
+
+    describe('refreshSource', () => {
+      it('refreshing A calls A\'s resolver once and never B\'s', async () => {
+        await writeManifest(
+          'project',
+          {
+            schemaVersion: SCHEMA_VERSION,
+            sources: [
+              { id: 'sourceA', type: 'git-custom', scope: 'project', url: 'https://example.com/a.git' },
+              { id: 'sourceB', type: 'git-custom', scope: 'project', url: 'https://example.com/b.git' },
+            ],
+            desiredInstallations: [],
+          },
+          testTempDir
+        );
+
+        const provider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+        const resolvedSources: string[] = [];
+        (provider as any).resolveSourceGroup = async (src: Source) => {
+          resolvedSources.push(src.id);
+          const pkg: Package = { id: `p-${src.id}`, sourceId: src.id, nativeFormat: 'raw', artifacts: [] };
+          return {
+            group: new AvailableSourceGroupItem(src, { packages: [pkg], diagnostics: [] }),
+            attempt: { status: 'resolved', source: src, packages: [pkg] },
+          };
+        };
+
+        const srcA: Source = { id: 'sourceA', type: 'git-custom', scope: 'project', url: 'https://example.com/a.git' };
+        const srcB: Source = { id: 'sourceB', type: 'git-custom', scope: 'project', url: 'https://example.com/b.git' };
+        provider['cachedSourceGroups'] = [
+          new AvailableSourceGroupItem(srcA, { packages: [], diagnostics: [] }),
+          new AvailableSourceGroupItem(srcB, { packages: [], diagnostics: [] }),
+        ];
+
+        await provider.refreshSource('sourceA', 'project');
+
+        assert.strictEqual(resolvedSources.length, 1);
+        assert.strictEqual(resolvedSources[0], 'sourceA');
+        assert.strictEqual(resolvedSources.includes('sourceB'), false);
+      });
+
+      it('group order unchanged when replacing refreshed source in place', async () => {
+        await writeManifest(
+          'project',
+          {
+            schemaVersion: SCHEMA_VERSION,
+            sources: [
+              { id: 'sourceA', type: 'git-custom', scope: 'project', url: 'https://example.com/a.git' },
+              { id: 'sourceB', type: 'git-custom', scope: 'project', url: 'https://example.com/b.git' },
+              { id: 'sourceC', type: 'git-custom', scope: 'project', url: 'https://example.com/c.git' },
+            ],
+            desiredInstallations: [],
+          },
+          testTempDir
+        );
+
+        const provider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+        (provider as any).resolveSourceGroup = async (src: Source) => {
+          const pkg: Package = { id: `p-${src.id}-new`, sourceId: src.id, nativeFormat: 'raw', artifacts: [] };
+          return {
+            group: new AvailableSourceGroupItem(src, { packages: [pkg], diagnostics: [] }),
+            attempt: { status: 'resolved', source: src, packages: [pkg] },
+          };
+        };
+
+        const srcA: Source = { id: 'sourceA', type: 'git-custom', scope: 'project' };
+        const srcB: Source = { id: 'sourceB', type: 'git-custom', scope: 'project' };
+        const srcC: Source = { id: 'sourceC', type: 'git-custom', scope: 'project' };
+
+        const groupA = new AvailableSourceGroupItem(srcA, { packages: [], diagnostics: [] });
+        const groupB = new AvailableSourceGroupItem(srcB, { packages: [], diagnostics: [] });
+        const groupC = new AvailableSourceGroupItem(srcC, { packages: [], diagnostics: [] });
+
+        provider['cachedSourceGroups'] = [groupA, groupB, groupC];
+
+        await provider.refreshSource('sourceB', 'project');
+
+        const groups = provider.getCachedSourceGroups();
+        assert.strictEqual(groups.length, 3);
+        assert.strictEqual(groups[0].source.id, 'sourceA');
+        assert.strictEqual(groups[1].source.id, 'sourceB');
+        assert.strictEqual(groups[2].source.id, 'sourceC');
+        // Group A and C are the exact same instances; Group B is updated in place
+        assert.strictEqual(groups[0], groupA);
+        assert.notStrictEqual(groups[1], groupB);
+        assert.strictEqual(groups[1].resolution.packages[0].id, 'p-sourceB-new');
+        assert.strictEqual(groups[2], groupC);
+      });
+
+      it('a failing resolve leaves a diagnostic group for that source only', async () => {
+        await writeManifest(
+          'project',
+          {
+            schemaVersion: SCHEMA_VERSION,
+            sources: [
+              { id: 'sourceA', type: 'git-custom', scope: 'project', url: 'https://example.com/a.git' },
+              { id: 'sourceB', type: 'git-custom', scope: 'project', url: 'https://example.com/b.git' },
+            ],
+            desiredInstallations: [],
+          },
+          testTempDir
+        );
+
+        const provider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+        (provider as any).resolveSourceGroup = async (src: Source) => {
+          if (src.id === 'sourceA') {
+            return {
+              group: new AvailableSourceGroupItem(src, {
+                packages: [],
+                diagnostics: [
+                  {
+                    code: 'unreadable-skill',
+                    severity: 'error',
+                    path: src.id,
+                    message: 'Network timeout',
+                  },
+                ],
+              }),
+              attempt: { status: 'failed', source: src, error: 'Network timeout' },
+            };
+          }
+          const pkg: Package = { id: `p-${src.id}`, sourceId: src.id, nativeFormat: 'raw', artifacts: [] };
+          return {
+            group: new AvailableSourceGroupItem(src, { packages: [pkg], diagnostics: [] }),
+            attempt: { status: 'resolved', source: src, packages: [pkg] },
+          };
+        };
+
+        const srcA: Source = { id: 'sourceA', type: 'git-custom', scope: 'project' };
+        const srcB: Source = { id: 'sourceB', type: 'git-custom', scope: 'project' };
+        const pkgB: Package = { id: 'p-b', sourceId: 'sourceB', nativeFormat: 'raw', artifacts: [] };
+        const groupB = new AvailableSourceGroupItem(srcB, { packages: [pkgB], diagnostics: [] });
+
+        provider['cachedSourceGroups'] = [
+          new AvailableSourceGroupItem(srcA, { packages: [], diagnostics: [] }),
+          groupB,
+        ];
+
+        await provider.refreshSource('sourceA', 'project');
+
+        const groups = provider.getCachedSourceGroups();
+        assert.strictEqual(groups.length, 2);
+        assert.strictEqual(groups[0].source.id, 'sourceA');
+        assert.strictEqual(groups[0].resolution.diagnostics.length, 1);
+        assert.strictEqual(groups[0].resolution.diagnostics[0].message, 'Network timeout');
+        assert.strictEqual(groups[0].resolution.packages.length, 0);
+
+        // Source B is untouched
+        assert.strictEqual(groups[1], groupB);
+        assert.strictEqual(groups[1].resolution.diagnostics.length, 0);
+        assert.strictEqual(groups[1].resolution.packages.length, 1);
+
+        const attemptA = provider['resolutionAttempts'].get('sourceA');
+        assert.ok(attemptA);
+        assert.strictEqual(attemptA!.status, 'failed');
+        assert.strictEqual((attemptA as any).error, 'Network timeout');
+      });
+
+      it('removed source disappears from cache, attempts, and tree', async () => {
+        // Manifest only has sourceB; sourceA was deleted
+        await writeManifest(
+          'project',
+          {
+            schemaVersion: SCHEMA_VERSION,
+            sources: [
+              { id: 'sourceB', type: 'git-custom', scope: 'project', url: 'https://example.com/b.git' },
+            ],
+            desiredInstallations: [
+              { sourceId: 'sourceA', artifactId: 'artA', assistant: 'claude-code', scope: 'project' },
+            ],
+          },
+          testTempDir
+        );
+
+        const provider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+        const srcA: Source = { id: 'sourceA', type: 'git-custom', scope: 'project' };
+        const srcB: Source = { id: 'sourceB', type: 'git-custom', scope: 'project' };
+
+        provider['cachedSourceGroups'] = [
+          new AvailableSourceGroupItem(srcA, { packages: [], diagnostics: [] }),
+          new AvailableSourceGroupItem(srcB, { packages: [], diagnostics: [] }),
+        ];
+        provider['resolutionAttempts'].set('sourceA', { status: 'resolved', source: srcA, packages: [] });
+        provider['resolutionAttempts'].set('sourceB', { status: 'resolved', source: srcB, packages: [] });
+
+        let refreshedFired = false;
+        provider.onDidChangeTreeData(() => {
+          refreshedFired = true;
+        });
+
+        await provider.refreshSource('sourceA', 'project');
+
+        assert.strictEqual(refreshedFired, true);
+        const groups = provider.getCachedSourceGroups();
+        assert.strictEqual(groups.length, 1);
+        assert.strictEqual(groups[0].source.id, 'sourceB');
+        assert.strictEqual(provider['resolutionAttempts'].has('sourceA'), false);
+
+        // Recommendation for sourceA is now broken because sourceA is no longer registered
+        const recGroup = provider.getCachedRecommendedGroup();
+        assert.ok(recGroup);
+        assert.strictEqual(recGroup!.pending.length, 0);
+        assert.strictEqual(recGroup!.broken.length, 1);
+        assert.strictEqual(recGroup!.broken[0].reason.kind, 'source-not-registered');
+      });
+
+      it('same id in both scopes refreshes only the requested scope', async () => {
+        await writeManifest(
+          'global',
+          {
+            schemaVersion: SCHEMA_VERSION,
+            sources: [
+              { id: 's1', type: 'git-custom', scope: 'global', url: 'https://example.com/global-s1.git' },
+            ],
+            desiredInstallations: [],
+          },
+          undefined,
+          testHomeDir
+        );
+
+        await writeManifest(
+          'project',
+          {
+            schemaVersion: SCHEMA_VERSION,
+            sources: [
+              { id: 's1', type: 'git-custom', scope: 'project', url: 'https://example.com/proj-s1.git' },
+            ],
+            desiredInstallations: [],
+          },
+          testTempDir
+        );
+
+        const provider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+        const resolvedSources: { id: string; scope: Scope }[] = [];
+        (provider as any).resolveSourceGroup = async (src: Source) => {
+          resolvedSources.push({ id: src.id, scope: src.scope });
+          const pkg: Package = { id: `p-${src.id}-${src.scope}-updated`, sourceId: src.id, nativeFormat: 'raw', artifacts: [] };
+          return {
+            group: new AvailableSourceGroupItem(src, { packages: [pkg], diagnostics: [] }),
+            attempt: { status: 'resolved', source: src, packages: [pkg] },
+          };
+        };
+
+        const globalSrc: Source = { id: 's1', type: 'git-custom', scope: 'global' };
+        const projSrc: Source = { id: 's1', type: 'git-custom', scope: 'project' };
+        const globalGroup = new AvailableSourceGroupItem(globalSrc, { packages: [], diagnostics: [] });
+        const projGroup = new AvailableSourceGroupItem(projSrc, { packages: [], diagnostics: [] });
+
+        provider['cachedSourceGroups'] = [globalGroup, projGroup];
+
+        await provider.refreshSource('s1', 'project');
+
+        assert.strictEqual(resolvedSources.length, 1);
+        assert.strictEqual(resolvedSources[0].id, 's1');
+        assert.strictEqual(resolvedSources[0].scope, 'project');
+
+        const groups = provider.getCachedSourceGroups();
+        assert.strictEqual(groups.length, 2);
+        // Global group is untouched
+        assert.strictEqual(groups[0], globalGroup);
+        // Project group is replaced with updated group
+        assert.notStrictEqual(groups[1], projGroup);
+        assert.strictEqual(groups[1].resolution.packages[0].id, 'p-s1-project-updated');
+      });
+
+      it('Recommended group recomputed (a pending recommendation for A flips when A\'s resolution changes)', async () => {
+        await writeManifest(
+          'project',
+          {
+            schemaVersion: SCHEMA_VERSION,
+            sources: [
+              { id: 'sourceA', type: 'git-custom', scope: 'project', url: 'https://example.com/a.git' },
+            ],
+            desiredInstallations: [
+              { sourceId: 'sourceA', artifactId: 'artA', assistant: 'claude-code', scope: 'project' },
+            ],
+          },
+          testTempDir
+        );
+
+        const provider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+
+        // Phase 1: sourceA resolves WITH artA -> pending
+        let includeArtifact = true;
+        (provider as any).resolveSourceGroup = async (src: Source) => {
+          const art: Artifact = { id: 'artA', packageId: 'pA', kind: 'skill', name: 'artA', nativeFormat: 'md' };
+          const pkg: Package = {
+            id: 'pA',
+            sourceId: src.id,
+            nativeFormat: 'raw',
+            artifacts: includeArtifact ? [art] : [],
+          };
+          return {
+            group: new AvailableSourceGroupItem(src, { packages: [pkg], diagnostics: [] }),
+            attempt: { status: 'resolved', source: src, packages: [pkg] },
+          };
+        };
+
+        await provider.refreshSource('sourceA', 'project');
+
+        let recGroup = provider.getCachedRecommendedGroup();
+        assert.ok(recGroup);
+        assert.strictEqual(recGroup!.pending.length, 1);
+        assert.strictEqual(recGroup!.broken.length, 0);
+        assert.strictEqual(recGroup!.pending[0].desired.artifactId, 'artA');
+
+        // Phase 2: sourceA resolution no longer contains artA -> flips to broken (artifact-not-found)
+        includeArtifact = false;
+        await provider.refreshSource('sourceA', 'project');
+
+        recGroup = provider.getCachedRecommendedGroup();
+        assert.ok(recGroup);
+        assert.strictEqual(recGroup!.pending.length, 0);
+        assert.strictEqual(recGroup!.broken.length, 1);
+        assert.strictEqual(recGroup!.broken[0].reason.kind, 'artifact-not-found');
+
+        // Phase 3: sourceA resolution recovers with artA -> flips back to pending
+        includeArtifact = true;
+        await provider.refreshSource('sourceA', 'project');
+
+        recGroup = provider.getCachedRecommendedGroup();
+        assert.ok(recGroup);
+        assert.strictEqual(recGroup!.pending.length, 1);
+        assert.strictEqual(recGroup!.broken.length, 0);
+      });
+
+      it('concurrent refreshSource(A) calls resolve once', async () => {
+        await writeManifest(
+          'project',
+          {
+            schemaVersion: SCHEMA_VERSION,
+            sources: [
+              { id: 'sourceA', type: 'git-custom', scope: 'project', url: 'https://example.com/a.git' },
+            ],
+            desiredInstallations: [],
+          },
+          testTempDir
+        );
+
+        const provider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+        let resolveCount = 0;
+        (provider as any).resolveSourceGroup = async (src: Source) => {
+          resolveCount++;
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          const pkg: Package = { id: `p-${src.id}`, sourceId: src.id, nativeFormat: 'raw', artifacts: [] };
+          return {
+            group: new AvailableSourceGroupItem(src, { packages: [pkg], diagnostics: [] }),
+            attempt: { status: 'resolved', source: src, packages: [pkg] },
+          };
+        };
+
+        await Promise.all([
+          provider.refreshSource('sourceA', 'project'),
+          provider.refreshSource('sourceA', 'project'),
+          provider.refreshSource('sourceA', 'project'),
+        ]);
+
+        assert.strictEqual(resolveCount, 1);
+      });
+
+      it('refreshSource awaits in-flight full refresh', async () => {
+        await writeManifest(
+          'project',
+          {
+            schemaVersion: SCHEMA_VERSION,
+            sources: [
+              { id: 'sourceA', type: 'git-custom', scope: 'project', url: 'https://example.com/a.git' },
+            ],
+            desiredInstallations: [],
+          },
+          testTempDir
+        );
+
+        const provider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+        let fullRefreshFinished = false;
+
+        const origDoRefresh = (provider as any).doRefreshCatalog.bind(provider);
+        (provider as any).doRefreshCatalog = async () => {
+          await new Promise((resolve) => setTimeout(resolve, 25));
+          fullRefreshFinished = true;
+          await origDoRefresh();
+        };
+
+        const refreshCatalogPromise = provider.refreshCatalog();
+        let refreshSourceWitnessedFullDone = false;
+
+        const origDoRefreshSource = (provider as any).doRefreshSource.bind(provider);
+        (provider as any).doRefreshSource = async (sourceId: string, scope: Scope) => {
+          await origDoRefreshSource(sourceId, scope);
+          refreshSourceWitnessedFullDone = fullRefreshFinished;
+        };
+
+        await Promise.all([
+          refreshCatalogPromise,
+          provider.refreshSource('sourceA', 'project'),
+        ]);
+
+        assert.strictEqual(fullRefreshFinished, true);
+        assert.strictEqual(refreshSourceWitnessedFullDone, true);
+      });
+
+      it('shows progress via vscode.window.withProgress when available', async () => {
+        await writeManifest(
+          'project',
+          {
+            schemaVersion: SCHEMA_VERSION,
+            sources: [
+              { id: 'sourceA', type: 'git-custom', scope: 'project', url: 'https://example.com/a.git' },
+            ],
+            desiredInstallations: [],
+          },
+          testTempDir
+        );
+
+        const provider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+        let withProgressCalledWith: any = undefined;
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const vscodeModule = require('vscode');
+        vscodeModule.window.withProgress = async (options: any, task: any) => {
+          withProgressCalledWith = options;
+          return task({ report: () => {} });
+        };
+
+        try {
+          await provider.refreshSource('sourceA', 'project');
+          assert.ok(withProgressCalledWith);
+          assert.deepStrictEqual(withProgressCalledWith.location, { viewId: 'aiSwissknife.sources' });
+        } finally {
+          delete vscodeModule.window.withProgress;
+        }
+      });
+
+      it('shows status bar message when withProgress is not available and disposes it', async () => {
+        await writeManifest(
+          'project',
+          {
+            schemaVersion: SCHEMA_VERSION,
+            sources: [
+              { id: 'sourceA', type: 'git-custom', scope: 'project', url: 'https://example.com/a.git' },
+            ],
+            desiredInstallations: [],
+          },
+          testTempDir
+        );
+
+        const provider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+        let messageObservedDuringTask: string | undefined = undefined;
+
+        (provider as any).resolveSourceGroup = async (src: Source) => {
+          messageObservedDuringTask = mockLastStatusBarMessage;
+          const pkg: Package = { id: `p-${src.id}`, sourceId: src.id, nativeFormat: 'raw', artifacts: [] };
+          return {
+            group: new AvailableSourceGroupItem(src, { packages: [pkg], diagnostics: [] }),
+            attempt: { status: 'resolved', source: src, packages: [pkg] },
+          };
+        };
+
+        await provider.refreshSource('sourceA', 'project');
+
+        assert.strictEqual(messageObservedDuringTask, 'Refreshing source sourceA...');
+        assert.strictEqual(mockLastStatusBarMessage, undefined);
+      });
     });
   });
 
