@@ -2,6 +2,14 @@
 
 All notable changes to the "AI Swissknife" extension are documented in this file.
 
+## [0.3.0] - 2026-10-08
+
+- Changed: Add Source wizard reordered to type, scope, location, then id and
+  display name prefilled from the location; the branch/tag pin is now an
+  optional "Advanced" step; scope is labelled Global / Workspace (36.2).
+- Internal: refresh of a single source in the catalog (`refreshSource`), not
+  yet wired to a button (38.1).
+
 ## [0.2.0] - 2026-10-08
 
 - Fixed: the Dashboard Installed tab showed `[object Object]` after a data
