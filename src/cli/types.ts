@@ -1,0 +1,107 @@
+import type { AssistantId, ItemKind, Scope, ResolvedRevision } from '../domain/types';
+import type { MatrixSummary } from '../engine/installMatrix';
+import type { DriftReport } from '../engine/types';
+
+export type ErrorCode =
+  | 'INVALID_ARGUMENT'
+  | 'NOT_FOUND'
+  | 'SOURCE_RESOLUTION_FAILED'
+  | 'INTERNAL';
+
+export interface CliErrorResponse {
+  error: {
+    code: ErrorCode;
+    message: string;
+  };
+}
+
+export interface GlobalCliOptions {
+  workspace?: string;
+  home?: string;
+  assistants?: string;
+}
+
+export interface CliSource {
+  id: string;
+  type: string;
+  scope: Scope;
+  url?: string;
+  localPath?: string;
+  branch?: string;
+  tag?: string;
+  commit?: string;
+  name?: string;
+}
+
+export interface CatalogArtifact {
+  sourceId: string;
+  scope: Scope;
+  packageId: string;
+  artifactId: string;
+  kind: ItemKind;
+  name: string;
+  description?: string;
+  version?: string | ResolvedRevision;
+}
+
+export interface CatalogDiagnostic {
+  sourceId: string;
+  scope: Scope;
+  message: string;
+}
+
+export interface CatalogResult {
+  artifacts: CatalogArtifact[];
+  diagnostics: CatalogDiagnostic[];
+}
+
+export interface CliInstalledItem {
+  key: string;
+  kind: ItemKind;
+  name: string;
+  assistant: AssistantId;
+  scope: Scope;
+  membership: 'managed' | 'observed';
+  path: string;
+  sourceId?: string;
+  match?: 'identical' | 'different';
+}
+
+export interface CliUpdateItem {
+  key: string;
+  kind: ItemKind;
+  name: string;
+  assistant: AssistantId;
+  scope: Scope;
+  status: DriftReport['status'];
+  sourceId?: string;
+  details?: string;
+}
+
+export interface CliItemDetail {
+  key: string;
+  kind: ItemKind;
+  name: string;
+  assistant: AssistantId;
+  scope: Scope;
+  membership: 'managed' | 'observed';
+  path: string;
+  origin?: {
+    sourceId?: string;
+    packageId?: string;
+    artifactId?: string;
+    sourceRevision?: string | ResolvedRevision;
+    status?: string;
+    type?: string;
+  };
+  installedIn: Array<{
+    assistant: AssistantId;
+    scope: Scope;
+    membership: 'managed' | 'observed';
+    path: string;
+  }>;
+  diffAvailable: boolean;
+  diff?: string;
+}
+
+export type CliPlanInstallSummary = MatrixSummary;

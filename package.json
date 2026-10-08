@@ -21,6 +21,9 @@
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
+  "bin": {
+    "ai-swissknife": "./dist/cli.js"
+  },
   "contributes": {
     "configuration": {
       "title": "AI Swissknife",
@@ -469,6 +472,9 @@
     "lint": "eslint src --ext ts",
     "typecheck": "tsc --noEmit",
     "test": "tsc && node --test out"
+  },
+  "dependencies": {
+    "commander": "^12.1.0"
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
