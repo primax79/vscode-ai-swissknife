@@ -9,6 +9,7 @@ import { scanInstalledInventory, promoteObservedArtifact } from '../engine/disco
 import { planInstall } from '../engine/plan';
 import { planSync } from '../engine/sync';
 import { applyInstall } from '../engine/apply';
+import { planUpdate } from '../engine/update';
 import { softDeletePath } from '../engine/softDelete';
 import { getAdapter, getEnabledAdapters } from '../adapters/registry';
 import type { DriftReport } from '../engine/types';
@@ -495,31 +496,7 @@ export class InstalledTreeDataProvider {
       return;
     }
 
-    const targetAdapter = getAdapter(inst.assistant);
-
-    const fakePkg = {
-      id: inst.packageId ?? `${source.id}:${inst.name}`,
-      sourceId: source.id,
-      nativeFormat: 'raw',
-      artifacts: [],
-    };
-
-    const fakeArtifact = {
-      id: inst.artifactId ?? `${source.id}:${inst.name}`,
-      packageId: fakePkg.id,
-      kind: inst.kind,
-      name: inst.name,
-      nativeFormat: 'raw',
-    };
-
-    const prepared = await planInstall({
-      source,
-      pkg: fakePkg,
-      artifact: fakeArtifact,
-      targetAdapter,
-      targetScope: inst.scope,
-      projectRoot: inst.projectPath,
-    });
+    const prepared = await planUpdate(inst, source);
 
     if (!prepared.supported) {
       vscode.window.showErrorMessage(`Failed to plan update for ${inst.name}: ${prepared.plan.reason}`);
