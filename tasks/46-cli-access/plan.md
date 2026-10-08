@@ -22,4 +22,5 @@
 | [46.1](46.1-cli-read-only.md) | CLI skeleton + read-only commands (sources, catalog, installed, updates, item, plan-install) | 37.1, 44.1 | M |
 | [46.2](46.2-agent-docs.md) | Agent-facing documentation: AGENTS.md block + `--help --json` self-description | 46.1 | S |
 | [46.3](46.3-state-lock.md) | Cross-process lock for manifest/state read-modify-write | - | S |
+| [46.5](46.5-redistribute.md) | `redistribute <path|item>` v1 (installed from a local folder; plan-first, `--write`) | 46.1, 46.3, 47.1 | M |
 | [46.4](46.4-cli-writes.md) | Write commands behind `--write`: apply-install, uninstall (soft), add/remove source | 46.1, 46.3 | M |
