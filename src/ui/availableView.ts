@@ -196,6 +196,15 @@ export class AvailableTreeDataProvider
   private sources: Source[] = [];
   private resolutionAttempts = new Map<string, SourceResolutionAttempt>();
   private sourceRefreshInFlight = new Map<string, Promise<void>>();
+  private loadingSources = new Set<string>();
+
+  isSourceLoading(sourceId: string, scope: Scope): boolean {
+    return this.loadingSources.has(`${scope}:${sourceId}`);
+  }
+
+  isRefreshing(): boolean {
+    return this.refreshInFlight !== undefined;
+  }
 
   setInstalledRefreshCallback(cb: () => void) {
     this.onInstalledRefreshCallback = cb;
@@ -278,10 +287,38 @@ export class AvailableTreeDataProvider
     this.sources = await this.loadSources();
     this.resolutionAttempts = new Map<string, SourceResolutionAttempt>();
 
-    for (const src of this.sources) {
-      const { group, attempt } = await this.resolveSourceGroup(src);
-      this.cachedSourceGroups.push(group);
-      this.resolutionAttempts.set(src.id, attempt);
+    try {
+      for (const src of this.sources) {
+        const key = `${src.scope}:${src.id}`;
+        this.loadingSources.add(key);
+        this.refresh();
+        try {
+          const { group, attempt } = await this.resolveSourceGroup(src);
+          this.cachedSourceGroups.push(group);
+          this.resolutionAttempts.set(src.id, attempt);
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          this.cachedSourceGroups.push(
+            new AvailableSourceGroupItem(src, {
+              packages: [],
+              diagnostics: [
+                {
+                  code: 'unreadable-skill',
+                  severity: 'error',
+                  path: src.url ?? src.localPath ?? src.id,
+                  message: `Failed to resolve source: ${msg}`,
+                },
+              ],
+            })
+          );
+          this.resolutionAttempts.set(src.id, { status: 'failed', source: src, error: msg });
+        } finally {
+          this.loadingSources.delete(key);
+        }
+        this.refresh();
+      }
+    } finally {
+      this.loadingSources.clear();
     }
 
     await this.recomputeRecommendedGroup();
@@ -396,69 +433,101 @@ export class AvailableTreeDataProvider
     }
 
     const run = async () => {
-      const freshSources = await this.loadSources();
-      this.sources = freshSources;
+      const key = `${scope}:${sourceId}`;
+      this.loadingSources.add(key);
+      this.refresh();
 
-      const matchingSource = freshSources.find(
-        (s) => s.id === sourceId && s.scope === scope
-      );
+      try {
+        const freshSources = await this.loadSources();
+        this.sources = freshSources;
 
-      if (!matchingSource) {
-        const groupIndex = this.cachedSourceGroups.findIndex(
-          (g) => g.source.id === sourceId && g.source.scope === scope
+        const matchingSource = freshSources.find(
+          (s) => s.id === sourceId && s.scope === scope
         );
-        if (groupIndex !== -1) {
-          this.cachedSourceGroups.splice(groupIndex, 1);
-        }
 
-        const remainingSource = freshSources.find((s) => s.id === sourceId);
-        if (remainingSource) {
-          const remainingGroup = this.cachedSourceGroups.find(
-            (g) => g.source.id === sourceId && g.source.scope === remainingSource.scope
+        if (!matchingSource) {
+          const groupIndex = this.cachedSourceGroups.findIndex(
+            (g) => g.source.id === sourceId && g.source.scope === scope
           );
-          if (remainingGroup) {
-            if (
-              remainingGroup.resolution.diagnostics.length > 0 &&
-              remainingGroup.resolution.packages.length === 0
-            ) {
-              this.resolutionAttempts.set(sourceId, {
-                status: 'failed',
-                source: remainingSource,
-                error: remainingGroup.resolution.diagnostics[0]?.message ?? 'Failed to resolve source',
-              });
+          if (groupIndex !== -1) {
+            this.cachedSourceGroups.splice(groupIndex, 1);
+          }
+
+          const remainingSource = freshSources.find((s) => s.id === sourceId);
+          if (remainingSource) {
+            const remainingGroup = this.cachedSourceGroups.find(
+              (g) => g.source.id === sourceId && g.source.scope === remainingSource.scope
+            );
+            if (remainingGroup) {
+              if (
+                remainingGroup.resolution.diagnostics.length > 0 &&
+                remainingGroup.resolution.packages.length === 0
+              ) {
+                this.resolutionAttempts.set(sourceId, {
+                  status: 'failed',
+                  source: remainingSource,
+                  error: remainingGroup.resolution.diagnostics[0]?.message ?? 'Failed to resolve source',
+                });
+              } else {
+                this.resolutionAttempts.set(sourceId, {
+                  status: 'resolved',
+                  source: remainingSource,
+                  packages: remainingGroup.resolution.packages,
+                });
+              }
             } else {
-              this.resolutionAttempts.set(sourceId, {
-                status: 'resolved',
-                source: remainingSource,
-                packages: remainingGroup.resolution.packages,
-              });
+              this.resolutionAttempts.delete(sourceId);
             }
           } else {
             this.resolutionAttempts.delete(sourceId);
           }
-        } else {
-          this.resolutionAttempts.delete(sourceId);
+
+          await this.recomputeRecommendedGroup();
+          return;
         }
 
-        await this.recomputeRecommendedGroup();
+        try {
+          const { group, attempt } = await this.resolveSourceGroup(matchingSource);
+
+          const groupIndex = this.cachedSourceGroups.findIndex(
+            (g) => g.source.id === sourceId && g.source.scope === scope
+          );
+          if (groupIndex !== -1) {
+            this.cachedSourceGroups[groupIndex] = group;
+          } else {
+            this.cachedSourceGroups.push(group);
+          }
+
+          this.resolutionAttempts.set(sourceId, attempt);
+          await this.recomputeRecommendedGroup();
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          const failGroup = new AvailableSourceGroupItem(matchingSource, {
+            packages: [],
+            diagnostics: [
+              {
+                code: 'unreadable-skill',
+                severity: 'error',
+                path: matchingSource.url ?? matchingSource.localPath ?? matchingSource.id,
+                message: `Failed to resolve source: ${msg}`,
+              },
+            ],
+          });
+          const groupIndex = this.cachedSourceGroups.findIndex(
+            (g) => g.source.id === sourceId && g.source.scope === scope
+          );
+          if (groupIndex !== -1) {
+            this.cachedSourceGroups[groupIndex] = failGroup;
+          } else {
+            this.cachedSourceGroups.push(failGroup);
+          }
+          this.resolutionAttempts.set(sourceId, { status: 'failed', source: matchingSource, error: msg });
+          await this.recomputeRecommendedGroup();
+        }
+      } finally {
+        this.loadingSources.delete(key);
         this.refresh();
-        return;
       }
-
-      const { group, attempt } = await this.resolveSourceGroup(matchingSource);
-
-      const groupIndex = this.cachedSourceGroups.findIndex(
-        (g) => g.source.id === sourceId && g.source.scope === scope
-      );
-      if (groupIndex !== -1) {
-        this.cachedSourceGroups[groupIndex] = group;
-      } else {
-        this.cachedSourceGroups.push(group);
-      }
-
-      this.resolutionAttempts.set(sourceId, attempt);
-      await this.recomputeRecommendedGroup();
-      this.refresh();
     };
 
     if (typeof vscode.window.withProgress === 'function') {
@@ -508,6 +577,16 @@ export class AvailableTreeDataProvider
 
     if (element instanceof AvailableSourceGroupItem) {
       const source = element.source;
+      if (this.isSourceLoading(source.id, source.scope)) {
+        const item = new vscode.TreeItem(
+          source.name ?? source.id,
+          vscode.TreeItemCollapsibleState.Expanded
+        );
+        item.description = 'Refreshing...';
+        item.iconPath = new vscode.ThemeIcon('sync~spin');
+        item.contextValue = 'availableSourceGroup';
+        return item;
+      }
       const count = element.resolution.packages.length;
       const diagCount = element.resolution.diagnostics.length;
       const item = new vscode.TreeItem(
@@ -584,7 +663,9 @@ export class AvailableTreeDataProvider
 
   async getChildren(element?: AvailableTreeItem): Promise<AvailableTreeItem[]> {
     if (!element) {
-      await this.ensureCatalogLoaded();
+      if (!this.refreshInFlight) {
+        await this.ensureCatalogLoaded();
+      }
       const children: AvailableTreeItem[] = [];
       if (this.cachedRecommendedGroup) {
         children.push(this.cachedRecommendedGroup);
