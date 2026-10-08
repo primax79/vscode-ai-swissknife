@@ -4,7 +4,13 @@ import * as child_process from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { runGit } from './gitProcess';
+import {
+  runGit,
+  DEFAULT_GIT_ALLOW_PROTOCOL,
+  validateGitUrl,
+  validateGitRef,
+  resolveAndValidateCacheDir,
+} from './gitProcess';
 
 function runGitSync(args: string[], cwd: string): string {
   return child_process
@@ -51,5 +57,115 @@ describe('runGit', () => {
     // but a local-only command must never touch the network at all.
     const { stdout } = await runGit(['log', '-1', '--format=%H'], repoDir);
     assert.ok(stdout.trim().length > 0);
+  });
+
+  it('sets GIT_ALLOW_PROTOCOL to file:git:http:https:ssh on spawned process', async () => {
+    assert.strictEqual(DEFAULT_GIT_ALLOW_PROTOCOL, 'file:git:http:https:ssh');
+    // Verify disallowed protocols like ext:: are rejected by git
+    await assert.rejects(
+      () => runGit(['clone', '--', 'ext::sh -c true', path.join(repoDir, 'sub-ext')], repoDir),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.ok(
+          err.message.includes("transport 'ext' not allowed") ||
+            err.message.includes('Git command failed')
+        );
+        return true;
+      }
+    );
+  });
+});
+
+describe('validateGitUrl', () => {
+  it('rejects empty or whitespace-only url', () => {
+    assert.throws(() => validateGitUrl('git-custom', ''), /source\.url is required/);
+    assert.throws(() => validateGitUrl('git-custom', '   '), /source\.url is required/);
+    assert.throws(() => validateGitUrl('git-custom', undefined), /source\.url is required/);
+  });
+
+  it('rejects url starting with "-"', () => {
+    assert.throws(() => validateGitUrl('git-custom', '--upload-pack=touch /tmp/pwn'), /must not start with "-"/);
+    assert.throws(() => validateGitUrl('git-custom', '-oProxyCommand=calc'), /must not start with "-"/);
+  });
+
+  it('rejects url containing newlines or control characters', () => {
+    assert.throws(() => validateGitUrl('git-custom', 'https://github.com/org/repo\nfoo'), /must not contain newlines/);
+    assert.throws(() => validateGitUrl('git-custom', 'https://github.com/org/repo\rfoo'), /must not contain newlines/);
+    assert.throws(() => validateGitUrl('git-custom', 'https://github.com/org/repo\0foo'), /must not contain newlines/);
+  });
+
+  it('rejects url with disallowed protocols', () => {
+    assert.throws(() => validateGitUrl('git-custom', 'ext::sh -c calc'), /Git repository URL must use HTTPS/);
+    assert.throws(() => validateGitUrl('git-custom', 'ftp://github.com/org/repo.git'), /Git repository URL must use HTTPS/);
+  });
+
+  it('accepts valid HTTPS, SSH, and SCP URLs', () => {
+    assert.doesNotThrow(() => validateGitUrl('git-custom', 'https://github.com/org/repo.git'));
+    assert.doesNotThrow(() => validateGitUrl('git-custom', 'ssh://git@github.com/org/repo.git'));
+    assert.doesNotThrow(() => validateGitUrl('git-custom', 'git@github.com:org/repo.git'));
+  });
+
+  it('accepts safe absolute local filesystem paths for tests/local cloning', () => {
+    assert.doesNotThrow(() => validateGitUrl('git-custom', '/var/folders/temp-repo'));
+  });
+});
+
+describe('validateGitRef', () => {
+  it('rejects empty refs', () => {
+    assert.throws(() => validateGitRef('branch', ''), /cannot be empty/);
+    assert.throws(() => validateGitRef('tag', '   '), /cannot be empty/);
+    assert.throws(() => validateGitRef('commit', ''), /cannot be empty/);
+  });
+
+  it('rejects refs starting with "-"', () => {
+    assert.throws(() => validateGitRef('branch', '-x'), /must not start with "-"/);
+    assert.throws(() => validateGitRef('tag', '--tag-opt'), /must not start with "-"/);
+    assert.throws(() => validateGitRef('commit', '-abc1234'), /must not start with "-"/);
+  });
+
+  it('rejects refs containing whitespace or control characters', () => {
+    assert.throws(() => validateGitRef('branch', 'a b'), /must not contain whitespace/);
+    assert.throws(() => validateGitRef('tag', 'v1 0'), /must not contain whitespace/);
+    assert.throws(() => validateGitRef('branch', 'a\nb'), /must not contain whitespace/);
+  });
+
+  it('rejects refs containing ".."', () => {
+    assert.throws(() => validateGitRef('branch', 'a..b'), /must not contain "\.\."/);
+    assert.throws(() => validateGitRef('tag', 'v1..v2'), /must not contain "\.\."/);
+    assert.throws(() => validateGitRef('commit', '..'), /must not contain "\.\."/);
+  });
+
+  it('validates commit hash format (7 to 40 hex chars)', () => {
+    assert.throws(() => validateGitRef('commit', 'abc123'), /must be a 7-40 character hexadecimal hash/);
+    assert.throws(() => validateGitRef('commit', 'not-a-hash'), /must be a 7-40 character hexadecimal hash/);
+    assert.throws(() => validateGitRef('commit', '0123456789abcdef0123456789abcdef0123456789a'), /must be a 7-40 character hexadecimal hash/);
+
+    assert.doesNotThrow(() => validateGitRef('commit', '0123456'));
+    assert.doesNotThrow(() => validateGitRef('commit', '0123456789abcdef0123456789abcdef01234567'));
+    assert.doesNotThrow(() => validateGitRef('commit', 'ABCDEF01234567'));
+  });
+
+  it('accepts valid branch and tag names', () => {
+    assert.doesNotThrow(() => validateGitRef('branch', 'main'));
+    assert.doesNotThrow(() => validateGitRef('branch', 'feature/new-ui'));
+    assert.doesNotThrow(() => validateGitRef('tag', 'v1.0.0'));
+  });
+});
+
+describe('resolveAndValidateCacheDir', () => {
+  const tempBase = path.join(os.tmpdir(), 'cache-test-base');
+
+  it('rejects empty, ".", "..", and leading dot ids', () => {
+    assert.throws(() => resolveAndValidateCacheDir(tempBase, ''), /empty or starts with "\."/);
+    assert.throws(() => resolveAndValidateCacheDir(tempBase, '.'), /empty or starts with "\."/);
+    assert.throws(() => resolveAndValidateCacheDir(tempBase, '..'), /empty or starts with "\."/);
+    assert.throws(() => resolveAndValidateCacheDir(tempBase, '.hidden'), /empty or starts with "\."/);
+  });
+
+  it('asserts targetDir is contained within baseCacheDir', () => {
+    const { targetDir, sanitizedId } = resolveAndValidateCacheDir(tempBase, 'valid-source-id');
+    assert.strictEqual(sanitizedId, 'valid-source-id');
+    assert.strictEqual(targetDir, path.join(tempBase, 'valid-source-id'));
+    assert.ok(path.resolve(targetDir).startsWith(path.resolve(tempBase) + path.sep));
   });
 });

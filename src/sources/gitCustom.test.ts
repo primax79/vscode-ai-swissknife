@@ -1,4 +1,4 @@
-import { describe, it, before, after } from 'node:test';
+import { describe, it, before, after, mock } from 'node:test';
 import * as assert from 'node:assert';
 import * as child_process from 'child_process';
 import * as fs from 'fs';
@@ -8,6 +8,7 @@ import type { Source, ResolvedArtifact } from '../domain/types';
 import type { CanonicalSkill, CanonicalAgent, CanonicalCommand } from '../adapters/types';
 import type { SourceResolution } from './types';
 import { resolveGitCustom, resolveArtifactContent, gitCustomMutex, gitCustomResolver } from './gitCustom';
+import * as gitProcessModule from './gitProcess';
 
 function runGitSync(args: string[], cwd: string): string {
   return child_process
@@ -373,6 +374,220 @@ describe('gitCustom — resolveGitCustom with committed fixtures in dynamic repo
       },
       /source\.url is required/
     );
+  });
+
+  describe('hardening — url, ref, and id validation (44.1)', () => {
+    it('rejects malicious or invalid URLs before git runs without calling runGit', async () => {
+      const invalidUrls = [
+        '--upload-pack=touch /tmp/pwn',
+        '-oProxyCommand=calc',
+        'ext::sh -c touch /tmp/pwn',
+        'https://github.com/org/repo\nfoo',
+      ];
+
+      for (const badUrl of invalidUrls) {
+        const runGitSpy = mock.method(gitProcessModule, 'runGit');
+        try {
+          const source: Source = {
+            id: 'src-test-bad-url',
+            type: 'git-custom',
+            scope: 'project',
+            url: badUrl,
+          };
+          await assert.rejects(
+            async () => {
+              await resolveGitCustom(source, { cacheDir: cacheBaseDir });
+            },
+            (err: Error) => {
+              assert.ok(
+                err.message.includes('Invalid source URL') ||
+                  err.message.includes('Git repository URL must use HTTPS')
+              );
+              return true;
+            }
+          );
+          assert.strictEqual(
+            runGitSpy.mock.calls.length,
+            0,
+            `runGit should not have been called for URL "${badUrl}"`
+          );
+        } finally {
+          runGitSpy.mock.restore();
+        }
+      }
+    });
+
+    it('rejects invalid refs (-x, a..b, a b) before git runs without calling runGit', async () => {
+      const invalidRefs = ['-x', 'a..b', 'a b'];
+
+      for (const badRef of invalidRefs) {
+        // Test branch
+        const branchSpy = mock.method(gitProcessModule, 'runGit');
+        try {
+          const sourceBranch: Source = {
+            id: 'src-test-bad-ref-branch',
+            type: 'git-custom',
+            scope: 'project',
+            url: remoteRepoDir,
+            branch: badRef,
+          };
+          await assert.rejects(
+            async () => {
+              await resolveGitCustom(sourceBranch, { cacheDir: cacheBaseDir });
+            },
+            (err: Error) => {
+              assert.ok(err.message.includes('Git branch ref'));
+              return true;
+            }
+          );
+          assert.strictEqual(
+            branchSpy.mock.calls.length,
+            0,
+            `runGit should not be called for bad branch ref "${badRef}"`
+          );
+        } finally {
+          branchSpy.mock.restore();
+        }
+
+        // Test tag
+        const tagSpy = mock.method(gitProcessModule, 'runGit');
+        try {
+          const sourceTag: Source = {
+            id: 'src-test-bad-ref-tag',
+            type: 'git-custom',
+            scope: 'project',
+            url: remoteRepoDir,
+            tag: badRef,
+          };
+          await assert.rejects(
+            async () => {
+              await resolveGitCustom(sourceTag, { cacheDir: cacheBaseDir });
+            },
+            (err: Error) => {
+              assert.ok(err.message.includes('Git tag ref'));
+              return true;
+            }
+          );
+          assert.strictEqual(
+            tagSpy.mock.calls.length,
+            0,
+            `runGit should not be called for bad tag ref "${badRef}"`
+          );
+        } finally {
+          tagSpy.mock.restore();
+        }
+
+        // Test commit
+        const commitSpy = mock.method(gitProcessModule, 'runGit');
+        try {
+          const sourceCommit: Source = {
+            id: 'src-test-bad-ref-commit',
+            type: 'git-custom',
+            scope: 'project',
+            url: remoteRepoDir,
+            commit: badRef,
+          };
+          await assert.rejects(
+            async () => {
+              await resolveGitCustom(sourceCommit, { cacheDir: cacheBaseDir });
+            },
+            (err: Error) => {
+              assert.ok(err.message.includes('Git commit ref'));
+              return true;
+            }
+          );
+          assert.strictEqual(
+            commitSpy.mock.calls.length,
+            0,
+            `runGit should not be called for bad commit ref "${badRef}"`
+          );
+        } finally {
+          commitSpy.mock.restore();
+        }
+      }
+    });
+
+    it('rejects ids ".", "..", and empty without removing sentinel cache directory contents', async () => {
+      const sentinelDir = path.join(cacheBaseDir, 'sentinel-dir');
+      const sentinelFile = path.join(sentinelDir, 'sentinel.txt');
+      fs.mkdirSync(sentinelDir, { recursive: true });
+      fs.writeFileSync(sentinelFile, 'sentinel content', 'utf-8');
+
+      const badIds = ['.', '..', '', '.hidden'];
+
+      for (const badId of badIds) {
+        const source: Source = {
+          id: badId,
+          type: 'git-custom',
+          scope: 'project',
+          url: remoteRepoDir,
+        };
+
+        await assert.rejects(
+          async () => {
+            await resolveGitCustom(source, { cacheDir: cacheBaseDir });
+          },
+          /Invalid source id/
+        );
+
+        assert.ok(
+          fs.existsSync(sentinelFile),
+          `Sentinel file must still exist after rejecting id "${badId}"`
+        );
+        assert.ok(
+          fs.existsSync(sentinelDir),
+          `Sentinel dir must still exist after rejecting id "${badId}"`
+        );
+      }
+    });
+
+    it('accepts valid https, ssh, and scp URLs and invokes git clone with -- separator', async () => {
+      const validUrls = [
+        'https://github.com/org/repo.git',
+        'ssh://git@github.com/org/repo.git',
+        'git@github.com:org/repo.git',
+      ];
+
+      for (const validUrl of validUrls) {
+        const runGitSpy = mock.method(gitProcessModule, 'runGit', async (args: string[], _cwd?: string) => {
+          if (args[0] === 'clone') {
+            const target = args[3];
+            if (target) {
+              fs.mkdirSync(path.join(target, '.git'), { recursive: true });
+            }
+            return { stdout: '', stderr: '' };
+          }
+          if (args[0] === 'rev-parse') {
+            return { stdout: '0123456789abcdef0123456789abcdef01234567\n', stderr: '' };
+          }
+          if (args[0] === 'symbolic-ref' || args[0] === 'branch') {
+            return { stdout: 'main\n', stderr: '' };
+          }
+          return { stdout: '', stderr: '' };
+        });
+
+        try {
+          const source: Source = {
+            id: 'src-valid-url-test',
+            type: 'git-custom',
+            scope: 'project',
+            url: validUrl,
+          };
+          const tempCache = path.join(cacheBaseDir, 'valid-url-cache-' + Math.random().toString(36).slice(2));
+          await resolveGitCustom(source, { cacheDir: tempCache });
+
+          const cloneCall = runGitSpy.mock.calls.find((call) => call.arguments[0]?.[0] === 'clone');
+          assert.ok(cloneCall, `clone should have been called for URL "${validUrl}"`);
+          assert.deepStrictEqual(
+            cloneCall.arguments[0]?.slice(0, 3),
+            ['clone', '--', validUrl],
+            `clone command must use "--" separator before URL`
+          );
+        } finally {
+          runGitSpy.mock.restore();
+        }
+      }
+    });
   });
 
   it('exposes gitCustomResolver conforming to SourceResolver', () => {
