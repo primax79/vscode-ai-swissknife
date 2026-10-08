@@ -250,6 +250,13 @@ export function activate(context: vscode.ExtensionContext) {
       sourcesProvider.exportSource(item)
     ),
     vscode.commands.registerCommand('aiSwissknife.refreshCatalog', () => availableProvider.refreshCatalog()),
+    vscode.commands.registerCommand('aiSwissknife.refreshSource', (item?: SourceItem) => {
+      if (!item) {
+        vscode.window.showWarningMessage('Please select a source to refresh.');
+        return;
+      }
+      return availableProvider.refreshSource(item.source.id, item.source.scope);
+    }),
     vscode.commands.registerCommand('aiSwissknife.installArtifact', (item?: AvailableArtifactItem) =>
       availableProvider.installArtifact(item)
     ),

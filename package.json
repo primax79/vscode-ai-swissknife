@@ -198,6 +198,12 @@
         "category": "AI Swissknife"
       },
       {
+        "command": "aiSwissknife.refreshSource",
+        "title": "Refresh Source",
+        "icon": "$(refresh)",
+        "category": "AI Swissknife"
+      },
+      {
         "command": "aiSwissknife.installArtifact",
         "title": "Install Skill",
         "icon": "$(cloud-download)",
@@ -313,6 +319,12 @@
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "aiSwissknife.refreshSource",
+          "when": "false"
+        }
+      ],
       "view/title": [
         {
           "command": "aiSwissknife.openDashboard",
@@ -462,24 +474,29 @@
           "group": "inline@1"
         },
         {
-          "command": "aiSwissknife.installSourceGroup",
+          "command": "aiSwissknife.refreshSource",
           "when": "view == aiSwissknife.sources && viewItem == sourceItem",
           "group": "inline@1"
         },
         {
-          "command": "aiSwissknife.removeSource",
+          "command": "aiSwissknife.installSourceGroup",
           "when": "view == aiSwissknife.sources && viewItem == sourceItem",
           "group": "inline@2"
         },
         {
-          "command": "aiSwissknife.openInDashboard",
+          "command": "aiSwissknife.removeSource",
           "when": "view == aiSwissknife.sources && viewItem == sourceItem",
           "group": "inline@3"
         },
         {
-          "command": "aiSwissknife.exportSource",
+          "command": "aiSwissknife.openInDashboard",
           "when": "view == aiSwissknife.sources && viewItem == sourceItem",
           "group": "inline@4"
+        },
+        {
+          "command": "aiSwissknife.exportSource",
+          "when": "view == aiSwissknife.sources && viewItem == sourceItem",
+          "group": "inline@5"
         }
       ]
     }
