@@ -176,12 +176,12 @@ hands-on testing round.
 | 36       | 36  | [Add-source wizard](36-add-source-wizard/plan.md)                                          | in progress (36.1 merged; 36.2, 36.3 pending) | 29, 30, 31       | M    |
 | 37       | 37  | [Install to multiple assistants and scopes](37-install-multi-target/plan.md)               | in progress (37.1 merged; 37.2 ready) | 29, 31           | M    |
 | 38       | 38  | [Per-source refresh](38-per-source-refresh/plan.md)                                        | ready to delegate (2 tasks) | 31, 33           | S    |
-| 39       | 39  | [Dashboard Installed: bug, action parity, status clarity](39-dashboard-installed-fixes/plan.md) | 39.1 merged; 39.4 ready; 39.2 waits on 40.2; 39.3 waits on 40.2 | 31, 32, 34, 35 | M    |
+| 39       | 39  | [Dashboard Installed: bug, action parity, status clarity](39-dashboard-installed-fixes/plan.md) | 39.1 and 39.4 merged; 39.2 waits on 40.2; 39.3 waits on 40.2 | 31, 32, 34, 35 | M    |
 | 40       | 40  | [Dashboard Installed: collapsible object tree](40-dashboard-collapsible-objects/plan.md)   | ready to delegate after 39.1 (5 tasks) | 35, 39.1   | L    |
 | 41       | 41  | [Install elsewhere from a Dashboard row](41-install-elsewhere/plan.md)                      | planned (2 tasks, no open questions) | 37, 40       | M    |
 | 42       | 42  | [Item actions, Tier 1 remainder](42-item-actions-tier1/plan.md)                            | planned (5 tasks, no open questions) | 39.2, 40 | M    |
 | 43       | 43  | [Disabled state for installed items](43-disabled-state/plan.md)                              | spike 43.1 ready; 43.2-43.4 outlined, specified after the spike | 40, 42 | L    |
-| 44       | 44  | [Hardening and fixes from the kilocode-dev cross-check](44-hardening-from-kilocode-dev/plan.md) | planned (5 tasks; 44.1 and 44.3 are P1) | 36.1, 38.1 | M    |
+| 44       | 44  | [Hardening and fixes from the kilocode-dev cross-check](44-hardening-from-kilocode-dev/plan.md) | in progress (44.1 merged; 44.3 P1 next) | 36.1, 38.1 | M    |
 | 45       | 45  | [Claude Code plugins, native management](45-claude-plugins/plan.md)                          | P3, after the rest: spike 45.1 paused (partial findings); CP-Q3/Q5 assumptions unconfirmed | 40, 42 | L    |
 
 ## Next up
