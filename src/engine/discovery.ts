@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as path from 'path';
 import type {
   ManagedInstallation,
   ObservedArtifact,
@@ -26,6 +27,8 @@ import {
   readSkill,
 } from '../adapters/codec';
 import { getAdapter, getAdapterWithHomeRoot, ALL_ADAPTERS } from '../adapters/registry';
+import { parseKiloAgentMarkdown, parseKiloCommandMarkdown } from '../adapters/kilo';
+import { parseClaudeAgentMarkdown, parseClaudeCommandMarkdown } from '../adapters/claude';
 import { getSourceResolver } from '../sources/registry';
 import type { SourceResolution } from '../sources/types';
 import { resolveAndTranslate } from './plan';
@@ -172,6 +175,124 @@ export async function scanInstalledInventory(
     } catch {
       // ignore
     }
+
+    // Disabled roots scanning
+    if (adapter.disableSupport !== 'unsupported') {
+      const disabledKinds: ('skill' | 'agent' | 'command')[] = ['skill', 'agent', 'command'];
+      for (const kind of disabledKinds) {
+        try {
+          const disabledRoot = adapter.getDisabledRoot(kind, loc);
+          if (!disabledRoot) continue;
+
+          let entries: fs.Dirent[];
+          try {
+            entries = await fs.promises.readdir(disabledRoot, { withFileTypes: true });
+          } catch {
+            continue;
+          }
+
+          if (kind === 'skill') {
+            for (const entry of entries) {
+              if (entry.isDirectory()) {
+                const name = entry.name;
+                if (!managedSet.has(`${assistant}:${scope}:skill:${name}`)) {
+                  const itemPath = path.join(disabledRoot, name);
+                  const skillFile = path.join(itemPath, 'SKILL.md');
+                  try {
+                    const stat = await fs.promises.stat(skillFile);
+                    if (!stat.isFile()) continue;
+                  } catch {
+                    continue;
+                  }
+                  let contentHash: string | undefined;
+                  try {
+                    const skill = await readSkill(itemPath);
+                    contentHash = canonicalSkillHash(skill);
+                  } catch {
+                    // ignore
+                  }
+                  rawObserved.push({
+                    assistant,
+                    scope,
+                    projectPath: projectRoot,
+                    kind: 'skill',
+                    name,
+                    path: itemPath,
+                    discoveredAt: now,
+                    contentHash,
+                    disabled: true,
+                  });
+                }
+              }
+            }
+          } else if (kind === 'agent') {
+            for (const entry of entries) {
+              if (entry.isFile() && entry.name.endsWith('.md')) {
+                const name = entry.name.replace(/\.md$/, '');
+                if (!managedSet.has(`${assistant}:${scope}:agent:${name}`)) {
+                  const itemPath = path.join(disabledRoot, entry.name);
+                  let contentHash: string | undefined;
+                  try {
+                    const content = await fs.promises.readFile(itemPath, 'utf-8');
+                    const agent =
+                      assistant === 'kilo-code'
+                        ? parseKiloAgentMarkdown(content)
+                        : parseClaudeAgentMarkdown(content);
+                    contentHash = canonicalAgentHash(agent);
+                  } catch {
+                    // ignore
+                  }
+                  rawObserved.push({
+                    assistant,
+                    scope,
+                    projectPath: projectRoot,
+                    kind: 'agent',
+                    name,
+                    path: itemPath,
+                    discoveredAt: now,
+                    contentHash,
+                    disabled: true,
+                  });
+                }
+              }
+            }
+          } else if (kind === 'command') {
+            for (const entry of entries) {
+              if (entry.isFile() && entry.name.endsWith('.md')) {
+                const name = entry.name.replace(/\.md$/, '');
+                if (!managedSet.has(`${assistant}:${scope}:command:${name}`)) {
+                  const itemPath = path.join(disabledRoot, entry.name);
+                  let contentHash: string | undefined;
+                  try {
+                    const content = await fs.promises.readFile(itemPath, 'utf-8');
+                    const cmd =
+                      assistant === 'kilo-code'
+                        ? parseKiloCommandMarkdown(content, name)
+                        : parseClaudeCommandMarkdown(content, name);
+                    contentHash = canonicalCommandHash(cmd);
+                  } catch {
+                    // ignore
+                  }
+                  rawObserved.push({
+                    assistant,
+                    scope,
+                    projectPath: projectRoot,
+                    kind: 'command',
+                    name,
+                    path: itemPath,
+                    discoveredAt: now,
+                    contentHash,
+                    disabled: true,
+                  });
+                }
+              }
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
   }
 
   // Load all registered sources for cross-matching
@@ -290,6 +411,10 @@ export async function promoteObservedArtifact(
   provenance: Pick<ObservedSourceMatch, 'sourceId' | 'packageId' | 'artifactId' | 'sourceRevision'>,
   homeRoot?: string
 ): Promise<ManagedInstallation> {
+  if (observed.disabled) {
+    throw new Error(`Cannot promote disabled artifact "${observed.name}". Enable it first.`);
+  }
+
   const adapter = homeRoot ? getAdapterWithHomeRoot(observed.assistant, homeRoot) : getAdapter(observed.assistant);
   const loc = { scope: observed.scope, projectRoot: observed.projectPath };
 

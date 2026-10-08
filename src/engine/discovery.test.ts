@@ -4,7 +4,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { scanInstalledInventory, promoteObservedArtifact } from './discovery';
-import { readState, writeManifest, SCHEMA_VERSION } from '../domain/registry';
+import { readState, writeState, writeManifest, SCHEMA_VERSION } from '../domain/registry';
+import type { ObservedArtifact } from '../domain/types';
 
 describe('inventory discovery & promotion — scanInstalledInventory & promoteObservedArtifact', () => {
   let testTempDir: string;
@@ -307,5 +308,160 @@ describe('inventory discovery & promotion — scanInstalledInventory & promoteOb
 
     assert.strictEqual(obs.candidates?.length, 1);
     assert.strictEqual(obs.candidates?.[0].sourceId, 'remote-source-1');
+  });
+
+  // Task 43.3 tests
+  it('scans disabled unmanaged skill, agent, and command returning observed with disabled: true and correct metadata', async () => {
+    // 1. Unmanaged disabled skill under .kilo/_disabled/skills/my-skill
+    const disabledSkillDir = path.join(testTempDir, '.kilo', '_disabled', 'skills', 'dis-skill');
+    await fs.promises.mkdir(disabledSkillDir, { recursive: true });
+    await fs.promises.writeFile(
+      path.join(disabledSkillDir, 'SKILL.md'),
+      '---\nname: dis-skill\ndescription: Disabled skill\n---\nBody\n',
+      'utf-8'
+    );
+
+    // 2. Unmanaged disabled agent under .kilo/_disabled/agents/dis-agent.md
+    const disabledAgentsDir = path.join(testTempDir, '.kilo', '_disabled', 'agents');
+    await fs.promises.mkdir(disabledAgentsDir, { recursive: true });
+    await fs.promises.writeFile(
+      path.join(disabledAgentsDir, 'dis-agent.md'),
+      '---\nname: dis-agent\ndescription: Disabled agent\n---\nInstructions\n',
+      'utf-8'
+    );
+
+    // 3. Unmanaged disabled command under .kilo/_disabled/command/dis-cmd.md
+    const disabledCmdsDir = path.join(testTempDir, '.kilo', '_disabled', 'command');
+    await fs.promises.mkdir(disabledCmdsDir, { recursive: true });
+    await fs.promises.writeFile(
+      path.join(disabledCmdsDir, 'dis-cmd.md'),
+      '---\ndescription: Disabled command\n---\nCommand prompt\n',
+      'utf-8'
+    );
+
+    const inventory = await scanInstalledInventory('project', testTempDir, testHomeDir);
+    assert.strictEqual(inventory.managed.length, 0);
+    assert.strictEqual(inventory.observed.length, 3);
+
+    const skillObs = inventory.observed.find((o) => o.name === 'dis-skill')!;
+    assert.ok(skillObs);
+    assert.strictEqual(skillObs.kind, 'skill');
+    assert.strictEqual(skillObs.assistant, 'kilo-code');
+    assert.strictEqual(skillObs.scope, 'project');
+    assert.strictEqual(skillObs.disabled, true);
+    assert.ok(skillObs.contentHash);
+
+    const agentObs = inventory.observed.find((o) => o.name === 'dis-agent')!;
+    assert.ok(agentObs);
+    assert.strictEqual(agentObs.kind, 'agent');
+    assert.strictEqual(agentObs.assistant, 'kilo-code');
+    assert.strictEqual(agentObs.scope, 'project');
+    assert.strictEqual(agentObs.disabled, true);
+    assert.ok(agentObs.contentHash);
+
+    const cmdObs = inventory.observed.find((o) => o.name === 'dis-cmd')!;
+    assert.ok(cmdObs);
+    assert.strictEqual(cmdObs.kind, 'command');
+    assert.strictEqual(cmdObs.assistant, 'kilo-code');
+    assert.strictEqual(cmdObs.scope, 'project');
+    assert.strictEqual(cmdObs.disabled, true);
+    assert.ok(cmdObs.contentHash);
+  });
+
+  it('managed disabled installation appears once as managed and is not duplicated as observed', async () => {
+    const disabledSkillDir = path.join(testTempDir, '.kilo', '_disabled', 'skills', 'managed-dis-skill');
+    await fs.promises.mkdir(disabledSkillDir, { recursive: true });
+    await fs.promises.writeFile(
+      path.join(disabledSkillDir, 'SKILL.md'),
+      '---\nname: managed-dis-skill\ndescription: Managed disabled skill\n---\nBody\n',
+      'utf-8'
+    );
+
+    // Save as managed disabled in state.json
+    const state = await readState('project', testTempDir, testHomeDir);
+    state.installations.push({
+      assistant: 'kilo-code',
+      scope: 'project',
+      projectPath: testTempDir,
+      kind: 'skill',
+      name: 'managed-dis-skill',
+      path: disabledSkillDir,
+      installedAt: new Date().toISOString(),
+      disabled: true,
+    });
+    await writeState('project', state, testTempDir, testHomeDir);
+
+    const inventory = await scanInstalledInventory('project', testTempDir, testHomeDir);
+    assert.strictEqual(inventory.managed.length, 1);
+    assert.strictEqual(inventory.managed[0].name, 'managed-dis-skill');
+    assert.strictEqual(inventory.managed[0].disabled, true);
+
+    // Must NOT be duplicated in observed
+    assert.strictEqual(inventory.observed.length, 0);
+  });
+
+  it('an identical-to-source disabled copy shows match identical', async () => {
+    // 1. Create registered source
+    const sourceFolder = path.join(testTempDir, 'upstream-repo');
+    const sourceSkillDir = path.join(sourceFolder, 'matched-tool');
+    await fs.promises.mkdir(sourceSkillDir, { recursive: true });
+    const skillContent = '---\nname: matched-tool\ndescription: Matched tool v1\n---\n# Matched\n';
+    await fs.promises.writeFile(path.join(sourceSkillDir, 'SKILL.md'), skillContent, 'utf-8');
+
+    await writeManifest(
+      'project',
+      {
+        schemaVersion: SCHEMA_VERSION,
+        sources: [
+          {
+            id: 'my-source',
+            type: 'local-folder',
+            scope: 'project',
+            localPath: 'upstream-repo',
+          },
+        ],
+        desiredInstallations: [],
+      },
+      testTempDir,
+      testHomeDir
+    );
+
+    // 2. Create disabled copy in .kilo/_disabled/skills/matched-tool
+    const disabledSkillDir = path.join(testTempDir, '.kilo', '_disabled', 'skills', 'matched-tool');
+    await fs.promises.mkdir(disabledSkillDir, { recursive: true });
+    await fs.promises.writeFile(path.join(disabledSkillDir, 'SKILL.md'), skillContent, 'utf-8');
+
+    // 3. Scan
+    const inventory = await scanInstalledInventory('project', testTempDir, testHomeDir);
+    assert.strictEqual(inventory.observed.length, 1);
+
+    const obs = inventory.observed[0];
+    assert.strictEqual(obs.name, 'matched-tool');
+    assert.strictEqual(obs.disabled, true);
+    assert.strictEqual(obs.match?.status, 'identical');
+    assert.strictEqual(obs.match?.sourceId, 'my-source');
+  });
+
+  it('refuses to promote a disabled observed artifact with "Enable it first"', async () => {
+    const disabledObs: ObservedArtifact = {
+      assistant: 'kilo-code',
+      scope: 'project',
+      projectPath: testTempDir,
+      kind: 'skill',
+      name: 'cannot-promote-skill',
+      path: path.join(testTempDir, '.kilo', '_disabled', 'skills', 'cannot-promote-skill'),
+      discoveredAt: new Date().toISOString(),
+      disabled: true,
+    };
+
+    await assert.rejects(
+      async () => {
+        await promoteObservedArtifact(disabledObs, { sourceId: 'any-source' }, testHomeDir);
+      },
+      (err: Error) => {
+        assert.ok(err.message.includes('Enable it first'));
+        return true;
+      }
+    );
   });
 });

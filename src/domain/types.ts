@@ -89,6 +89,7 @@ export interface ObservedArtifact {
   contentHash?: string;
   candidates?: ObservedSourceMatch[];
   match?: ObservedSourceMatch;
+  disabled?: boolean;
 }
 
 export interface ManagedInstallation {

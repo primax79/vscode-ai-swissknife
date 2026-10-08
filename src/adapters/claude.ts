@@ -380,6 +380,55 @@ export class ClaudeAdapter implements Adapter {
     return undefined;
   }
 
+  getDisabledRoot(kind: ItemKind, loc: LocationRef): string | undefined {
+    if (kind === 'skill') {
+      const assistantRoot =
+        loc.scope === 'global'
+          ? path.join(this.getHomedir(), '.claude')
+          : loc.projectRoot
+          ? path.join(loc.projectRoot, '.claude')
+          : undefined;
+      if (!assistantRoot) {
+        if (loc.scope === 'project') {
+          throw new Error('projectRoot is required when scope is "project"');
+        }
+        return undefined;
+      }
+      return path.join(assistantRoot, '_disabled', 'skills');
+    }
+    if (kind === 'agent') {
+      const assistantRoot =
+        loc.scope === 'global'
+          ? path.join(this.getHomedir(), '.claude')
+          : loc.projectRoot
+          ? path.join(loc.projectRoot, '.claude')
+          : undefined;
+      if (!assistantRoot) {
+        if (loc.scope === 'project') {
+          throw new Error('projectRoot is required when scope is "project"');
+        }
+        return undefined;
+      }
+      return path.join(assistantRoot, '_disabled', 'agents');
+    }
+    if (kind === 'command') {
+      const assistantRoot =
+        loc.scope === 'global'
+          ? path.join(this.getHomedir(), '.claude')
+          : loc.projectRoot
+          ? path.join(loc.projectRoot, '.claude')
+          : undefined;
+      if (!assistantRoot) {
+        if (loc.scope === 'project') {
+          throw new Error('projectRoot is required when scope is "project"');
+        }
+        return undefined;
+      }
+      return path.join(assistantRoot, '_disabled', 'commands');
+    }
+    return undefined;
+  }
+
   constructor(private readonly getHomedir: () => string = os.homedir) {}
 
   skillDir(name: string, loc: LocationRef): string {

@@ -478,3 +478,89 @@ test('installedTree - statusByKey supports Record and normalizes checking…', (
   });
   assert.equal(treeRecord[0].places[0].state, 'checking');
 });
+
+test('installedTree (43.3) - disabled places and severity rules', () => {
+  // 1. Severity ordering: 'disabled' is strictly lower than 'up-to-date'
+  assert.ok(
+    STATE_SEVERITY['up-to-date'] > STATE_SEVERITY['disabled'],
+    `up-to-date (${STATE_SEVERITY['up-to-date']}) must be > disabled (${STATE_SEVERITY['disabled']})`
+  );
+  assert.equal(STATE_SEVERITY['disabled'], 0);
+
+  // 2. Object with one enabled and one disabled place keeps enabled place's severity as worstState
+  const managedEnabled: ManagedInstallation = {
+    assistant: 'kilo-code',
+    scope: 'project',
+    projectPath: '/workspace',
+    kind: 'skill',
+    name: 'hybrid-skill',
+    path: '/workspace/.kilo/skills/hybrid-skill',
+    installedAt: '2026-10-01T00:00:00Z',
+  };
+  const observedDisabled: ObservedArtifact = {
+    assistant: 'claude-code',
+    scope: 'global',
+    kind: 'skill',
+    name: 'hybrid-skill',
+    path: '/home/user/.claude/_disabled/skills/hybrid-skill',
+    discoveredAt: '2026-10-01T00:00:00Z',
+    disabled: true,
+  };
+
+  const hybridTree = buildInstalledTree(
+    [managedEnabled],
+    [observedDisabled],
+    { statusByKey: { [getIdentityKey(managedEnabled)]: 'up-to-date' } }
+  );
+
+  assert.equal(hybridTree.length, 1);
+  const hybridObj = hybridTree[0];
+  assert.equal(hybridObj.places.length, 2);
+
+  const claudePlace = hybridObj.places.find((p) => p.assistant === 'claude-code')!;
+  assert.equal(claudePlace.disabled, true);
+  assert.equal(claudePlace.state, 'disabled');
+
+  const kiloPlace = hybridObj.places.find((p) => p.assistant === 'kilo-code')!;
+  assert.equal(kiloPlace.disabled, false);
+  assert.equal(kiloPlace.state, 'up-to-date');
+
+  // Enabled place severity (up-to-date) wins over disabled
+  assert.equal(hybridObj.worstState, 'up-to-date');
+
+  // 3. Object with all places disabled reports worstState 'disabled'
+  const managedDisabled: ManagedInstallation = {
+    assistant: 'kilo-code',
+    scope: 'project',
+    projectPath: '/workspace',
+    kind: 'agent',
+    name: 'all-disabled-agent',
+    path: '/workspace/.kilo/_disabled/agents/all-disabled-agent.md',
+    installedAt: '2026-10-01T00:00:00Z',
+    disabled: true,
+  };
+  const observedDisabledAgent: ObservedArtifact = {
+    assistant: 'claude-code',
+    scope: 'global',
+    kind: 'agent',
+    name: 'all-disabled-agent',
+    path: '/home/user/.claude/_disabled/agents/all-disabled-agent.md',
+    discoveredAt: '2026-10-01T00:00:00Z',
+    disabled: true,
+  };
+
+  const allDisabledTree = buildInstalledTree([managedDisabled], [observedDisabledAgent]);
+  assert.equal(allDisabledTree.length, 1);
+  const allDisabledObj = allDisabledTree[0];
+  assert.equal(allDisabledObj.places.length, 2);
+  assert.equal(allDisabledObj.places[0].disabled, true);
+  assert.equal(allDisabledObj.places[0].state, 'disabled');
+  assert.equal(allDisabledObj.places[1].disabled, true);
+  assert.equal(allDisabledObj.places[1].state, 'disabled');
+  assert.equal(allDisabledObj.worstState, 'disabled');
+
+  // 4. A single disabled place object reports worstState 'disabled'
+  const singleDisabledTree = buildInstalledTree([], [observedDisabled]);
+  assert.equal(singleDisabledTree[0].worstState, 'disabled');
+  assert.equal(singleDisabledTree[0].places[0].disabled, true);
+});

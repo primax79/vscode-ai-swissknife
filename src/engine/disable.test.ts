@@ -3,10 +3,17 @@ import * as assert from 'node:assert';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import type { ManagedInstallation, Scope, ItemKind, Source } from '../domain/types';
+import type { ManagedInstallation, ObservedArtifact, Scope, ItemKind, Source } from '../domain/types';
 import { readState, writeState } from '../domain/registry';
 import { getAdapterWithHomeRoot } from '../adapters/registry';
-import { planDisable, applyDisable, applyEnable } from './disable';
+import {
+  planDisable,
+  applyDisable,
+  applyEnable,
+  planDisableObserved,
+  applyDisableObserved,
+  applyEnableObserved,
+} from './disable';
 import { analyzeLocalDrift } from './drift';
 import { planUpdate, planUpdateAll } from './update';
 
@@ -89,6 +96,60 @@ describe('disable and enable engine', () => {
     await writeState(scope, state, testProjectDir, testHomeDir);
 
     return { installation, originalFiles };
+  }
+
+  async function setupObservedArtifact(
+    kind: 'skill' | 'agent' | 'command',
+    name: string,
+    scope: Scope,
+    assistant: 'kilo-code' | 'claude-code' = 'kilo-code'
+  ): Promise<{ artifact: ObservedArtifact; originalFiles: Map<string, Buffer> }> {
+    const adapter = getAdapterWithHomeRoot(assistant, testHomeDir);
+    const loc = { scope, projectRoot: testProjectDir };
+    const originalFiles = new Map<string, Buffer>();
+
+    let itemPath: string;
+
+    if (kind === 'skill') {
+      const activeFile = adapter.skillPath(name, loc);
+      const skillDir = path.dirname(activeFile);
+      await fs.promises.mkdir(skillDir, { recursive: true });
+
+      const skillContent = Buffer.from(`---\nname: ${name}\ndescription: test skill\n---\nSkill body content\n`, 'utf-8');
+      const helperContent = Buffer.from('#!/bin/bash\necho "hello"\n', 'utf-8');
+
+      await fs.promises.writeFile(path.join(skillDir, 'SKILL.md'), skillContent);
+      await fs.promises.mkdir(path.join(skillDir, 'scripts'), { recursive: true });
+      await fs.promises.writeFile(path.join(skillDir, 'scripts', 'run.sh'), helperContent);
+
+      originalFiles.set('SKILL.md', skillContent);
+      originalFiles.set('scripts/run.sh', helperContent);
+      itemPath = skillDir;
+    } else if (kind === 'agent') {
+      itemPath = adapter.agentPath(name, loc);
+      await fs.promises.mkdir(path.dirname(itemPath), { recursive: true });
+      const content = Buffer.from(`---\nname: ${name}\ndescription: test agent\n---\nAgent instructions\n`, 'utf-8');
+      await fs.promises.writeFile(itemPath, content);
+      originalFiles.set(path.basename(itemPath), content);
+    } else {
+      itemPath = adapter.commandPath(name, loc);
+      await fs.promises.mkdir(path.dirname(itemPath), { recursive: true });
+      const content = Buffer.from(`---\ndescription: test command\n---\nCommand body\n`, 'utf-8');
+      await fs.promises.writeFile(itemPath, content);
+      originalFiles.set(path.basename(itemPath), content);
+    }
+
+    const artifact: ObservedArtifact = {
+      assistant,
+      scope,
+      projectPath: scope === 'project' ? testProjectDir : undefined,
+      kind,
+      name,
+      path: itemPath,
+      discoveredAt: new Date().toISOString(),
+    };
+
+    return { artifact, originalFiles };
   }
 
   // Helper to read all files in a directory or single file
@@ -480,5 +541,200 @@ describe('disable and enable engine', () => {
     assert.strictEqual(batchResult.cannotUpdate.length, 1);
     assert.strictEqual(batchResult.cannotUpdate[0].installation.name, 'update-disabled-skill');
     assert.ok(batchResult.cannotUpdate[0].reason.includes('disabled'));
+  });
+
+  // Task 43.3 tests
+  it('adapter getDisabledRoot returns expected paths for Kilo and Claude, undefined for unsupported', () => {
+    const kilo = getAdapterWithHomeRoot('kilo-code', testHomeDir);
+    const claude = getAdapterWithHomeRoot('claude-code', testHomeDir);
+    const copilot = getAdapterWithHomeRoot('github-copilot', testHomeDir);
+    const codex = getAdapterWithHomeRoot('codex-cli', testHomeDir);
+    const gemini = getAdapterWithHomeRoot('gemini-cli', testHomeDir);
+
+    const locGlobal = { scope: 'global' as Scope };
+    const locProject = { scope: 'project' as Scope, projectRoot: testProjectDir };
+
+    // Kilo
+    assert.strictEqual(kilo.getDisabledRoot('skill', locGlobal), path.join(testHomeDir, '.kilo', '_disabled', 'skills'));
+    assert.strictEqual(kilo.getDisabledRoot('skill', locProject), path.join(testProjectDir, '.kilo', '_disabled', 'skills'));
+    assert.strictEqual(kilo.getDisabledRoot('agent', locGlobal), path.join(testHomeDir, '.config', 'kilo', '_disabled', 'agents'));
+    assert.strictEqual(kilo.getDisabledRoot('agent', locProject), path.join(testProjectDir, '.kilo', '_disabled', 'agents'));
+    assert.strictEqual(kilo.getDisabledRoot('command', locGlobal), path.join(testHomeDir, '.config', 'kilo', '_disabled', 'command'));
+    assert.strictEqual(kilo.getDisabledRoot('command', locProject), path.join(testProjectDir, '.kilo', '_disabled', 'command'));
+    assert.strictEqual(kilo.getDisabledRoot('mcp-server', locGlobal), undefined);
+
+    // Claude
+    assert.strictEqual(claude.getDisabledRoot('skill', locGlobal), path.join(testHomeDir, '.claude', '_disabled', 'skills'));
+    assert.strictEqual(claude.getDisabledRoot('skill', locProject), path.join(testProjectDir, '.claude', '_disabled', 'skills'));
+    assert.strictEqual(claude.getDisabledRoot('agent', locGlobal), path.join(testHomeDir, '.claude', '_disabled', 'agents'));
+    assert.strictEqual(claude.getDisabledRoot('agent', locProject), path.join(testProjectDir, '.claude', '_disabled', 'agents'));
+    assert.strictEqual(claude.getDisabledRoot('command', locGlobal), path.join(testHomeDir, '.claude', '_disabled', 'commands'));
+    assert.strictEqual(claude.getDisabledRoot('command', locProject), path.join(testProjectDir, '.claude', '_disabled', 'commands'));
+    assert.strictEqual(claude.getDisabledRoot('mcp-server', locGlobal), undefined);
+
+    // Unsupported
+    assert.strictEqual(copilot.getDisabledRoot('skill', locGlobal), undefined);
+    assert.strictEqual(codex.getDisabledRoot('skill', locGlobal), undefined);
+    assert.strictEqual(gemini.getDisabledRoot('skill', locGlobal), undefined);
+  });
+
+  it('round trip: disable then enable restores byte-identical files for unmanaged observed skill/agent/command without writing state', async () => {
+    for (const kind of ['skill', 'agent', 'command'] as const) {
+      for (const scope of ['global', 'project'] as const) {
+        const name = `unmanaged-${kind}-${scope}`;
+        const { artifact, originalFiles } = await setupObservedArtifact(kind, name, scope, 'kilo-code');
+
+        const originalPath = artifact.path;
+        assert.strictEqual(fs.existsSync(originalPath), true);
+
+        // State before
+        const stateBefore = await readState(scope, testProjectDir, testHomeDir);
+        const countBefore = stateBefore.installations.length;
+
+        // 1. Plan disable observed
+        const plan = await planDisableObserved(artifact, { homeRoot: testHomeDir });
+        assert.strictEqual(plan.status, 'ready');
+        if (plan.status !== 'ready') continue;
+
+        const disabledPath = plan.targetPath;
+        assert.notStrictEqual(disabledPath, originalPath);
+        assert.ok(disabledPath.includes('_disabled'));
+
+        // 2. Apply disable observed
+        const disableOutcome = await applyDisableObserved(plan, { homeRoot: testHomeDir });
+        assert.strictEqual(disableOutcome.status, 'applied');
+        if (disableOutcome.status !== 'applied') continue;
+
+        assert.strictEqual(fs.existsSync(originalPath), false, 'Original path must not exist after disable');
+        assert.strictEqual(fs.existsSync(disabledPath), true, 'Disabled path must exist after disable');
+
+        const disabledArtifact = disableOutcome.artifact;
+        assert.strictEqual(disabledArtifact.disabled, true);
+        assert.strictEqual(disabledArtifact.path, disabledPath);
+
+        // State must NOT be written for unmanaged items
+        const stateAfterDisable = await readState(scope, testProjectDir, testHomeDir);
+        assert.strictEqual(stateAfterDisable.installations.length, countBefore, 'State must not record unmanaged disable');
+
+        // 3. Apply enable observed
+        const enableOutcome = await applyEnableObserved(disabledArtifact, { homeRoot: testHomeDir });
+        assert.strictEqual(enableOutcome.status, 'applied');
+        if (enableOutcome.status !== 'applied') continue;
+
+        assert.strictEqual(fs.existsSync(disabledPath), false, 'Disabled path must not exist after enable');
+        assert.strictEqual(fs.existsSync(originalPath), true, 'Original path must exist after enable');
+
+        const enabledArtifact = enableOutcome.artifact;
+        assert.strictEqual(enabledArtifact.disabled, undefined);
+        assert.strictEqual(enabledArtifact.path, originalPath);
+
+        // Verify files restored byte-identical
+        const restoredFiles = await readAllFiles(originalPath);
+        assert.strictEqual(restoredFiles.size, originalFiles.size);
+        for (const [relPath, origBuf] of originalFiles.entries()) {
+          const restoredBuf = restoredFiles.get(relPath);
+          assert.ok(restoredBuf, `Restored file ${relPath} must exist`);
+          assert.strictEqual(restoredBuf.equals(origBuf), true, `File ${relPath} must be byte-identical`);
+        }
+
+        // State still unchanged
+        const stateAfterEnable = await readState(scope, testProjectDir, testHomeDir);
+        assert.strictEqual(stateAfterEnable.installations.length, countBefore, 'State must not change');
+      }
+    }
+  });
+
+  it('enable unmanaged observed item returns conflict when active destination already exists', async () => {
+    const { artifact } = await setupObservedArtifact('agent', 'obs-agent-conflict', 'project', 'kilo-code');
+    const disableOutcome = await applyDisableObserved(artifact, { homeRoot: testHomeDir });
+    assert.strictEqual(disableOutcome.status, 'applied');
+    if (disableOutcome.status !== 'applied') return;
+
+    const disabledArtifact = disableOutcome.artifact;
+
+    // Simulate an active item being created while disabled
+    await fs.promises.writeFile(artifact.path, 'new active conflicting agent', 'utf-8');
+
+    // Attempt enable
+    const enableOutcome = await applyEnableObserved(disabledArtifact, { homeRoot: testHomeDir });
+    assert.strictEqual(enableOutcome.status, 'conflict');
+    if (enableOutcome.status === 'conflict') {
+      assert.strictEqual(enableOutcome.existingPath, artifact.path);
+    }
+
+    // Active item and disabled item must remain untouched
+    assert.strictEqual(fs.existsSync(disabledArtifact.path), true);
+    const activeContent = await fs.promises.readFile(artifact.path, 'utf-8');
+    assert.strictEqual(activeContent, 'new active conflicting agent');
+  });
+
+  it('disable unmanaged observed item returns conflict when disabled destination already exists', async () => {
+    const { artifact } = await setupObservedArtifact('agent', 'obs-agent-dis-conflict', 'project', 'kilo-code');
+    const adapter = getAdapterWithHomeRoot('kilo-code', testHomeDir);
+    const disabledPath = adapter.getDisabledPath('agent', 'obs-agent-dis-conflict', { scope: 'project', projectRoot: testProjectDir });
+    assert.ok(disabledPath);
+
+    // Pre-create file at disabled path
+    await fs.promises.mkdir(path.dirname(disabledPath), { recursive: true });
+    await fs.promises.writeFile(disabledPath, 'pre-existing disabled file', 'utf-8');
+
+    // Plan disable
+    const plan = await planDisableObserved(artifact, { homeRoot: testHomeDir });
+    assert.strictEqual(plan.status, 'conflict');
+    if (plan.status === 'conflict') {
+      assert.strictEqual(plan.existingPath, disabledPath);
+    }
+
+    // Apply disable
+    const outcome = await applyDisableObserved(artifact, { homeRoot: testHomeDir });
+    assert.strictEqual(outcome.status, 'conflict');
+    if (outcome.status === 'conflict') {
+      assert.strictEqual(outcome.existingPath, disabledPath);
+    }
+
+    // Both files unchanged
+    assert.strictEqual(fs.existsSync(artifact.path), true);
+    const destContent = await fs.promises.readFile(disabledPath, 'utf-8');
+    assert.strictEqual(destContent, 'pre-existing disabled file');
+  });
+
+  it('unsupported kind and unsupported adapter return unsupported for unmanaged observed items', async () => {
+    // 1. Unsupported kind
+    const mcpArtifact: ObservedArtifact = {
+      assistant: 'kilo-code',
+      scope: 'project',
+      projectPath: testProjectDir,
+      kind: 'mcp-server',
+      name: 'some-mcp',
+      path: '/some/path',
+      discoveredAt: new Date().toISOString(),
+    };
+    const kindPlan = await planDisableObserved(mcpArtifact, { homeRoot: testHomeDir });
+    assert.strictEqual(kindPlan.status, 'unsupported');
+
+    const kindOutcome = await applyDisableObserved(mcpArtifact, { homeRoot: testHomeDir });
+    assert.strictEqual(kindOutcome.status, 'unsupported');
+
+    const kindEnable = await applyEnableObserved(mcpArtifact, { homeRoot: testHomeDir });
+    assert.strictEqual(kindEnable.status, 'unsupported');
+
+    // 2. Unsupported assistant
+    const copilotArtifact: ObservedArtifact = {
+      assistant: 'github-copilot',
+      scope: 'project',
+      projectPath: testProjectDir,
+      kind: 'skill',
+      name: 'copilot-skill',
+      path: '/some/path',
+      discoveredAt: new Date().toISOString(),
+    };
+    const asstPlan = await planDisableObserved(copilotArtifact, { homeRoot: testHomeDir });
+    assert.strictEqual(asstPlan.status, 'unsupported');
+
+    const asstOutcome = await applyDisableObserved(copilotArtifact, { homeRoot: testHomeDir });
+    assert.strictEqual(asstOutcome.status, 'unsupported');
+
+    const asstEnable = await applyEnableObserved(copilotArtifact, { homeRoot: testHomeDir });
+    assert.strictEqual(asstEnable.status, 'unsupported');
   });
 });
