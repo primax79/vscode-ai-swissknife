@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { Source, Scope } from '../domain/types';
+import type { Source, Scope, SourceType } from '../domain/types';
 import {
   readManifest,
   writeManifest,
@@ -25,7 +25,8 @@ import {
   CONFIG_TRANSFER_SCHEMA_VERSION,
   type ExportedConfigFile,
 } from '../engine/configTransfer';
-import { getSourceResolver } from '../sources/registry';
+import { ALL_SOURCE_RESOLVERS, getSourceResolver } from '../sources/registry';
+import { deriveSourceDefaults, validateLocation } from '../sources/sourceDefaults';
 
 export type SourceTreeItem =
   | ScopeGroupItem
@@ -53,6 +54,48 @@ export class SourceItem {
 
 function getSourceTypeIcon(type: Source['type']): vscode.ThemeIcon {
   return new vscode.ThemeIcon(getSourceResolver(type).iconThemeId);
+}
+
+export async function promptScope(forceScope?: Scope): Promise<Scope[] | undefined> {
+  if (forceScope) {
+    return [forceScope];
+  }
+
+  const hasWorkspace = Boolean(
+    vscode.workspace.workspaceFolders && vscode.workspace.workspaceFolders.length > 0
+  );
+
+  interface ScopePickItem extends vscode.QuickPickItem {
+    scope: Scope;
+  }
+
+  const items: ScopePickItem[] = [
+    {
+      label: 'Global',
+      scope: 'global',
+      ...(hasWorkspace ? {} : { description: 'Workspace scope requires an open folder' }),
+    },
+  ];
+
+  if (hasWorkspace) {
+    items.push({
+      label: 'Workspace',
+      scope: 'project',
+    });
+  }
+
+  const picked = await vscode.window.showQuickPick(items, {
+    placeHolder: 'Select source scope',
+  });
+  if (!picked) {
+    return undefined;
+  }
+
+  const scope: Scope = typeof picked === 'string'
+    ? (picked === 'Workspace' || picked === 'project' ? 'project' : 'global')
+    : (picked.scope ?? (picked.label === 'Workspace' ? 'project' : 'global'));
+
+  return [scope];
 }
 
 export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTreeItem> {
@@ -171,94 +214,170 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
   }
 
   async addSource(forceScope?: Scope): Promise<Source | undefined> {
-    let scope: Scope;
-    if (forceScope) {
-      scope = forceScope;
-    } else {
-      const scopePick = await vscode.window.showQuickPick(['project', 'global'], {
-        placeHolder: 'Select source scope (project or global)',
-      });
-      if (!scopePick) return undefined;
-      scope = scopePick as Scope;
+    interface SourceTypePickItem extends vscode.QuickPickItem {
+      type: SourceType;
     }
+    const typeItems: SourceTypePickItem[] = ALL_SOURCE_RESOLVERS.map((resolver) => ({
+      label: `$(${resolver.iconThemeId}) ${resolver.displayName}`,
+      iconPath: new vscode.ThemeIcon(resolver.iconThemeId),
+      type: resolver.type,
+    }));
+
+    const pickedType = await vscode.window.showQuickPick(typeItems, {
+      placeHolder: 'Select source type',
+    });
+    if (!pickedType) return undefined;
+
+    const type: SourceType | undefined = typeof pickedType === 'string'
+      ? (ALL_SOURCE_RESOLVERS.find((r) => r.type === pickedType || r.displayName === pickedType || `$(${r.iconThemeId}) ${r.displayName}` === pickedType)?.type ?? (pickedType as SourceType))
+      : (pickedType as SourceTypePickItem).type ??
+        ALL_SOURCE_RESOLVERS.find((r) => r.displayName === pickedType.label || `$(${r.iconThemeId}) ${r.displayName}` === pickedType.label)?.type;
+    if (!type) return undefined;
+
+    const scopes = await promptScope(forceScope);
+    if (!scopes || scopes.length === 0) return undefined;
+    const scope = scopes[0];
 
     let projectRoot: string | undefined;
     if (scope === 'project') {
       projectRoot = await getWorkspaceRoot();
-      if (!projectRoot) return;
+      if (!projectRoot) return undefined;
     }
 
-    const typePick = await vscode.window.showQuickPick(
-      ['git-custom', 'git-marketplace', 'git-single-item', 'local-folder', 'remote-url'],
-      {
-        placeHolder: 'Select source type',
+    let location: string | undefined;
+    if (type === 'local-folder') {
+      interface FolderPickItem extends vscode.QuickPickItem {
+        action: 'browse' | 'type';
       }
-    );
-    if (!typePick) return;
+      const folderOptions: FolderPickItem[] = [
+        {
+          label: '$(folder) Browse...',
+          description: 'Select folder using file picker',
+          action: 'browse',
+        },
+        {
+          label: '$(edit) Enter path manually...',
+          description: 'Type folder path directly',
+          action: 'type',
+        },
+      ];
+
+      const folderChoice: FolderPickItem | string | undefined = await vscode.window.showQuickPick(folderOptions, {
+        placeHolder: 'Select folder or enter path',
+      });
+      if (!folderChoice) return undefined;
+
+      const choiceObj = folderChoice as FolderPickItem;
+      const isBrowse = typeof folderChoice === 'string'
+        ? (folderChoice as string).toLowerCase().includes('browse')
+        : choiceObj.action === 'browse' || choiceObj.label.toLowerCase().includes('browse');
+
+      if (typeof folderChoice === 'string' && !(folderChoice as string).toLowerCase().includes('browse') && !(folderChoice as string).toLowerCase().includes('enter path')) {
+        location = (folderChoice as string).trim();
+      } else if (isBrowse) {
+        const uris = await vscode.window.showOpenDialog({
+          canSelectFiles: false,
+          canSelectFolders: true,
+          canSelectMany: false,
+          openLabel: 'Select Folder',
+        });
+        if (!uris || uris.length === 0) return undefined;
+        location = uris[0].fsPath;
+      } else {
+        const typed = await vscode.window.showInputBox({
+          prompt: 'Local folder path (relative to workspace for Workspace scope, or absolute)',
+          validateInput: (v) => validateLocation(type, v),
+        });
+        if (!typed) return undefined;
+        location = typed.trim();
+      }
+    } else {
+      const urlPrompt =
+        type === 'remote-url'
+          ? 'Raw artifact URL (e.g. https://gist.github.com/...)'
+          : 'Git repository URL (HTTPS or SSH, e.g. https://github.com/org/repo.git)';
+
+      const typedUrl = await vscode.window.showInputBox({
+        prompt: urlPrompt,
+        validateInput: (v) => validateLocation(type, v),
+      });
+      if (!typedUrl) return undefined;
+      location = typedUrl.trim();
+    }
+
+    if (!location) return undefined;
+
+    const defaults = deriveSourceDefaults(type, location);
 
     const id = await vscode.window.showInputBox({
       prompt: 'Enter a unique identifier for this source (e.g. "team-skills")',
+      value: defaults.id,
       validateInput: (v) => (v.trim().length > 0 ? null : 'ID cannot be empty'),
     });
-    if (!id) return;
+    if (!id) return undefined;
 
     const name = await vscode.window.showInputBox({
       prompt: 'Optional display name',
-      value: id,
+      value: defaults.name,
     });
+    if (name === undefined) return undefined;
 
-    let url: string | undefined;
     let branch: string | undefined;
     let tag: string | undefined;
-    let localPath: string | undefined;
 
-    if (
-      typePick === 'git-custom' ||
-      typePick === 'git-marketplace' ||
-      typePick === 'git-single-item' ||
-      typePick === 'remote-url'
-    ) {
-      url = await vscode.window.showInputBox({
-        prompt:
-          typePick === 'remote-url'
-            ? 'Raw artifact URL (e.g. https://gist.github.com/...)'
-            : 'Git repository URL (HTTPS or SSH, e.g. https://github.com/org/repo.git)',
-        validateInput: (v) => (v.trim().length > 0 ? null : 'URL cannot be empty'),
-      });
-      if (!url) return;
+    const isGitType =
+      type === 'git-custom' ||
+      type === 'git-marketplace' ||
+      type === 'git-single-item';
 
-      if (typePick !== 'remote-url') {
-        const refChoice = await vscode.window.showQuickPick(
-          ['Default branch', 'Specific branch', 'Specific tag'],
+    if (isGitType) {
+      const refChoice = await vscode.window.showQuickPick(
+        [
+          { label: 'Default branch', description: 'Use the repository default branch' },
+          { label: 'Advanced: pin to branch/tag', description: 'Pin to a specific branch or tag' },
+        ],
+        {
+          placeHolder: 'Pin to a branch, tag, or default',
+        }
+      );
+      if (!refChoice) return undefined;
+
+      const refLabel = typeof refChoice === 'string' ? refChoice : refChoice.label;
+
+      if (refLabel === 'Advanced: pin to branch/tag') {
+        const pinChoice = await vscode.window.showQuickPick(
+          ['Specific branch', 'Specific tag'],
           {
-            placeHolder: 'Pin to a branch, tag, or default',
+            placeHolder: 'Pin to a specific branch or tag',
           }
         );
-        if (!refChoice) return;
+        if (!pinChoice) return undefined;
 
-        if (refChoice === 'Specific branch') {
+        const pinLabel = typeof pinChoice === 'string' ? pinChoice : (pinChoice as any).label;
+        if (pinLabel === 'Specific branch' || pinLabel?.includes('branch')) {
           branch = await vscode.window.showInputBox({ prompt: 'Branch name (e.g. "main" or "dev")' });
-        } else if (refChoice === 'Specific tag') {
+          if (!branch) return undefined;
+        } else if (pinLabel === 'Specific tag' || pinLabel?.includes('tag')) {
           tag = await vscode.window.showInputBox({ prompt: 'Tag name (e.g. "v1.0.0")' });
+          if (!tag) return undefined;
         }
+      } else if (refLabel === 'Specific branch') {
+        branch = await vscode.window.showInputBox({ prompt: 'Branch name (e.g. "main" or "dev")' });
+        if (!branch) return undefined;
+      } else if (refLabel === 'Specific tag') {
+        tag = await vscode.window.showInputBox({ prompt: 'Tag name (e.g. "v1.0.0")' });
+        if (!tag) return undefined;
       }
-    } else if (typePick === 'local-folder') {
-      localPath = await vscode.window.showInputBox({
-        prompt: 'Local folder path (relative to workspace for project scope, or absolute)',
-        validateInput: (v) => (v.trim().length > 0 ? null : 'Path cannot be empty'),
-      });
-      if (!localPath) return;
     }
 
     const runtimeSource: Source = {
       id: id.trim(),
-      type: typePick as Source['type'],
+      type,
       scope,
-      ...(name ? { name: name.trim() } : {}),
-      ...(url ? { url: url.trim() } : {}),
+      ...(name.trim() ? { name: name.trim() } : {}),
+      ...(type === 'local-folder' ? { localPath: location.trim() } : { url: location.trim() }),
       ...(branch ? { branch: branch.trim() } : {}),
       ...(tag ? { tag: tag.trim() } : {}),
-      ...(localPath ? { localPath: localPath.trim() } : {}),
       ...(projectRoot ? { projectPath: projectRoot } : {}),
     };
 
