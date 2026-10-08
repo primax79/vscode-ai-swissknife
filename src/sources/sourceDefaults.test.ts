@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert';
-import { validateLocation, deriveSourceDefaults } from './sourceDefaults';
+import * as path from 'path';
+import { validateLocation, validateLocalFolder, deriveSourceDefaults } from './sourceDefaults';
 
 describe('sourceDefaults - validateLocation', () => {
   it('rejects empty or whitespace-only locations for all source types', () => {
@@ -85,6 +86,44 @@ describe('sourceDefaults - validateLocation', () => {
       assert.strictEqual(typeof validateLocation('local-folder', 'ssh://git@github.com/repo'), 'string');
       assert.strictEqual(typeof validateLocation('local-folder', 'file:///Users/x/folder'), 'string');
       assert.strictEqual(typeof validateLocation('local-folder', 'ftp://example.com/folder'), 'string');
+    });
+  });
+
+  describe('local-folder with scope and rootDir (validateLocalFolder)', () => {
+    it('accepts valid paths inside workspace for project scope', () => {
+      const wsRoot = '/workspace/project';
+      assert.strictEqual(validateLocalFolder('skills/sub', 'project', wsRoot), null);
+      assert.strictEqual(validateLocalFolder(path.join(wsRoot, 'skills'), 'project', wsRoot), null);
+      assert.strictEqual(validateLocalFolder('./nested', 'project', wsRoot), null);
+    });
+
+    it('rejects paths outside workspace for project scope', () => {
+      const wsRoot = '/workspace/project';
+      const result = validateLocalFolder('/outside/path', 'project', wsRoot);
+      assert.strictEqual(typeof result, 'string');
+      assert.ok(result?.includes('lies outside workspace root'));
+
+      const dotDotResult = validateLocalFolder('../../outside', 'project', wsRoot);
+      assert.strictEqual(typeof dotDotResult, 'string');
+      assert.ok(dotDotResult?.includes('lies outside workspace root'));
+    });
+
+    it('accepts valid paths inside home for global scope', () => {
+      const homeRoot = '/Users/testuser';
+      assert.strictEqual(validateLocalFolder('my-skills', 'global', homeRoot), null);
+      assert.strictEqual(validateLocalFolder(path.join(homeRoot, 'skills'), 'global', homeRoot), null);
+    });
+
+    it('rejects paths outside home for global scope', () => {
+      const homeRoot = '/Users/testuser';
+      const result = validateLocalFolder('/var/other', 'global', homeRoot);
+      assert.strictEqual(typeof result, 'string');
+      assert.ok(result?.includes('lies outside home root'));
+    });
+
+    it('rejects URLs and empty locations in validateLocalFolder', () => {
+      assert.strictEqual(typeof validateLocalFolder('https://example.com', 'project', '/workspace'), 'string');
+      assert.strictEqual(typeof validateLocalFolder('', 'project', '/workspace'), 'string');
     });
   });
 });
