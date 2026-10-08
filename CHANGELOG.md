@@ -2,6 +2,11 @@
 
 All notable changes to the "AI Swissknife" extension are documented in this file.
 
+## [0.1.0] - 2026-10-08
+
+- Internal: engine helper to plan and apply an install across several
+  assistants and scopes at once (`installMatrix`); not yet wired into the UI.
+
 ## [0.0.1] - 2026-09-07
 
 Initial release.
