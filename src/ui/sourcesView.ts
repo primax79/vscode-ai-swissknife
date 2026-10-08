@@ -6,6 +6,7 @@ import {
   readState,
   fromDesiredSource,
   toDesiredSource,
+  withStateLock,
 } from '../domain/registry';
 import { getWorkspaceRoot } from './workspacePicker';
 import {
@@ -383,10 +384,12 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
 
     try {
       const desired = toDesiredSource(runtimeSource, projectRoot);
-      const manifest = await readManifest(scope, projectRoot);
-      manifest.sources = manifest.sources.filter((s) => s.id !== desired.id);
-      manifest.sources.push(desired);
-      await writeManifest(scope, manifest, projectRoot);
+      await withStateLock(scope, projectRoot, async () => {
+        const manifest = await readManifest(scope, projectRoot);
+        manifest.sources = manifest.sources.filter((s) => s.id !== desired.id);
+        manifest.sources.push(desired);
+        await writeManifest(scope, manifest, projectRoot);
+      });
       await this.availableProvider.refreshCatalog();
       this.refresh();
       vscode.window.showInformationMessage(`Source "${desired.id}" added successfully.`);
@@ -431,9 +434,12 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
       }
 
       // Remove from manifest and remove dependent desired installations
-      manifest.sources = manifest.sources.filter((s) => s.id !== source.id);
-      manifest.desiredInstallations = manifest.desiredInstallations.filter((d) => d.sourceId !== source.id);
-      await writeManifest(source.scope, manifest, projectRoot);
+      await withStateLock(source.scope, projectRoot, async () => {
+        const manifest = await readManifest(source.scope, projectRoot);
+        manifest.sources = manifest.sources.filter((s) => s.id !== source.id);
+        manifest.desiredInstallations = manifest.desiredInstallations.filter((d) => d.sourceId !== source.id);
+        await writeManifest(source.scope, manifest, projectRoot);
+      });
 
       await this.availableProvider.refreshCatalog();
       this.refresh();

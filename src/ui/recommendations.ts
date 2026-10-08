@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { Artifact, Package, Source, AssistantId, Scope, ItemKind, ManagedInstallation } from '../domain/types';
-import { readManifest, writeManifest, readState, fromDesiredSource, type DesiredSource } from '../domain/registry';
+import { readManifest, writeManifest, readState, fromDesiredSource, withStateLock, type DesiredSource } from '../domain/registry';
 import { getWorkspaceRoot } from './workspacePicker';
 import { getSourceResolver } from '../sources/registry';
 import { resolveRecommendations, SourceResolutionAttempt } from '../engine/recommendations';
@@ -241,8 +241,13 @@ async function ensureRecommendableSource(
     );
     if (choice !== 'Add & Continue') return undefined;
 
-    projectManifest.sources.push({ ...globalSource });
-    await writeManifest('project', projectManifest, projectRoot);
+    await withStateLock('project', projectRoot, async () => {
+      const freshProjectManifest = await readManifest('project', projectRoot);
+      if (!freshProjectManifest.sources.some((s) => s.id === globalSource.id)) {
+        freshProjectManifest.sources.push({ ...globalSource });
+        await writeManifest('project', freshProjectManifest, projectRoot);
+      }
+    });
     sourcesProvider.refresh();
     return { sourceId: existingSourceId, artifactId: existingArtifactId };
   }
@@ -274,12 +279,14 @@ async function ensureRecommendableSource(
     const { desired, scope } = picked.sc;
     runtimeSource = fromDesiredSource(desired, scope === 'project' ? projectRoot : undefined);
     if (scope === 'global') {
-      const freshProjectManifest = await readManifest('project', projectRoot);
-      if (!freshProjectManifest.sources.some((s) => s.id === desired.id)) {
-        freshProjectManifest.sources.push({ ...desired });
-        await writeManifest('project', freshProjectManifest, projectRoot);
-        sourcesProvider.refresh();
-      }
+      await withStateLock('project', projectRoot, async () => {
+        const freshProjectManifest = await readManifest('project', projectRoot);
+        if (!freshProjectManifest.sources.some((s) => s.id === desired.id)) {
+          freshProjectManifest.sources.push({ ...desired });
+          await writeManifest('project', freshProjectManifest, projectRoot);
+        }
+      });
+      sourcesProvider.refresh();
     }
   } else {
     return undefined;
@@ -332,18 +339,24 @@ export async function recommendAvailableArtifact(
   const assistant = assistantPick as AssistantId;
 
   try {
-    const manifest = await readManifest('project', projectRoot);
-    const existingIndex = manifest.desiredInstallations.findIndex(
-      (d) => d.sourceId === sourceId && d.artifactId === artifactId && d.assistant === assistant
-    );
-    if (existingIndex === -1) {
-      manifest.desiredInstallations.push({
-        sourceId,
-        artifactId,
-        assistant,
-        scope: 'project',
-      });
-      await writeManifest('project', manifest, projectRoot);
+    const written = await withStateLock('project', projectRoot, async () => {
+      const manifest = await readManifest('project', projectRoot);
+      const existingIndex = manifest.desiredInstallations.findIndex(
+        (d) => d.sourceId === sourceId && d.artifactId === artifactId && d.assistant === assistant
+      );
+      if (existingIndex === -1) {
+        manifest.desiredInstallations.push({
+          sourceId,
+          artifactId,
+          assistant,
+          scope: 'project',
+        });
+        await writeManifest('project', manifest, projectRoot);
+        return true;
+      }
+      return false;
+    });
+    if (written) {
       vscode.window.showInformationMessage(`Item recommended for workspace.`);
       return true;
     }
@@ -374,18 +387,24 @@ export async function recommendInstalledArtifact(
   const assistant = inst.assistant;
 
   try {
-    const manifest = await readManifest('project', projectRoot);
-    const existingIndex = manifest.desiredInstallations.findIndex(
-      (d) => d.sourceId === sourceId && d.artifactId === artifactId && d.assistant === assistant
-    );
-    if (existingIndex === -1) {
-      manifest.desiredInstallations.push({
-        sourceId,
-        artifactId,
-        assistant,
-        scope: 'project',
-      });
-      await writeManifest('project', manifest, projectRoot);
+    const written = await withStateLock('project', projectRoot, async () => {
+      const manifest = await readManifest('project', projectRoot);
+      const existingIndex = manifest.desiredInstallations.findIndex(
+        (d) => d.sourceId === sourceId && d.artifactId === artifactId && d.assistant === assistant
+      );
+      if (existingIndex === -1) {
+        manifest.desiredInstallations.push({
+          sourceId,
+          artifactId,
+          assistant,
+          scope: 'project',
+        });
+        await writeManifest('project', manifest, projectRoot);
+        return true;
+      }
+      return false;
+    });
+    if (written) {
       vscode.window.showInformationMessage(`Item recommended for workspace.`);
       return true;
     }
@@ -404,13 +423,19 @@ export async function unrecommendArtifactForWorkspace(
   projectRoot: string
 ): Promise<boolean> {
   try {
-    const manifest = await readManifest('project', projectRoot);
-    const existingIndex = manifest.desiredInstallations.findIndex(
-      (d) => d.sourceId === sourceId && d.artifactId === artifactId && d.assistant === assistant
-    );
-    if (existingIndex !== -1) {
-      manifest.desiredInstallations.splice(existingIndex, 1);
-      await writeManifest('project', manifest, projectRoot);
+    const removed = await withStateLock('project', projectRoot, async () => {
+      const manifest = await readManifest('project', projectRoot);
+      const existingIndex = manifest.desiredInstallations.findIndex(
+        (d) => d.sourceId === sourceId && d.artifactId === artifactId && d.assistant === assistant
+      );
+      if (existingIndex !== -1) {
+        manifest.desiredInstallations.splice(existingIndex, 1);
+        await writeManifest('project', manifest, projectRoot);
+        return true;
+      }
+      return false;
+    });
+    if (removed) {
       vscode.window.showInformationMessage(`Recommendation removed.`);
       return true;
     }
@@ -443,13 +468,19 @@ export async function unrecommendAvailableArtifact(
   const assistant = assistantPick as AssistantId;
 
   try {
-    const manifest = await readManifest('project', projectRoot);
-    const existingIndex = manifest.desiredInstallations.findIndex(
-      (d) => d.sourceId === sourceId && d.artifactId === artifactId && d.assistant === assistant
-    );
-    if (existingIndex !== -1) {
-      manifest.desiredInstallations.splice(existingIndex, 1);
-      await writeManifest('project', manifest, projectRoot);
+    const removed = await withStateLock('project', projectRoot, async () => {
+      const manifest = await readManifest('project', projectRoot);
+      const existingIndex = manifest.desiredInstallations.findIndex(
+        (d) => d.sourceId === sourceId && d.artifactId === artifactId && d.assistant === assistant
+      );
+      if (existingIndex !== -1) {
+        manifest.desiredInstallations.splice(existingIndex, 1);
+        await writeManifest('project', manifest, projectRoot);
+        return true;
+      }
+      return false;
+    });
+    if (removed) {
       vscode.window.showInformationMessage(`Recommendation removed.`);
       return true;
     }
@@ -473,13 +504,19 @@ export async function unrecommendInstalledArtifact(
   const { sourceId, artifactId, assistant } = inst;
 
   try {
-    const manifest = await readManifest('project', projectRoot);
-    const existingIndex = manifest.desiredInstallations.findIndex(
-      (d) => d.sourceId === sourceId && d.artifactId === artifactId && d.assistant === assistant
-    );
-    if (existingIndex !== -1) {
-      manifest.desiredInstallations.splice(existingIndex, 1);
-      await writeManifest('project', manifest, projectRoot);
+    const removed = await withStateLock('project', projectRoot, async () => {
+      const manifest = await readManifest('project', projectRoot);
+      const existingIndex = manifest.desiredInstallations.findIndex(
+        (d) => d.sourceId === sourceId && d.artifactId === artifactId && d.assistant === assistant
+      );
+      if (existingIndex !== -1) {
+        manifest.desiredInstallations.splice(existingIndex, 1);
+        await writeManifest('project', manifest, projectRoot);
+        return true;
+      }
+      return false;
+    });
+    if (removed) {
       vscode.window.showInformationMessage(`Recommendation removed.`);
       return true;
     }

@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
 import type { ManagedInstallation, ObservedArtifact, Source, AssistantId, Scope, ItemKind } from '../domain/types';
-import { readState, writeState, readManifest, fromDesiredSource } from '../domain/registry';
+import { readState, writeState, readManifest, fromDesiredSource, withStateLock } from '../domain/registry';
 import { analyzeLocalDrift, checkForUpstreamUpdate } from '../engine/drift';
 import { scanInstalledInventory, promoteObservedArtifact } from '../engine/discovery';
 import { planInstall } from '../engine/plan';
@@ -782,11 +782,13 @@ export class InstalledTreeDataProvider {
       await softDeletePath(inst.path, inst.kind, inst.name, inst.scope, inst.projectPath);
     }
 
-    const state = await readState(inst.scope, inst.projectPath);
-    state.installations = state.installations.filter(
-      (i) => !(i.assistant === inst.assistant && i.kind === inst.kind && i.name === inst.name)
-    );
-    await writeState(inst.scope, state, inst.projectPath);
+    await withStateLock(inst.scope, inst.projectPath, async () => {
+      const state = await readState(inst.scope, inst.projectPath);
+      state.installations = state.installations.filter(
+        (i) => !(i.assistant === inst.assistant && i.kind === inst.kind && i.name === inst.name)
+      );
+      await writeState(inst.scope, state, inst.projectPath);
+    });
   }
 
   async uninstallItem(item?: InstalledInstallationItem): Promise<void> {

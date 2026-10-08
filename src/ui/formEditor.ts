@@ -17,7 +17,7 @@ import {
   canonicalCommandHash,
   canonicalMcpServerHash,
 } from '../adapters/codec';
-import { readState, writeState } from '../domain/registry';
+import { readState, writeState, withStateLock } from '../domain/registry';
 import { getAdapter } from '../adapters/registry';
 
 export interface FormEditorContext {
@@ -192,39 +192,41 @@ export class FormEditorPanel {
       }
 
       // Update state.json if managed
-      const state = await readState(this._context.scope, this._context.projectRoot);
-      const existingIdx = state.installations.findIndex(
-        (i) =>
-          i.assistant === this._context.assistant &&
-          i.scope === this._context.scope &&
-          i.projectPath === this._context.projectRoot &&
-          i.kind === this._context.kind &&
-          i.name === name
-      );
+      await withStateLock(this._context.scope, this._context.projectRoot, async () => {
+        const state = await readState(this._context.scope, this._context.projectRoot);
+        const existingIdx = state.installations.findIndex(
+          (i) =>
+            i.assistant === this._context.assistant &&
+            i.scope === this._context.scope &&
+            i.projectPath === this._context.projectRoot &&
+            i.kind === this._context.kind &&
+            i.name === name
+        );
 
-      const installation: ManagedInstallation = {
-        assistant: this._context.assistant,
-        scope: this._context.scope,
-        projectPath: this._context.projectRoot,
-        kind: this._context.kind,
-        name,
-        path: targetPath,
-        sourceId: this._context.sourceInstallation?.sourceId ?? 'form-editor',
-        installedAt: new Date().toISOString(),
-        contentHash,
-      };
+        const installation: ManagedInstallation = {
+          assistant: this._context.assistant,
+          scope: this._context.scope,
+          projectPath: this._context.projectRoot,
+          kind: this._context.kind,
+          name,
+          path: targetPath,
+          sourceId: this._context.sourceInstallation?.sourceId ?? 'form-editor',
+          installedAt: new Date().toISOString(),
+          contentHash,
+        };
 
-      if (existingIdx !== -1) {
-        state.installations[existingIdx] = installation;
-      } else {
-        state.installations.push(installation);
-      }
+        if (existingIdx !== -1) {
+          state.installations[existingIdx] = installation;
+        } else {
+          state.installations.push(installation);
+        }
 
-      await writeState(
-        this._context.scope,
-        state,
-        this._context.projectRoot
-      );
+        await writeState(
+          this._context.scope,
+          state,
+          this._context.projectRoot
+        );
+      });
 
       vscode.window.showInformationMessage(`Saved ${this._context.kind} "${name}".`);
       this._onSavedCallback?.();

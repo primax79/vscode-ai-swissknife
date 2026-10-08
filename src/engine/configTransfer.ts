@@ -1,5 +1,5 @@
 import type { Scope } from '../domain/types';
-import { readManifest, writeManifest, type DesiredSource, type DesiredInstallation } from '../domain/registry';
+import { readManifest, writeManifest, withStateLock, type DesiredSource, type DesiredInstallation } from '../domain/registry';
 
 export const CONFIG_TRANSFER_SCHEMA_VERSION = 1;
 
@@ -79,32 +79,34 @@ export async function mergeScopeConfig(
   projectRoot?: string,
   homeRoot?: string
 ): Promise<MergeResult> {
-  const manifest = await readManifest(scope, projectRoot, homeRoot);
+  return withStateLock(scope, projectRoot, homeRoot, async () => {
+    const manifest = await readManifest(scope, projectRoot, homeRoot);
 
-  let sourcesAdded = 0;
-  let sourcesUpdated = 0;
-  for (const src of payload.sources) {
-    const existingIndex = manifest.sources.findIndex((s) => s.id === src.id);
-    if (existingIndex === -1) {
-      manifest.sources.push(src);
-      sourcesAdded++;
-    } else {
-      manifest.sources[existingIndex] = src;
-      sourcesUpdated++;
+    let sourcesAdded = 0;
+    let sourcesUpdated = 0;
+    for (const src of payload.sources) {
+      const existingIndex = manifest.sources.findIndex((s) => s.id === src.id);
+      if (existingIndex === -1) {
+        manifest.sources.push(src);
+        sourcesAdded++;
+      } else {
+        manifest.sources[existingIndex] = src;
+        sourcesUpdated++;
+      }
     }
-  }
 
-  let desiredInstallationsAdded = 0;
-  for (const d of payload.desiredInstallations) {
-    const exists = manifest.desiredInstallations.some(
-      (e) => e.sourceId === d.sourceId && e.artifactId === d.artifactId && e.assistant === d.assistant
-    );
-    if (!exists) {
-      manifest.desiredInstallations.push(d);
-      desiredInstallationsAdded++;
+    let desiredInstallationsAdded = 0;
+    for (const d of payload.desiredInstallations) {
+      const exists = manifest.desiredInstallations.some(
+        (e) => e.sourceId === d.sourceId && e.artifactId === d.artifactId && e.assistant === d.assistant
+      );
+      if (!exists) {
+        manifest.desiredInstallations.push(d);
+        desiredInstallationsAdded++;
+      }
     }
-  }
 
-  await writeManifest(scope, manifest, projectRoot, homeRoot);
-  return { sourcesAdded, sourcesUpdated, desiredInstallationsAdded };
+    await writeManifest(scope, manifest, projectRoot, homeRoot);
+    return { sourcesAdded, sourcesUpdated, desiredInstallationsAdded };
+  });
 }
