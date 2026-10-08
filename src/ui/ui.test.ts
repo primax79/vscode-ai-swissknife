@@ -48,6 +48,8 @@ let mockConfigGetResult: any = undefined;
 let mockCustomShowQuickPick: ((items: any, options?: any) => Promise<any>) | undefined = undefined;
 let mockCustomShowInputBox: ((options?: any) => Promise<any>) | undefined = undefined;
 let mockCustomShowOpenDialog: ((options?: any) => Promise<any>) | undefined = undefined;
+let mockCustomShowWarningMessage: ((msg: string, ...args: any[]) => Promise<any>) | undefined = undefined;
+let mockShowErrorMessageCalls: string[] = [];
 
 const mockVscode = {
   StatusBarAlignment: {
@@ -114,8 +116,15 @@ const mockVscode = {
       mockShowInformationMessageCalls.push({ msg, actions });
       return mockShowInformationMessageResult;
     },
-    showWarningMessage: async (msg: string) => { mockLastWarningMessage = msg; return undefined; },
-    showErrorMessage: async () => undefined,
+    showWarningMessage: async (msg: string, ...args: any[]) => {
+      mockLastWarningMessage = msg;
+      if (mockCustomShowWarningMessage) return mockCustomShowWarningMessage(msg, ...args);
+      return undefined;
+    },
+    showErrorMessage: async (msg: string) => {
+      mockShowErrorMessageCalls.push(msg);
+      return undefined;
+    },
     showQuickPick: async (items: any, options?: any) => {
       if (mockCustomShowQuickPick) return mockCustomShowQuickPick(items, options);
       return mockQuickPickResult;
@@ -222,6 +231,8 @@ describe('UI TreeDataProviders', () => {
     mockCustomShowQuickPick = undefined;
     mockCustomShowInputBox = undefined;
     mockCustomShowOpenDialog = undefined;
+    mockCustomShowWarningMessage = undefined;
+    mockShowErrorMessageCalls = [];
     mockLastWarningMessage = undefined;
     mockShowInformationMessageResult = undefined;
     mockShowInformationMessageCalls = [];
@@ -315,7 +326,7 @@ describe('UI TreeDataProviders', () => {
             assert.strictEqual(items.length, 2);
             assert.strictEqual(items[0].label, 'Global');
             assert.strictEqual(items[1].label, 'Workspace');
-            return items[1]; // Workspace ('project')
+            return [items[1]]; // Workspace ('project')
           }
           if (options?.placeHolder?.includes('Pin to a branch')) {
             promptSequence.push('quickPick:pin');
@@ -370,7 +381,7 @@ describe('UI TreeDataProviders', () => {
             return items.find((i) => i.type === 'git-custom');
           }
           if (options?.placeHolder?.includes('source scope')) {
-            return items.find((i) => i.scope === 'project');
+            return [items.find((i) => i.scope === 'project')];
           }
           if (options?.placeHolder?.includes('Pin to a branch')) {
             return items[0];
@@ -413,7 +424,7 @@ describe('UI TreeDataProviders', () => {
           }
           if (options?.placeHolder?.includes('source scope')) {
             promptTypes.push('scope');
-            return items[0];
+            return [items[0]];
           }
           if (options?.placeHolder?.includes('Pin to a branch')) {
             promptTypes.push('pin');
@@ -453,7 +464,7 @@ describe('UI TreeDataProviders', () => {
         mockCustomShowQuickPick = async (items: any[], options?: any) => {
           if (options?.placeHolder?.includes('source scope')) {
             offeredItems = items;
-            return items[0];
+            return [items[0]];
           }
           return undefined;
         };
@@ -482,7 +493,7 @@ describe('UI TreeDataProviders', () => {
             }
             if (options?.placeHolder?.includes('source scope')) {
               if (cancelStep === 1) return undefined;
-              return items.find((i) => i.scope === 'project');
+              return [items.find((i) => i.scope === 'project')];
             }
             if (options?.placeHolder?.includes('Pin to a branch')) {
               if (cancelStep === 5) return undefined;
@@ -491,7 +502,7 @@ describe('UI TreeDataProviders', () => {
             }
             if (options?.placeHolder?.includes('Pin to a specific branch')) {
               if (cancelStep === 6) return undefined;
-              return 'Specific branch';
+              return items.find((i: any) => i.target === 'branch' || i.label === 'Specific branch');
             }
             return undefined;
           };
@@ -530,7 +541,7 @@ describe('UI TreeDataProviders', () => {
         // 1. Default branch source
         mockCustomShowQuickPick = async (items: any[], options?: any) => {
           if (options?.placeHolder?.includes('source type')) return items.find((i) => i.type === 'git-custom');
-          if (options?.placeHolder?.includes('source scope')) return items.find((i) => i.scope === 'project');
+          if (options?.placeHolder?.includes('source scope')) return [items.find((i) => i.scope === 'project')];
           if (options?.placeHolder?.includes('Pin to a branch')) return items[0]; // Default branch
           return undefined;
         };
@@ -558,9 +569,9 @@ describe('UI TreeDataProviders', () => {
         // 2. Advanced pin branch source
         mockCustomShowQuickPick = async (items: any[], options?: any) => {
           if (options?.placeHolder?.includes('source type')) return items.find((i) => i.type === 'git-custom');
-          if (options?.placeHolder?.includes('source scope')) return items.find((i) => i.scope === 'project');
+          if (options?.placeHolder?.includes('source scope')) return [items.find((i) => i.scope === 'project')];
           if (options?.placeHolder?.includes('Pin to a branch')) return items[1]; // Advanced: pin to branch/tag
-          if (options?.placeHolder?.includes('Pin to a specific branch')) return 'Specific branch';
+          if (options?.placeHolder?.includes('Pin to a specific branch')) return items.find((i: any) => i.target === 'branch' || i.label === 'Specific branch');
           return undefined;
         };
         mockCustomShowInputBox = async (options?: any) => {
@@ -589,9 +600,9 @@ describe('UI TreeDataProviders', () => {
         // 3. Tag pin source
         mockCustomShowQuickPick = async (items: any[], options?: any) => {
           if (options?.placeHolder?.includes('source type')) return items.find((i) => i.type === 'git-custom');
-          if (options?.placeHolder?.includes('source scope')) return items.find((i) => i.scope === 'project');
+          if (options?.placeHolder?.includes('source scope')) return [items.find((i) => i.scope === 'project')];
           if (options?.placeHolder?.includes('Pin to a branch')) return items[1]; // Advanced
-          if (options?.placeHolder?.includes('Pin to a specific branch')) return 'Specific tag';
+          if (options?.placeHolder?.includes('Pin to a specific branch')) return items.find((i: any) => i.target === 'tag' || i.label === 'Specific tag');
           return undefined;
         };
         mockCustomShowInputBox = async (options?: any) => {
@@ -624,7 +635,7 @@ describe('UI TreeDataProviders', () => {
         let pinPromptCalled = false;
         mockCustomShowQuickPick = async (items: any[], options?: any) => {
           if (options?.placeHolder?.includes('source type')) return items.find((i) => i.type === 'remote-url');
-          if (options?.placeHolder?.includes('source scope')) return items.find((i) => i.scope === 'project');
+          if (options?.placeHolder?.includes('source scope')) return [items.find((i) => i.scope === 'project')];
           if (options?.placeHolder?.includes('Pin to a branch')) {
             pinPromptCalled = true;
             return items[0];
@@ -651,7 +662,7 @@ describe('UI TreeDataProviders', () => {
         let openDialogOptions: any;
         mockCustomShowQuickPick = async (items: any[], options?: any) => {
           if (options?.placeHolder?.includes('source type')) return items.find((i) => i.type === 'local-folder');
-          if (options?.placeHolder?.includes('source scope')) return items.find((i) => i.scope === 'project');
+          if (options?.placeHolder?.includes('source scope')) return [items.find((i) => i.scope === 'project')];
           if (options?.placeHolder?.includes('Select folder or enter path')) {
             return items.find((i) => i.action === 'browse' || i.label.includes('Browse'));
           }
@@ -683,7 +694,7 @@ describe('UI TreeDataProviders', () => {
         let validateFn: ((v: string) => string | null) | undefined;
         mockCustomShowQuickPick = async (items: any[], options?: any) => {
           if (options?.placeHolder?.includes('source type')) return items.find((i) => i.type === 'local-folder');
-          if (options?.placeHolder?.includes('source scope')) return items.find((i) => i.scope === 'project');
+          if (options?.placeHolder?.includes('source scope')) return [items.find((i) => i.scope === 'project')];
           if (options?.placeHolder?.includes('Select folder or enter path')) {
             return items.find((i) => i.action === 'type' || i.label.includes('Enter path'));
           }
@@ -705,6 +716,292 @@ describe('UI TreeDataProviders', () => {
         const res2 = await provider.addSource();
         assert.ok(res2);
         assert.strictEqual(res2.localPath, path.join(testTempDir, 'typed-skills'));
+      });
+
+      it('both scopes with two different local paths write two manifests with the same id and different localPath', async () => {
+        const { provider } = createTestSourcesProvider();
+
+        const globalLocal = path.join(os.homedir(), 'global-folder');
+        const wsLocal = path.join(testTempDir, 'ws-folder');
+
+        mockCustomShowQuickPick = async (items: any[], options?: any) => {
+          if (options?.placeHolder?.includes('source type')) {
+            return items.find((i) => i.type === 'local-folder');
+          }
+          if (options?.placeHolder?.includes('source scope')) {
+            return [items[0], items[1]];
+          }
+          if (options?.placeHolder?.includes('Select folder or enter path')) {
+            return items.find((i) => i.action === 'type');
+          }
+          return undefined;
+        };
+
+        mockCustomShowInputBox = async (options?: any) => {
+          if (options?.prompt?.includes('Local folder path for Global scope')) {
+            return globalLocal;
+          }
+          if (options?.prompt?.includes('Local folder path for Workspace scope')) {
+            return wsLocal;
+          }
+          if (options?.prompt?.includes('unique identifier')) {
+            assert.strictEqual(options.value, 'global-folder');
+            return 'both-scopes-skills';
+          }
+          if (options?.prompt?.includes('display name')) {
+            return 'Both Scopes Skills';
+          }
+          return undefined;
+        };
+
+        const res = await provider.addSource();
+        assert.ok(res);
+        assert.strictEqual(res.id, 'both-scopes-skills');
+        assert.strictEqual(res.scope, 'global');
+
+        // Check global manifest
+        const globalManifest = await readManifest('global');
+        const gSource = globalManifest.sources.find((s) => s.id === 'both-scopes-skills');
+        assert.ok(gSource);
+        assert.strictEqual(gSource.type, 'local-folder');
+        assert.strictEqual(gSource.scope, 'global');
+        assert.strictEqual(gSource.name, 'Both Scopes Skills');
+        assert.strictEqual(gSource.localPath, 'global-folder');
+
+        // Check workspace manifest
+        const wsManifest = await readManifest('project', testTempDir);
+        const wsSource = wsManifest.sources.find((s) => s.id === 'both-scopes-skills');
+        assert.ok(wsSource);
+        assert.strictEqual(wsSource.type, 'local-folder');
+        assert.strictEqual(wsSource.scope, 'project');
+        assert.strictEqual(wsSource.name, 'Both Scopes Skills');
+        assert.strictEqual(wsSource.localPath, 'ws-folder');
+
+        // Same ID, different localPath
+        assert.strictEqual(gSource.id, wsSource.id);
+        assert.notStrictEqual(gSource.localPath, wsSource.localPath);
+      });
+
+      it('workspace path outside the workspace is rejected at input time', async () => {
+        const { provider } = createTestSourcesProvider();
+
+        let validateCalled = false;
+        mockCustomShowQuickPick = async (items: any[], options?: any) => {
+          if (options?.placeHolder?.includes('source type')) return items.find((i) => i.type === 'local-folder');
+          if (options?.placeHolder?.includes('source scope')) return [items.find((i) => i.scope === 'project')];
+          if (options?.placeHolder?.includes('Select folder or enter path')) {
+            return items.find((i) => i.action === 'type');
+          }
+          return undefined;
+        };
+
+        mockCustomShowInputBox = async (options?: any) => {
+          if (options?.prompt?.includes('Local folder path')) {
+            const validate = options.validateInput;
+            assert.ok(validate);
+            validateCalled = true;
+
+            const outsidePath = '/completely/outside/directory';
+            const outsideErr = validate(outsidePath);
+            assert.strictEqual(typeof outsideErr, 'string');
+            assert.ok(outsideErr.includes('outside workspace root'));
+
+            const relativeOutside = '../../outside/directory';
+            const relErr = validate(relativeOutside);
+            assert.strictEqual(typeof relErr, 'string');
+            assert.ok(relErr.includes('outside workspace root'));
+
+            assert.strictEqual(validate(path.join(testTempDir, 'valid-dir')), null);
+            assert.strictEqual(validate('valid/relative/path'), null);
+
+            return path.join(testTempDir, 'valid-dir');
+          }
+          if (options?.prompt?.includes('unique identifier')) return 'valid-ws-source';
+          if (options?.prompt?.includes('display name')) return 'Valid WS Source';
+          return undefined;
+        };
+
+        const res = await provider.addSource();
+        assert.ok(res);
+        assert.strictEqual(validateCalled, true);
+      });
+
+      it('global-only and workspace-only multi-scope choices still work', async () => {
+        const { provider } = createTestSourcesProvider();
+
+        // 1. Global only
+        mockCustomShowQuickPick = async (items: any[], options?: any) => {
+          if (options?.placeHolder?.includes('source type')) return items.find((i) => i.type === 'remote-url');
+          if (options?.placeHolder?.includes('source scope')) return [items[0]]; // Global
+          return undefined;
+        };
+        mockCustomShowInputBox = async (options?: any) => {
+          if (options?.prompt?.includes('artifact URL')) return 'https://example.com/global-skill.md';
+          if (options?.prompt?.includes('unique identifier')) return 'global-only-src';
+          if (options?.prompt?.includes('display name')) return 'Global Only Src';
+          return undefined;
+        };
+
+        const gRes = await provider.addSource();
+        assert.ok(gRes);
+        assert.strictEqual(gRes.scope, 'global');
+        const gManifest = await readManifest('global');
+        assert.ok(gManifest.sources.some((s) => s.id === 'global-only-src'));
+        const wsManifest1 = await readManifest('project', testTempDir);
+        assert.strictEqual(wsManifest1.sources.some((s) => s.id === 'global-only-src'), false);
+
+        // 2. Workspace only
+        mockCustomShowQuickPick = async (items: any[], options?: any) => {
+          if (options?.placeHolder?.includes('source type')) return items.find((i) => i.type === 'remote-url');
+          if (options?.placeHolder?.includes('source scope')) return [items[1]]; // Workspace
+          return undefined;
+        };
+        mockCustomShowInputBox = async (options?: any) => {
+          if (options?.prompt?.includes('artifact URL')) return 'https://example.com/ws-skill.md';
+          if (options?.prompt?.includes('unique identifier')) return 'ws-only-src';
+          if (options?.prompt?.includes('display name')) return 'WS Only Src';
+          return undefined;
+        };
+
+        const wsRes = await provider.addSource();
+        assert.ok(wsRes);
+        assert.strictEqual(wsRes.scope, 'project');
+        const wsManifest2 = await readManifest('project', testTempDir);
+        assert.ok(wsManifest2.sources.some((s) => s.id === 'ws-only-src'));
+      });
+
+      it('second-write failure message names the scope and does not rollback first write', async () => {
+        const { provider } = createTestSourcesProvider();
+
+        mockCustomShowQuickPick = async (items: any[], options?: any) => {
+          if (options?.placeHolder?.includes('source type')) return items.find((i) => i.type === 'git-custom');
+          if (options?.placeHolder?.includes('source scope')) return [items[0], items[1]]; // Global and Workspace
+          if (options?.placeHolder?.includes('Pin to a branch')) return items[0];
+          return undefined;
+        };
+        mockCustomShowInputBox = async (options?: any) => {
+          if (options?.prompt?.includes('Git repository URL')) return 'https://github.com/org/fail-test.git';
+          if (options?.prompt?.includes('unique identifier')) return 'fail-scope-test';
+          if (options?.prompt?.includes('display name')) return 'Fail Scope Test';
+          return undefined;
+        };
+
+        // Create .vscode as a regular file so writeManifest for project scope fails
+        fs.writeFileSync(path.join(testTempDir, '.vscode'), 'not a directory');
+
+        const res = await provider.addSource();
+        assert.ok(res);
+        assert.strictEqual(res.id, 'fail-scope-test');
+        assert.strictEqual(res.scope, 'global');
+
+        // First write (Global) must NOT have rolled back
+        const gManifest = await readManifest('global');
+        assert.ok(gManifest.sources.some((s) => s.id === 'fail-scope-test'));
+
+        // Error message must name the failed scope (Workspace) and the succeeded scope (Global)
+        assert.ok(mockShowErrorMessageCalls.length > 0);
+        const lastErr = mockShowErrorMessageCalls[mockShowErrorMessageCalls.length - 1];
+        assert.ok(lastErr.includes('Workspace'));
+        assert.ok(lastErr.includes('Global'));
+      });
+
+      it('duplicate id prompts modal and respects No (skipping that scope only)', async () => {
+        const { provider } = createTestSourcesProvider();
+
+        await writeManifest('global', {
+          schemaVersion: SCHEMA_VERSION,
+          sources: [
+            {
+              id: 'dup-id',
+              type: 'git-custom',
+              scope: 'global',
+              url: 'https://github.com/org/original-global.git',
+            },
+          ],
+          desiredInstallations: [],
+        });
+
+        let warningPrompted = false;
+        mockCustomShowQuickPick = async (items: any[], options?: any) => {
+          if (options?.placeHolder?.includes('source type')) return items.find((i) => i.type === 'remote-url');
+          if (options?.placeHolder?.includes('source scope')) return [items[0], items[1]]; // Both Global and Workspace
+          return undefined;
+        };
+        mockCustomShowInputBox = async (options?: any) => {
+          if (options?.prompt?.includes('artifact URL')) return 'https://example.com/new.md';
+          if (options?.prompt?.includes('unique identifier')) return 'dup-id';
+          if (options?.prompt?.includes('display name')) return 'Dup Source';
+          return undefined;
+        };
+        mockCustomShowWarningMessage = async (msg: string, ...args: any[]) => {
+          warningPrompted = true;
+          assert.ok(msg.includes('dup-id'));
+          assert.ok(msg.includes('Global'));
+          assert.ok(args[0]?.modal === true);
+          return 'No'; // Skip Global
+        };
+
+        const res = await provider.addSource();
+        assert.ok(res);
+        assert.strictEqual(res.id, 'dup-id');
+        assert.strictEqual(res.scope, 'project');
+        assert.strictEqual(warningPrompted, true);
+
+        // Global manifest still has the original source
+        const gManifest = await readManifest('global');
+        const gSource = gManifest.sources.find((s) => s.id === 'dup-id');
+        assert.ok(gSource);
+        assert.strictEqual(gSource.url, 'https://github.com/org/original-global.git');
+
+        // Workspace manifest has the new source
+        const wsManifest = await readManifest('project', testTempDir);
+        const wsSource = wsManifest.sources.find((s) => s.id === 'dup-id');
+        assert.ok(wsSource);
+        assert.strictEqual(wsSource.url, 'https://example.com/new.md');
+      });
+
+      it('duplicate id prompts modal and replaces when confirmed with Replace', async () => {
+        const { provider } = createTestSourcesProvider();
+
+        await writeManifest('project', {
+          schemaVersion: SCHEMA_VERSION,
+          sources: [
+            {
+              id: 'replace-me',
+              type: 'remote-url',
+              scope: 'project',
+              url: 'https://example.com/old.md',
+            },
+          ],
+          desiredInstallations: [],
+        }, testTempDir);
+
+        mockCustomShowQuickPick = async (items: any[], options?: any) => {
+          if (options?.placeHolder?.includes('source type')) return items.find((i) => i.type === 'remote-url');
+          if (options?.placeHolder?.includes('source scope')) return [items[1]]; // Workspace
+          return undefined;
+        };
+        mockCustomShowInputBox = async (options?: any) => {
+          if (options?.prompt?.includes('artifact URL')) return 'https://example.com/new-replaced.md';
+          if (options?.prompt?.includes('unique identifier')) return 'replace-me';
+          if (options?.prompt?.includes('display name')) return 'Replaced Source';
+          return undefined;
+        };
+        mockCustomShowWarningMessage = async (msg: string, ...args: any[]) => {
+          assert.ok(msg.includes('replace-me'));
+          assert.ok(msg.includes('Workspace'));
+          assert.ok(args[0]?.modal === true);
+          return 'Replace';
+        };
+
+        const res = await provider.addSource();
+        assert.ok(res);
+        assert.strictEqual(res.id, 'replace-me');
+        assert.strictEqual(res.url, 'https://example.com/new-replaced.md');
+
+        const wsManifest = await readManifest('project', testTempDir);
+        assert.strictEqual(wsManifest.sources.length, 1);
+        assert.strictEqual(wsManifest.sources[0].url, 'https://example.com/new-replaced.md');
       });
     });
   });

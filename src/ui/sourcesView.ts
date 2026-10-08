@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as os from 'os';
 import type { Source, Scope, SourceType } from '../domain/types';
 import {
   readManifest,
@@ -27,7 +28,7 @@ import {
   type ExportedConfigFile,
 } from '../engine/configTransfer';
 import { ALL_SOURCE_RESOLVERS, getSourceResolver } from '../sources/registry';
-import { deriveSourceDefaults, validateLocation } from '../sources/sourceDefaults';
+import { deriveSourceDefaults, validateLocation, validateLocalFolder } from '../sources/sourceDefaults';
 
 export type SourceTreeItem =
   | ScopeGroupItem
@@ -86,17 +87,14 @@ export async function promptScope(forceScope?: Scope): Promise<Scope[] | undefin
   }
 
   const picked = await vscode.window.showQuickPick(items, {
-    placeHolder: 'Select source scope',
+    canPickMany: true,
+    placeHolder: 'Select source scope (one or both)',
   });
-  if (!picked) {
+  if (!picked || picked.length === 0) {
     return undefined;
   }
 
-  const scope: Scope = typeof picked === 'string'
-    ? (picked === 'Workspace' || picked === 'project' ? 'project' : 'global')
-    : (picked.scope ?? (picked.label === 'Workspace' ? 'project' : 'global'));
-
-  return [scope];
+  return picked.map((item) => item.scope);
 }
 
 export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTreeItem> {
@@ -228,24 +226,19 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
       placeHolder: 'Select source type',
     });
     if (!pickedType) return undefined;
-
-    const type: SourceType | undefined = typeof pickedType === 'string'
-      ? (ALL_SOURCE_RESOLVERS.find((r) => r.type === pickedType || r.displayName === pickedType || `$(${r.iconThemeId}) ${r.displayName}` === pickedType)?.type ?? (pickedType as SourceType))
-      : (pickedType as SourceTypePickItem).type ??
-        ALL_SOURCE_RESOLVERS.find((r) => r.displayName === pickedType.label || `$(${r.iconThemeId}) ${r.displayName}` === pickedType.label)?.type;
-    if (!type) return undefined;
+    const type = pickedType.type;
 
     const scopes = await promptScope(forceScope);
     if (!scopes || scopes.length === 0) return undefined;
-    const scope = scopes[0];
 
     let projectRoot: string | undefined;
-    if (scope === 'project') {
+    if (scopes.includes('project')) {
       projectRoot = await getWorkspaceRoot();
       if (!projectRoot) return undefined;
     }
 
-    let location: string | undefined;
+    const scopeLocations = new Map<Scope, string>();
+
     if (type === 'local-folder') {
       interface FolderPickItem extends vscode.QuickPickItem {
         action: 'browse' | 'type';
@@ -263,34 +256,48 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
         },
       ];
 
-      const folderChoice: FolderPickItem | string | undefined = await vscode.window.showQuickPick(folderOptions, {
-        placeHolder: 'Select folder or enter path',
-      });
-      if (!folderChoice) return undefined;
-
-      const choiceObj = folderChoice as FolderPickItem;
-      const isBrowse = typeof folderChoice === 'string'
-        ? (folderChoice as string).toLowerCase().includes('browse')
-        : choiceObj.action === 'browse' || choiceObj.label.toLowerCase().includes('browse');
-
-      if (typeof folderChoice === 'string' && !(folderChoice as string).toLowerCase().includes('browse') && !(folderChoice as string).toLowerCase().includes('enter path')) {
-        location = (folderChoice as string).trim();
-      } else if (isBrowse) {
-        const uris = await vscode.window.showOpenDialog({
-          canSelectFiles: false,
-          canSelectFolders: true,
-          canSelectMany: false,
-          openLabel: 'Select Folder',
+      for (const scope of scopes) {
+        const scopeLabel = scope === 'project' ? 'Workspace' : 'Global';
+        const folderChoice = await vscode.window.showQuickPick(folderOptions, {
+          placeHolder:
+            scopes.length > 1
+              ? `Select folder or enter path (${scopeLabel} scope)`
+              : 'Select folder or enter path',
         });
-        if (!uris || uris.length === 0) return undefined;
-        location = uris[0].fsPath;
-      } else {
-        const typed = await vscode.window.showInputBox({
-          prompt: 'Local folder path (relative to workspace for Workspace scope, or absolute)',
-          validateInput: (v) => validateLocation(type, v),
-        });
-        if (!typed) return undefined;
-        location = typed.trim();
+        if (!folderChoice) return undefined;
+
+        let location: string | undefined;
+        const rootDir = scope === 'project' ? projectRoot! : os.homedir();
+
+        if (folderChoice.action === 'browse') {
+          const uris = await vscode.window.showOpenDialog({
+            canSelectFiles: false,
+            canSelectFolders: true,
+            canSelectMany: false,
+            openLabel: `Select Folder (${scopeLabel})`,
+          });
+          if (!uris || uris.length === 0) return undefined;
+          const chosen = uris[0].fsPath;
+          const err = validateLocalFolder(chosen, scope, rootDir);
+          if (err) {
+            vscode.window.showErrorMessage(err);
+            return undefined;
+          }
+          location = chosen;
+        } else {
+          const typed = await vscode.window.showInputBox({
+            prompt:
+              scopes.length > 1
+                ? `Local folder path for ${scopeLabel} scope`
+                : 'Local folder path (relative to workspace for Workspace scope, or absolute)',
+            validateInput: (v) => validateLocalFolder(v, scope, rootDir),
+          });
+          if (!typed) return undefined;
+          location = typed.trim();
+        }
+
+        if (!location) return undefined;
+        scopeLocations.set(scope, location);
       }
     } else {
       const urlPrompt =
@@ -303,12 +310,14 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
         validateInput: (v) => validateLocation(type, v),
       });
       if (!typedUrl) return undefined;
-      location = typedUrl.trim();
+      const location = typedUrl.trim();
+      for (const s of scopes) {
+        scopeLocations.set(s, location);
+      }
     }
 
-    if (!location) return undefined;
-
-    const defaults = deriveSourceDefaults(type, location);
+    const firstLocation = scopeLocations.get(scopes[0])!;
+    const defaults = deriveSourceDefaults(type, firstLocation);
 
     const id = await vscode.window.showInputBox({
       prompt: 'Enter a unique identifier for this source (e.g. "team-skills")',
@@ -332,73 +341,116 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
       type === 'git-single-item';
 
     if (isGitType) {
-      const refChoice = await vscode.window.showQuickPick(
-        [
-          { label: 'Default branch', description: 'Use the repository default branch' },
-          { label: 'Advanced: pin to branch/tag', description: 'Pin to a specific branch or tag' },
-        ],
-        {
-          placeHolder: 'Pin to a branch, tag, or default',
-        }
-      );
+      interface RefPickItem extends vscode.QuickPickItem {
+        action: 'default' | 'pin';
+      }
+      const refOptions: RefPickItem[] = [
+        { label: 'Default branch', description: 'Use the repository default branch', action: 'default' },
+        { label: 'Advanced: pin to branch/tag', description: 'Pin to a specific branch or tag', action: 'pin' },
+      ];
+      const refChoice = await vscode.window.showQuickPick(refOptions, {
+        placeHolder: 'Pin to a branch, tag, or default',
+      });
       if (!refChoice) return undefined;
 
-      const refLabel = typeof refChoice === 'string' ? refChoice : refChoice.label;
-
-      if (refLabel === 'Advanced: pin to branch/tag') {
-        const pinChoice = await vscode.window.showQuickPick(
-          ['Specific branch', 'Specific tag'],
-          {
-            placeHolder: 'Pin to a specific branch or tag',
-          }
-        );
+      if (refChoice.action === 'pin') {
+        interface PinPickItem extends vscode.QuickPickItem {
+          target: 'branch' | 'tag';
+        }
+        const pinOptions: PinPickItem[] = [
+          { label: 'Specific branch', target: 'branch' },
+          { label: 'Specific tag', target: 'tag' },
+        ];
+        const pinChoice = await vscode.window.showQuickPick(pinOptions, {
+          placeHolder: 'Pin to a specific branch or tag',
+        });
         if (!pinChoice) return undefined;
 
-        const pinLabel = typeof pinChoice === 'string' ? pinChoice : (pinChoice as any).label;
-        if (pinLabel === 'Specific branch' || pinLabel?.includes('branch')) {
+        if (pinChoice.target === 'branch') {
           branch = await vscode.window.showInputBox({ prompt: 'Branch name (e.g. "main" or "dev")' });
           if (!branch) return undefined;
-        } else if (pinLabel === 'Specific tag' || pinLabel?.includes('tag')) {
+        } else {
           tag = await vscode.window.showInputBox({ prompt: 'Tag name (e.g. "v1.0.0")' });
           if (!tag) return undefined;
         }
-      } else if (refLabel === 'Specific branch') {
-        branch = await vscode.window.showInputBox({ prompt: 'Branch name (e.g. "main" or "dev")' });
-        if (!branch) return undefined;
-      } else if (refLabel === 'Specific tag') {
-        tag = await vscode.window.showInputBox({ prompt: 'Tag name (e.g. "v1.0.0")' });
-        if (!tag) return undefined;
       }
     }
 
-    const runtimeSource: Source = {
-      id: id.trim(),
-      type,
-      scope,
-      ...(name.trim() ? { name: name.trim() } : {}),
-      ...(type === 'local-folder' ? { localPath: location.trim() } : { url: location.trim() }),
-      ...(branch ? { branch: branch.trim() } : {}),
-      ...(tag ? { tag: tag.trim() } : {}),
-      ...(projectRoot ? { projectPath: projectRoot } : {}),
-    };
+    const trimmedId = id.trim();
+    const succeededScopes: Scope[] = [];
+    let firstWrittenSource: Source | undefined;
+    let hasError = false;
 
-    try {
-      const desired = toDesiredSource(runtimeSource, projectRoot);
-      await withStateLock(scope, projectRoot, async () => {
-        const manifest = await readManifest(scope, projectRoot);
-        manifest.sources = manifest.sources.filter((s) => s.id !== desired.id);
-        manifest.sources.push(desired);
-        await writeManifest(scope, manifest, projectRoot);
-      });
+    for (const scope of scopes) {
+      const location = scopeLocations.get(scope)!;
+      const root = scope === 'project' ? projectRoot : undefined;
+      const scopeLabel = scope === 'project' ? 'Workspace' : 'Global';
+
+      try {
+        const manifest = await readManifest(scope, root);
+        const existing = manifest.sources.find((s) => s.id === trimmedId);
+        if (existing) {
+          const choice = await vscode.window.showWarningMessage(
+            `Source "${trimmedId}" already exists in ${scopeLabel} scope. Replace?`,
+            { modal: true },
+            'Replace',
+            'No'
+          );
+          if (choice !== 'Replace') {
+            continue;
+          }
+        }
+
+        const runtimeSource: Source = {
+          id: trimmedId,
+          type,
+          scope,
+          ...(name.trim() ? { name: name.trim() } : {}),
+          ...(type === 'local-folder' ? { localPath: location.trim() } : { url: location.trim() }),
+          ...(branch ? { branch: branch.trim() } : {}),
+          ...(tag ? { tag: tag.trim() } : {}),
+          ...(root ? { projectPath: root } : {}),
+        };
+
+        const desired = toDesiredSource(runtimeSource, root);
+        await withStateLock(scope, root, async () => {
+          const curManifest = await readManifest(scope, root);
+          curManifest.sources = curManifest.sources.filter((s) => s.id !== desired.id);
+          curManifest.sources.push(desired);
+          await writeManifest(scope, curManifest, root);
+        });
+
+        succeededScopes.push(scope);
+        if (!firstWrittenSource) {
+          firstWrittenSource = runtimeSource;
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (succeededScopes.length > 0) {
+          const succeededLabels = succeededScopes
+            .map((s) => (s === 'project' ? 'Workspace' : 'Global'))
+            .join(', ');
+          vscode.window.showErrorMessage(
+            `Source "${trimmedId}" added to ${succeededLabels} scope, but failed to add to ${scopeLabel} scope: ${msg}`
+          );
+        } else {
+          vscode.window.showErrorMessage(`Failed to add source to ${scopeLabel} scope: ${msg}`);
+        }
+        hasError = true;
+        break;
+      }
+    }
+
+    if (succeededScopes.length > 0) {
       await this.availableProvider.refreshCatalog();
       this.refresh();
-      vscode.window.showInformationMessage(`Source "${desired.id}" added successfully.`);
-      return runtimeSource;
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      vscode.window.showErrorMessage(`Failed to add source: ${msg}`);
-      return undefined;
+      if (!hasError) {
+        vscode.window.showInformationMessage(`Source "${trimmedId}" added successfully.`);
+      }
+      return firstWrittenSource;
     }
+
+    return undefined;
   }
 
   async removeSource(sourceItem?: SourceItem): Promise<void> {

@@ -1,4 +1,5 @@
-import type { SourceType } from '../domain/types';
+import * as path from 'path';
+import type { Scope, SourceType } from '../domain/types';
 
 function isUrl(v: string): boolean {
   if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(v)) {
@@ -75,6 +76,29 @@ export function validateLocation(type: SourceType, value: string): string | null
       return `Unsupported source type: ${_exhaustive}`;
     }
   }
+}
+
+export function validateLocalFolder(
+  value: string,
+  scope: Scope,
+  rootDir: string
+): string | null {
+  const basic = validateLocation('local-folder', value);
+  if (basic) {
+    return basic;
+  }
+
+  const trimmed = value.trim();
+  const absRoot = path.resolve(rootDir);
+  const absLocal = path.isAbsolute(trimmed)
+    ? path.resolve(trimmed)
+    : path.resolve(absRoot, trimmed);
+  const rel = path.relative(absRoot, absLocal);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) {
+    const scopeLabel = scope === 'project' ? 'workspace' : 'home';
+    return `Path "${trimmed}" lies outside ${scopeLabel} root "${rootDir}"`;
+  }
+  return null;
 }
 
 function extractRawSegment(location: string): string {
