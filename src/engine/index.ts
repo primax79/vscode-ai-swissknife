@@ -47,3 +47,4 @@ export {
   type PlanInstallMatrixResult,
   type ApplyInstallMatrixOptions,
 } from './installMatrix';
+export * from './claudeCli';

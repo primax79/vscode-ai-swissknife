@@ -1,0 +1,20 @@
+dev-suite 1.0.0
+  Description: Developer suite with commands
+  Source: dev-suite@tools
+
+Component inventory
+  Skills (2)  build-helper, test-runner
+  Agents (1)  reviewer
+  Commands (2)  deploy, benchmark
+  Hooks (1)  pre-commit
+  MCP servers (1)  db-server
+  LSP servers (1)  py-lsp
+
+Projected token cost
+  Always-on:   ~1,250 tok   added to every session
+
+Per-component (rounded)
+  component            always-on  on-invoke
+  build-helper              ~500      ~1.0k
+  test-runner               ~400      ~2.0k
+  reviewer                  ~350      ~3.0k
