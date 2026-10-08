@@ -240,6 +240,11 @@ export class DashboardPanel {
             this._refreshCallback();
             await this.update();
             break;
+          case 'refreshSource':
+            await this._availableProvider.refreshSource(message.sourceId, message.scope);
+            this._refreshCallback();
+            await this.update();
+            break;
           case 'requestCatalog': {
             await this._availableProvider.ensureCatalogLoaded();
             const groups = this._availableProvider.getCachedSourceGroups();
@@ -1129,6 +1134,7 @@ export class DashboardPanel {
           </div>
           <div></div>
           <div class="source-actions" style="display: flex; gap: 4px; justify-content: flex-end;" onclick="event.stopPropagation()">
+            <button class="btn btn-sm btn-secondary" title="Refresh source" onclick="vscode.postMessage({ command: 'refreshSource', sourceId: ${this.jsStringLiteral(s.id)}, scope: ${this.jsStringLiteral(s.scope)} })">↻</button>
             <button class="btn btn-sm btn-primary" title="Install Source Group" onclick="vscode.postMessage({ command: 'installSourceGroup', sourceId: ${this.jsStringLiteral(s.id)}, scope: ${this.jsStringLiteral(s.scope)} })">⬇</button>
             <button class="btn btn-sm btn-secondary" title="Export Source" onclick="vscode.postMessage({ command: 'exportSource', sourceId: ${this.jsStringLiteral(s.id)}, scope: ${this.jsStringLiteral(s.scope)} })">⇧</button>
             <button class="btn btn-sm btn-secondary" title="Remove Source" style="color: var(--badge-error); border-color: rgba(207, 34, 46, 0.3);" onclick="vscode.postMessage({ command: 'removeSource', sourceId: ${this.jsStringLiteral(s.id)}, scope: ${this.jsStringLiteral(s.scope)} })">🗑</button>

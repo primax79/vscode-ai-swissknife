@@ -39,6 +39,7 @@ let mockShowInformationMessageResult: string | undefined = undefined;
 let mockShowInformationMessageCalls: { msg: string, actions: string[] }[] = [];
 let mockLastCreatedStatusBarItem: any = undefined;
 let mockLastStatusBarMessage: string | undefined = undefined;
+let mockLastWebviewMessageListener: ((msg: any) => any) | undefined = undefined;
 
 const mockRegisteredCommands = new Map<string, (...args: any[]) => any>();
 
@@ -135,7 +136,10 @@ const mockVscode = {
       webview: {
         html: '',
         asWebviewUri: (uri: any) => 'vscode-webview-resource://' + uri.fsPath,
-        onDidReceiveMessage: () => ({ dispose: () => {} }),
+        onDidReceiveMessage: (handler: (msg: any) => any) => {
+          mockLastWebviewMessageListener = handler;
+          return { dispose: () => {} };
+        },
         postMessage: async () => {},
       },
     }),
@@ -2550,6 +2554,161 @@ describe('UI TreeDataProviders', () => {
       await handler();
 
       assert.strictEqual(mockConfigUpdates.length, 0);
+    });
+  });
+
+  describe('refreshSource Command & Dashboard Integration', () => {
+    let fakeContext: any;
+    let extension: any;
+    let originalHome: string | undefined;
+
+    beforeEach(async () => {
+      fakeContext = {
+        subscriptions: [],
+        workspaceState: {
+          _state: new Map<string, any>(),
+          get(key: string) { return this._state.get(key); },
+          async update(key: string, value: any) { this._state.set(key, value); }
+        }
+      };
+      originalHome = process.env.HOME;
+      process.env.HOME = testHomeDir;
+      mockRegisteredCommands.clear();
+      mockLastWarningMessage = undefined;
+      mockLastWebviewMessageListener = undefined;
+      delete require.cache[require.resolve('../extension')];
+      extension = require('../extension');
+    });
+
+    afterEach(() => {
+      process.env.HOME = originalHome;
+    });
+
+    it('command shows warning message when invoked without an item', async () => {
+      extension.activate(fakeContext);
+      const handler = mockRegisteredCommands.get('aiSwissknife.refreshSource');
+      assert.ok(handler, 'aiSwissknife.refreshSource must be registered');
+
+      await handler(undefined);
+      assert.strictEqual(mockLastWarningMessage, 'Please select a source to refresh.');
+    });
+
+    it("command invokes availableProvider.refreshSource with the item's id and scope", async () => {
+      const originalRefreshSource = AvailableTreeDataProvider.prototype.refreshSource;
+      let calledWith: { sourceId: string; scope: Scope } | undefined;
+      AvailableTreeDataProvider.prototype.refreshSource = async function (sourceId: string, scope: Scope) {
+        calledWith = { sourceId, scope };
+      };
+
+      try {
+        extension.activate(fakeContext);
+        const handler = mockRegisteredCommands.get('aiSwissknife.refreshSource');
+        assert.ok(handler, 'aiSwissknife.refreshSource must be registered');
+
+        const mockItem = new SourceItem(
+          {
+            id: 'my-custom-source',
+            scope: 'project',
+            type: 'git-custom',
+            url: 'https://github.com/org/repo.git'
+          },
+          'my-custom-source'
+        );
+
+        await handler(mockItem);
+        assert.deepStrictEqual(calledWith, {
+          sourceId: 'my-custom-source',
+          scope: 'project'
+        });
+      } finally {
+        AvailableTreeDataProvider.prototype.refreshSource = originalRefreshSource;
+      }
+    });
+
+    it('Dashboard message switch invokes availableProvider.refreshSource with sourceId and scope', async () => {
+      if (DashboardPanel.currentPanel) {
+        DashboardPanel.currentPanel.dispose();
+      }
+
+      let refreshed: { sourceId: string; scope: Scope } | undefined;
+      const mockAvailable = {
+        refreshSource: async (sourceId: string, scope: Scope) => {
+          refreshed = { sourceId, scope };
+        },
+        getCachedRecommendedGroup: () => undefined,
+      };
+
+      const panel = DashboardPanel.render(
+        { fsPath: '/test/ext' } as any,
+        {} as any,
+        { getAllSources: async () => [] } as any,
+        mockAvailable as any,
+        () => {}
+      );
+
+      assert.ok(mockLastWebviewMessageListener, 'Webview message listener must be captured');
+      await mockLastWebviewMessageListener({
+        command: 'refreshSource',
+        sourceId: 'dashboard-src',
+        scope: 'global'
+      });
+
+      assert.deepStrictEqual(refreshed, {
+        sourceId: 'dashboard-src',
+        scope: 'global'
+      });
+      panel.dispose();
+    });
+
+    it('Dashboard renders per-source refresh button and handles source id with apostrophe safely', () => {
+      if (DashboardPanel.currentPanel) {
+        DashboardPanel.currentPanel.dispose();
+      }
+
+      const panel = DashboardPanel.render(
+        { fsPath: '/test/ext' } as any,
+        {} as any,
+        {} as any,
+        { getCachedRecommendedGroup: () => undefined } as any,
+        () => {}
+      );
+
+      const testSource: Source = {
+        id: "team's-toolkit",
+        scope: 'global',
+        type: 'git-custom',
+        url: 'https://github.com/team/toolkit.git',
+        name: "Team's Toolkit"
+      };
+
+      const html = panel.getHtml([testSource], [], [], []);
+      assert.ok(html.includes('title="Refresh source"'), 'Must have button with tooltip "Refresh source"');
+      assert.ok(html.includes('>↻</button>'), 'Must have icon-only ↻ button');
+
+      // Verify apostrophe in source id does not break onclick attribute JavaScript parsing
+      const match = html.match(/<button[^>]*title="Refresh source"[^>]*onclick="([^"]*)"/);
+      assert.ok(match, 'Refresh button with onclick must exist');
+      const onclickAttr = match[1];
+
+      // Simulate browser HTML decoding of attribute value before executing inline JS
+      const decodedJs = onclickAttr
+        .replace(/&quot;/g, '"')
+        .replace(/&#039;/g, "'")
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&');
+
+      let posted: any = undefined;
+      const exec = new Function('vscode', decodedJs);
+      exec({ postMessage: (msg: any) => { posted = msg; } });
+
+      assert.deepStrictEqual(posted, {
+        command: 'refreshSource',
+        sourceId: "team's-toolkit",
+        scope: 'global'
+      });
+
+      panel.dispose();
     });
   });
 });
