@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as crypto from 'crypto';
 import type { ManagedInstallation, ObservedArtifact, Source, AssistantId, Scope, ItemKind } from '../domain/types';
 import { readState, writeState, readManifest, fromDesiredSource, withStateLock } from '../domain/registry';
-import { analyzeLocalDrift, checkForUpstreamUpdate } from '../engine/drift';
+import { analyzeLocalDrift, checkForUpstreamUpdate, checkDriftForAll } from '../engine/drift';
 import { scanInstalledInventory, promoteObservedArtifact } from '../engine/discovery';
 import { planInstall } from '../engine/plan';
 import { planSync } from '../engine/sync';
@@ -438,15 +438,10 @@ export class InstalledTreeDataProvider {
     let updateCount = 0;
     let missingCount = 0;
 
-    for (const inst of allInstallations) {
-      const matchingSource = allSources.find((s) => s.id === inst.sourceId);
-      let report: DriftReport;
-      if (matchingSource) {
-        report = await checkForUpstreamUpdate(inst, matchingSource);
-      } else {
-        report = await analyzeLocalDrift(inst);
-      }
-      this.driftReports.set(this.getInstallKey(inst), report);
+    const reports = await checkDriftForAll(allInstallations, allSources);
+
+    for (const report of reports) {
+      this.driftReports.set(this.getInstallKey(report.installation), report);
 
       if (report.status === 'modified-locally') modifiedCount++;
       if (report.status === 'update-available' || report.status === 'modified-and-update-available') updateCount++;
