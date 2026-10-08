@@ -180,7 +180,7 @@ hands-on testing round.
 | 40       | 40  | [Dashboard Installed: collapsible object tree](40-dashboard-collapsible-objects/plan.md)   | ready to delegate after 39.1 (5 tasks) | 35, 39.1   | L    |
 | 41       | 41  | [Install elsewhere from a Dashboard row](41-install-elsewhere/plan.md)                      | planned (2 tasks, no open questions) | 37, 40       | M    |
 | 42       | 42  | [Item actions, Tier 1 remainder](42-item-actions-tier1/plan.md)                            | planned (5 tasks, no open questions) | 39.2, 40 | M    |
-| 43       | 43  | [Disabled state for installed items](43-disabled-state/plan.md)                              | 43.1 done (Kilo verified; Claude unverified); 43.2 specified; 43.3-43.4 outlined | 40, 42 | L    |
+| 43       | 43  | [Disabled state for installed items](43-disabled-state/plan.md)                              | 43.1-43.3 merged (Kilo verified live; Claude unverified); 43.4 (UI) outlined, after 40.2 and 42.3 | 40, 42 | L    |
 | 44       | 44  | [Hardening and fixes from the kilocode-dev cross-check](44-hardening-from-kilocode-dev/plan.md) | in progress (44.1 merged; 44.3 P1 next) | 36.1, 38.1 | M    |
 | 45       | 45  | [Claude Code plugins, native management](45-claude-plugins/plan.md)                          | P3, after the rest: spike 45.1 paused (partial findings); CP-Q3/Q5 assumptions unconfirmed | 40, 42 | L    |
 | 46       | 46  | [CLI access to the extension](46-cli-access/plan.md)                                      | in progress (46.3 merged; 46.1, 46.2, 46.4 planned; low-priority parallel track) | 37.1, 44.1 | M    |
