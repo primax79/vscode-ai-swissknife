@@ -45,6 +45,140 @@ description: Simple description text
     const res = extractSkillFrontmatter(raw);
     assert.deepStrictEqual(res, {});
   });
+
+  it('extracts folded block scalar description (>)', () => {
+    const raw = `---
+name: folded-skill
+description: >
+  This is a folded
+  description line.
+---
+# Content`;
+    const res = extractSkillFrontmatter(raw);
+    assert.strictEqual(res.name, 'folded-skill');
+    assert.strictEqual(res.description, 'This is a folded description line.');
+  });
+
+  it('extracts literal block scalar description (|)', () => {
+    const raw = `---
+name: literal-skill
+description: |
+  Line 1
+  Line 2
+---
+# Content`;
+    const res = extractSkillFrontmatter(raw);
+    assert.strictEqual(res.name, 'literal-skill');
+    assert.strictEqual(res.description, 'Line 1\nLine 2');
+  });
+
+  it('extracts folded block scalar with strip chomping indicator (>-)', () => {
+    const raw = `---
+name: strip-folded-skill
+description: >-
+  Folded text with strip
+  chomping indicator.
+---
+# Content`;
+    const res = extractSkillFrontmatter(raw);
+    assert.strictEqual(res.name, 'strip-folded-skill');
+    assert.strictEqual(res.description, 'Folded text with strip chomping indicator.');
+  });
+
+  it('extracts folded block scalar containing colons', () => {
+    const raw = `---
+name: colons-block-skill
+description: >
+  Use when: a: b
+  Note: another: colon here
+---
+# Content`;
+    const res = extractSkillFrontmatter(raw);
+    assert.strictEqual(res.name, 'colons-block-skill');
+    assert.strictEqual(res.description, 'Use when: a: b Note: another: colon here');
+  });
+
+  it('extracts literal block scalar containing colons', () => {
+    const raw = `---
+name: literal-colons-skill
+description: |
+  key1: value1
+  key2: value2
+---
+# Content`;
+    const res = extractSkillFrontmatter(raw);
+    assert.strictEqual(res.name, 'literal-colons-skill');
+    assert.strictEqual(res.description, 'key1: value1\nkey2: value2');
+  });
+
+  it('extracts plain scalar continued on the next indented line', () => {
+    const raw = `---
+name: continued-skill
+description: First line of description
+  continued on the second line
+  and a third line
+---
+# Content`;
+    const res = extractSkillFrontmatter(raw);
+    assert.strictEqual(res.name, 'continued-skill');
+    assert.strictEqual(res.description, 'First line of description continued on the second line and a third line');
+  });
+
+  it('preserves unquoted description containing colons without continuation (no regression)', () => {
+    const raw = `---
+name: plain-colons-skill
+description: Use when: a: b
+---
+# Content`;
+    const res = extractSkillFrontmatter(raw);
+    assert.strictEqual(res.name, 'plain-colons-skill');
+    assert.strictEqual(res.description, 'Use when: a: b');
+  });
+
+  it('handles CRLF line endings with block scalars and plain continued values', () => {
+    const raw = "---\r\nname: crlf-skill\r\ndescription: >-\r\n  Line one\r\n  Line two\r\n---\r\n# Content";
+    const res = extractSkillFrontmatter(raw);
+    assert.strictEqual(res.name, 'crlf-skill');
+    assert.strictEqual(res.description, 'Line one Line two');
+  });
+
+  it('extracts quoted scalar continued on indented lines', () => {
+    const raw = `---
+name: quoted-continued-skill
+description: "First line of quoted description
+  continued on the second line"
+---
+# Content`;
+    const res = extractSkillFrontmatter(raw);
+    assert.strictEqual(res.name, 'quoted-continued-skill');
+    assert.strictEqual(res.description, 'First line of quoted description continued on the second line');
+  });
+
+  it('extracts folded block scalar for name', () => {
+    const raw = `---
+name: >-
+  my-folded-
+  skill
+description: Simple desc
+---
+# Content`;
+    const res = extractSkillFrontmatter(raw);
+    assert.strictEqual(res.name, 'my-folded- skill');
+    assert.strictEqual(res.description, 'Simple desc');
+  });
+
+  it('extracts literal block scalar with strip chomping indicator (|-)', () => {
+    const raw = `---
+name: strip-literal-skill
+description: |-
+  First line
+  Second line
+---
+# Content`;
+    const res = extractSkillFrontmatter(raw);
+    assert.strictEqual(res.name, 'strip-literal-skill');
+    assert.strictEqual(res.description, 'First line\nSecond line');
+  });
 });
 
 describe('detect — findSkillDirs with committed fixtures', () => {
