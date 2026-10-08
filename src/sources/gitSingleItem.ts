@@ -15,7 +15,12 @@ import { readSkill } from '../adapters/codec';
 import { parseClaudeAgentMarkdown, parseClaudeCommandMarkdown } from '../adapters/claude';
 import { extractSkillFrontmatter } from './detect';
 import { KeyedMutex } from './gitCustom';
-import { runGit } from './gitProcess';
+import {
+  runGit,
+  validateGitUrl,
+  validateGitRef,
+  resolveAndValidateCacheDir,
+} from './gitProcess';
 
 export const gitSingleItemMutex = new KeyedMutex();
 
@@ -35,16 +40,21 @@ export async function resolveGitSingleItem(
   source: Source,
   opts?: { cacheDir?: string; homeRoot?: string }
 ): Promise<SourceResolution> {
-  if (!source.url || source.url.trim() === '') {
-    throw new Error(`source.url is required for git-single-item source "${source.id}"`);
-  }
+  validateGitUrl(source.type, source.url, source.id);
+  if (source.commit) validateGitRef('commit', source.commit);
+  if (source.tag) validateGitRef('tag', source.tag);
+  if (source.branch) validateGitRef('branch', source.branch);
 
   const baseCacheDir = opts?.cacheDir ?? path.join(opts?.homeRoot ?? os.homedir(), '.ai-swissknife', 'cache', 'sources');
-  const sanitizedId = source.id.replace(/[^a-zA-Z0-9._-]/g, '_');
-  const targetDir = path.join(baseCacheDir, sanitizedId);
+  const { targetDir } = resolveAndValidateCacheDir(baseCacheDir, source.id);
 
   return gitSingleItemMutex.runExclusive(targetDir, async () => {
     if (fs.existsSync(targetDir) && !fs.existsSync(path.join(targetDir, '.git'))) {
+      const resolvedTarget = path.resolve(targetDir);
+      const resolvedBase = path.resolve(baseCacheDir);
+      if (!resolvedTarget.startsWith(resolvedBase + path.sep)) {
+        throw new Error(`Refusing to remove directory outside cache base: "${resolvedTarget}"`);
+      }
       await fs.promises.rm(targetDir, { recursive: true, force: true });
     }
 
@@ -54,19 +64,19 @@ export async function resolveGitSingleItem(
       await runGit(['fetch', '--all', '--tags', '--prune'], targetDir);
     } else {
       await fs.promises.mkdir(path.dirname(targetDir), { recursive: true });
-      await runGit(['clone', source.url!, targetDir]);
+      await runGit(['clone', '--', source.url!, targetDir]);
     }
 
     let requestedRef: string | undefined;
     if (source.commit) {
       requestedRef = source.commit;
-      await runGit(['checkout', source.commit], targetDir);
+      await runGit(['checkout', source.commit, '--'], targetDir);
     } else if (source.tag) {
       requestedRef = source.tag;
-      await runGit(['checkout', source.tag], targetDir);
+      await runGit(['checkout', source.tag, '--'], targetDir);
     } else if (source.branch) {
       requestedRef = source.branch;
-      await runGit(['checkout', source.branch], targetDir);
+      await runGit(['checkout', source.branch, '--'], targetDir);
       try {
         await runGit(['reset', '--hard', `origin/${source.branch}`], targetDir);
       } catch {
@@ -74,7 +84,7 @@ export async function resolveGitSingleItem(
       }
     } else {
       const defaultBranch = await getDefaultBranch(targetDir);
-      await runGit(['checkout', defaultBranch], targetDir);
+      await runGit(['checkout', defaultBranch, '--'], targetDir);
       try {
         await runGit(['reset', '--hard', `origin/${defaultBranch}`], targetDir);
       } catch {
@@ -147,8 +157,7 @@ export async function resolveArtifactContent(
   opts?: { cacheDir?: string; homeRoot?: string }
 ): Promise<ResolvedArtifact<CanonicalSkill | CanonicalAgent | CanonicalCommand | CanonicalMcpServer | CanonicalHook | CanonicalRule>> {
   const baseCacheDir = opts?.cacheDir ?? path.join(opts?.homeRoot ?? os.homedir(), '.ai-swissknife', 'cache', 'sources');
-  const sanitizedId = source.id.replace(/[^a-zA-Z0-9._-]/g, '_');
-  const targetDir = path.join(baseCacheDir, sanitizedId);
+  const { targetDir } = resolveAndValidateCacheDir(baseCacheDir, source.id);
 
   return gitSingleItemMutex.runExclusive(targetDir, async () => {
     if (artifact.kind === 'skill') {
