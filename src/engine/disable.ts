@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import type { ManagedInstallation } from '../domain/types';
+import type { ManagedInstallation, ObservedArtifact } from '../domain/types';
 import { getAdapter, getAdapterWithHomeRoot } from '../adapters/registry';
 import { readState, writeState } from '../domain/registry';
 import { withStateLock } from '../domain/stateLock';
@@ -34,6 +34,36 @@ export type DisablePlan = DisablePlanReady | DisablePlanConflict | DisablePlanUn
 
 export type DisableOutcome =
   | { status: 'applied'; installation: ManagedInstallation }
+  | { status: 'conflict'; existingPath: string }
+  | { status: 'unsupported'; reason: string };
+
+export interface DisablePlanObservedReady {
+  status: 'ready';
+  artifact: ObservedArtifact;
+  sourcePath: string;
+  targetPath: string;
+  homeRoot?: string;
+}
+
+export interface DisablePlanObservedConflict {
+  status: 'conflict';
+  existingPath: string;
+  artifact: ObservedArtifact;
+}
+
+export interface DisablePlanObservedUnsupported {
+  status: 'unsupported';
+  reason: string;
+  artifact: ObservedArtifact;
+}
+
+export type DisablePlanObserved =
+  | DisablePlanObservedReady
+  | DisablePlanObservedConflict
+  | DisablePlanObservedUnsupported;
+
+export type DisableOutcomeObserved =
+  | { status: 'applied'; artifact: ObservedArtifact }
   | { status: 'conflict'; existingPath: string }
   | { status: 'unsupported'; reason: string };
 
@@ -401,4 +431,224 @@ export async function applyEnable(
       throw stateErr;
     }
   });
+}
+
+/**
+ * Plans disabling an unmanaged observed artifact.
+ * Verifies kind and adapter support, checks for conflicts at the disabled destination,
+ * and produces a DisablePlanObserved.
+ */
+export async function planDisableObserved(
+  obs: ObservedArtifact,
+  options?: DisableOptions
+): Promise<DisablePlanObserved> {
+  const homeRoot = options?.homeRoot;
+
+  // 1. Kind support: only skill, agent, command
+  if (obs.kind !== 'skill' && obs.kind !== 'agent' && obs.kind !== 'command') {
+    return {
+      status: 'unsupported',
+      reason: `Disable is unsupported for kind "${obs.kind}". Only skills, agents, and commands are supported.`,
+      artifact: obs,
+    };
+  }
+
+  // 2. Adapter support
+  const adapter = homeRoot
+    ? getAdapterWithHomeRoot(obs.assistant, homeRoot)
+    : getAdapter(obs.assistant);
+
+  if (adapter.disableSupport === 'unsupported') {
+    return {
+      status: 'unsupported',
+      reason: `Disable is unsupported for assistant "${obs.assistant}".`,
+      artifact: obs,
+    };
+  }
+
+  // 3. Compute disabled destination path
+  const loc = {
+    scope: obs.scope,
+    projectRoot: obs.projectPath,
+  };
+
+  const disabledPath = adapter.getDisabledPath(obs.kind, obs.name, loc);
+  if (!disabledPath) {
+    return {
+      status: 'unsupported',
+      reason: `No disabled path returned by adapter for ${obs.kind} "${obs.name}".`,
+      artifact: obs,
+    };
+  }
+
+  // 4. Check if source exists on disk
+  if (!fs.existsSync(obs.path)) {
+    return {
+      status: 'unsupported',
+      reason: `Source file or directory does not exist at ${obs.path}.`,
+      artifact: obs,
+    };
+  }
+
+  // Check if already disabled
+  if (obs.disabled || path.resolve(obs.path) === path.resolve(disabledPath)) {
+    return {
+      status: 'unsupported',
+      reason: `Artifact "${obs.name}" is already disabled.`,
+      artifact: obs,
+    };
+  }
+
+  // 5. Check if target disabled path already exists (conflict)
+  if (fs.existsSync(disabledPath)) {
+    return {
+      status: 'conflict',
+      existingPath: disabledPath,
+      artifact: obs,
+    };
+  }
+
+  return {
+    status: 'ready',
+    artifact: obs,
+    sourcePath: obs.path,
+    targetPath: disabledPath,
+    homeRoot,
+  };
+}
+
+/**
+ * Applies a disable plan (or plans and disables an unmanaged observed artifact).
+ * Performs a single move (with EXDEV copy+delete fallback). No state is written.
+ */
+export async function applyDisableObserved(
+  planOrObs: DisablePlanObserved | ObservedArtifact,
+  options?: DisableOptions
+): Promise<DisableOutcomeObserved> {
+  let plan: DisablePlanObserved;
+  if ('status' in planOrObs) {
+    plan = planOrObs;
+  } else {
+    plan = await planDisableObserved(planOrObs, options);
+  }
+
+  if (plan.status === 'unsupported') {
+    return { status: 'unsupported', reason: plan.reason };
+  }
+
+  if (plan.status === 'conflict') {
+    return { status: 'conflict', existingPath: plan.existingPath };
+  }
+
+  if (fs.existsSync(plan.targetPath)) {
+    return { status: 'conflict', existingPath: plan.targetPath };
+  }
+
+  if (!fs.existsSync(plan.sourcePath)) {
+    return {
+      status: 'unsupported',
+      reason: `Source file or directory does not exist at ${plan.sourcePath}.`,
+    };
+  }
+
+  await movePath(plan.sourcePath, plan.targetPath);
+
+  const resultingArtifact: ObservedArtifact = {
+    ...plan.artifact,
+    path: plan.targetPath,
+    disabled: true,
+  };
+
+  return {
+    status: 'applied',
+    artifact: resultingArtifact,
+  };
+}
+
+/**
+ * Enables a disabled unmanaged observed artifact.
+ * Restores the item to its exact original path, and never overwrites an existing item at the target path.
+ * No state is written.
+ */
+export async function applyEnableObserved(
+  artifact: ObservedArtifact,
+  options?: DisableOptions
+): Promise<DisableOutcomeObserved> {
+  const homeRoot = options?.homeRoot;
+
+  // 1. Unsupported kinds
+  if (artifact.kind !== 'skill' && artifact.kind !== 'agent' && artifact.kind !== 'command') {
+    return {
+      status: 'unsupported',
+      reason: `Enable is unsupported for kind "${artifact.kind}". Only skills, agents, and commands are supported.`,
+    };
+  }
+
+  // 2. Unsupported adapter
+  const adapter = homeRoot
+    ? getAdapterWithHomeRoot(artifact.assistant, homeRoot)
+    : getAdapter(artifact.assistant);
+
+  if (adapter.disableSupport === 'unsupported') {
+    return {
+      status: 'unsupported',
+      reason: `Enable is unsupported for assistant "${artifact.assistant}".`,
+    };
+  }
+
+  // 3. Compute exact original active path
+  const loc = {
+    scope: artifact.scope,
+    projectRoot: artifact.projectPath,
+  };
+  let activePath: string;
+  if (artifact.kind === 'skill') {
+    activePath = adapter.skillDir(artifact.name, loc);
+  } else if (artifact.kind === 'agent') {
+    activePath = adapter.agentPath(artifact.name, loc);
+  } else if (artifact.kind === 'command') {
+    activePath = adapter.commandPath(artifact.name, loc);
+  } else {
+    return {
+      status: 'unsupported',
+      reason: `Enable is unsupported for kind "${artifact.kind}".`,
+    };
+  }
+
+  const sourcePath = artifact.path;
+
+  // 4. Never overwrite: if target active path already exists
+  if (activePath !== sourcePath && fs.existsSync(activePath)) {
+    return {
+      status: 'conflict',
+      existingPath: activePath,
+    };
+  }
+
+  if (!fs.existsSync(sourcePath)) {
+    return {
+      status: 'unsupported',
+      reason: `Disabled file or directory does not exist at ${sourcePath}.`,
+    };
+  }
+
+  if (activePath === sourcePath && !artifact.disabled) {
+    return {
+      status: 'applied',
+      artifact,
+    };
+  }
+
+  await movePath(sourcePath, activePath);
+
+  const resultingArtifact: ObservedArtifact = {
+    ...artifact,
+    path: activePath,
+  };
+  delete resultingArtifact.disabled;
+
+  return {
+    status: 'applied',
+    artifact: resultingArtifact,
+  };
 }

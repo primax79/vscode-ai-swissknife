@@ -53,12 +53,14 @@ export type ManagedPlaceState =
   | 'update-available'
   | 'modified-locally'
   | 'modified-and-update-available'
-  | 'missing-on-disk';
+  | 'missing-on-disk'
+  | 'disabled';
 
 export type UnmanagedPlaceState =
   | 'identical'
   | 'different'
-  | 'local-only';
+  | 'local-only'
+  | 'disabled';
 
 export type PlaceState = ManagedPlaceState | UnmanagedPlaceState;
 
@@ -74,6 +76,7 @@ export interface Place {
   membership: 'managed' | 'unmanaged';
   state: PlaceState;
   match?: PlaceMatch;
+  disabled: boolean;
 }
 
 export interface InstalledObject {
@@ -94,15 +97,16 @@ export interface BuildInstalledTreeOptions {
  * Severity ranking for worst-state derivation. Higher number means worse/more actionable state.
  */
 export const STATE_SEVERITY: Readonly<Record<PlaceState, number>> = Object.freeze({
-  'missing-on-disk': 8,
-  'modified-and-update-available': 7,
-  'update-available': 6,
-  'modified-locally': 5,
-  'different': 4,
-  'local-only': 3,
-  'checking': 2,
-  'identical': 1,
-  'up-to-date': 0,
+  'missing-on-disk': 9,
+  'modified-and-update-available': 8,
+  'update-available': 7,
+  'modified-locally': 6,
+  'different': 5,
+  'local-only': 4,
+  'checking': 3,
+  'identical': 2,
+  'up-to-date': 1,
+  'disabled': 0,
 });
 
 export const SEVERITY_TABLE = STATE_SEVERITY;
@@ -256,7 +260,8 @@ export function buildInstalledTree(
 
     const key = getIdentityKey(inst);
     const injected = lookupStatus(opts?.statusByKey, key);
-    const state: PlaceState = injected ?? 'checking';
+    const disabled = Boolean(inst.disabled || injected === 'disabled');
+    const state: PlaceState = disabled ? 'disabled' : (injected ?? 'checking');
 
     const place: Place = {
       key,
@@ -264,6 +269,7 @@ export function buildInstalledTree(
       scope: inst.scope,
       membership: 'managed',
       state,
+      disabled,
     };
 
     if (!acc.placeMap.has(key)) {
@@ -308,16 +314,24 @@ export function buildInstalledTree(
       }
     }
 
+    const disabled = Boolean(obs.disabled);
     let state: PlaceState;
-    let match: PlaceMatch;
-    if (obs.match?.status === 'identical') {
+    if (disabled) {
+      state = 'disabled';
+    } else if (obs.match?.status === 'identical') {
       state = 'identical';
-      match = { status: 'identical', sourceId: obs.match.sourceId };
     } else if (obs.match?.status === 'different') {
       state = 'different';
-      match = { status: 'different', sourceId: obs.match.sourceId };
     } else {
       state = 'local-only';
+    }
+
+    let match: PlaceMatch;
+    if (obs.match?.status === 'identical') {
+      match = { status: 'identical', sourceId: obs.match.sourceId };
+    } else if (obs.match?.status === 'different') {
+      match = { status: 'different', sourceId: obs.match.sourceId };
+    } else {
       match = { status: 'none', sourceId: obs.match?.sourceId };
     }
 
@@ -328,12 +342,14 @@ export function buildInstalledTree(
       membership: 'unmanaged',
       state,
       match,
+      disabled,
     };
 
     if (!acc.placeMap.has(key)) {
       acc.placeMap.set(key, place);
       acc.places.push(place);
     } else {
+      // If already present (e.g. duplicate), update place
       const idx = acc.places.findIndex((p) => p.key === key);
       if (idx >= 0) {
         acc.places[idx] = place;

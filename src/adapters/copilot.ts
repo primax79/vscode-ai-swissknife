@@ -31,6 +31,10 @@ export class CopilotAdapter implements Adapter {
     return undefined;
   }
 
+  getDisabledRoot(_kind: ItemKind, _loc: LocationRef): string | undefined {
+    return undefined;
+  }
+
   constructor(private readonly getHomedir: () => string = os.homedir) {}
 
   skillDir(name: string, loc: LocationRef): string {

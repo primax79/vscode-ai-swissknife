@@ -76,6 +76,7 @@ export interface Adapter {
   readonly disableSupport: DisableSupport;
 
   getDisabledPath(kind: ItemKind, name: string, loc: LocationRef): string | undefined;
+  getDisabledRoot(kind: ItemKind, loc: LocationRef): string | undefined;
 
   skillDir(name: string, loc: LocationRef): string;
   skillPath(name: string, loc: LocationRef): string;
