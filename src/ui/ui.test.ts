@@ -243,7 +243,7 @@ import {
   SCHEMA_VERSION,
 } from '../domain/registry';
 import { SourcesTreeDataProvider, ScopeGroupItem, SourceItem, promptScope } from './sourcesView';
-import { AvailableTreeDataProvider, AvailableFolderItem, AvailableArtifactItem, buildHierarchy, AvailableSourceGroupItem } from './availableView';
+import { AvailableTreeDataProvider, AvailableFolderItem, AvailableArtifactItem, buildHierarchy, AvailableSourceGroupItem, DiagnosticTreeItem } from './availableView';
 import { ArtifactFileItem } from './artifactFileTree';
 import { InstalledTreeDataProvider, ScopeGroupItem as InstalledScopeGroupItem, InstalledInstallationItem, KindGroupItem } from './installedView';
 import { getAssistantIconPath } from './assistantIcons';
@@ -1884,6 +1884,309 @@ describe('UI TreeDataProviders', () => {
       assert.ok(children[0] instanceof RecommendedGroupItem);
       assert.ok(children[1] instanceof ScopeGroupItem);
       assert.ok(children[2] instanceof ScopeGroupItem);
+    });
+
+    describe('per-source loading state (44.5)', () => {
+      it('during a deliberately delayed resolver the tree reports a loading item for that source and fully rendered items for finished ones', async () => {
+        await writeManifest(
+          'project',
+          {
+            schemaVersion: SCHEMA_VERSION,
+            sources: [
+              { id: 'sourceFast', type: 'git-custom', scope: 'project', url: 'https://example.com/fast.git' },
+              { id: 'sourceSlow', type: 'git-custom', scope: 'project', url: 'https://example.com/slow.git' },
+            ],
+            desiredInstallations: [],
+          },
+          testTempDir
+        );
+
+        const availableProvider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+        const sourcesProvider = new SourcesTreeDataProvider(availableProvider);
+
+        let slowResolveStarted = false;
+        let resolveSlowPromise: () => void;
+        const slowPromise = new Promise<void>((resolve) => {
+          resolveSlowPromise = resolve;
+        });
+
+        (availableProvider as any).resolveSourceGroup = async (src: Source) => {
+          if (src.id === 'sourceFast') {
+            const artFast: Artifact = { id: 'artFast', packageId: 'pkgFast', kind: 'skill', name: 'Fast Artifact', nativeFormat: 'md' };
+            const pkg: Package = { id: 'pkgFast', sourceId: src.id, nativeFormat: 'raw', artifacts: [artFast] };
+            return {
+              group: new AvailableSourceGroupItem(src, { packages: [pkg], diagnostics: [] }),
+              attempt: { status: 'resolved', source: src, packages: [pkg] },
+            };
+          }
+
+          if (src.id === 'sourceSlow') {
+            slowResolveStarted = true;
+            await slowPromise;
+            const artSlow: Artifact = { id: 'artSlow', packageId: 'pkgSlow', kind: 'skill', name: 'Slow Artifact', nativeFormat: 'md' };
+            const pkg: Package = { id: 'pkgSlow', sourceId: src.id, nativeFormat: 'raw', artifacts: [artSlow] };
+            return {
+              group: new AvailableSourceGroupItem(src, { packages: [pkg], diagnostics: [] }),
+              attempt: { status: 'resolved', source: src, packages: [pkg] },
+            };
+          }
+
+          throw new Error(`Unexpected source: ${src.id}`);
+        };
+
+        const refreshPromise = availableProvider.refreshCatalog();
+
+        while (!slowResolveStarted) {
+          await new Promise((r) => setImmediate(r));
+        }
+
+        const srcFast: Source = { id: 'sourceFast', type: 'git-custom', scope: 'project' };
+        const srcSlow: Source = { id: 'sourceSlow', type: 'git-custom', scope: 'project' };
+        const sourceItemFast = new SourceItem(srcFast, 'sourceFast', 'git-custom');
+        const sourceItemSlow = new SourceItem(srcSlow, 'sourceSlow', 'git-custom');
+
+        // During delayed resolver:
+        // 1. sourceSlow is loading: loading flag true, spinner icon, description "Refreshing..."
+        assert.strictEqual(availableProvider.isSourceLoading('sourceSlow', 'project'), true);
+        assert.strictEqual(sourcesProvider.isSourceLoading('sourceSlow', 'project'), true);
+        const slowTreeItem = sourcesProvider.getTreeItem(sourceItemSlow);
+        assert.strictEqual((slowTreeItem.iconPath as any)?.id, 'sync~spin');
+        assert.strictEqual(slowTreeItem.description, 'Refreshing...');
+
+        // 2. sourceFast has finished: loading flag false, normal icon, manifest description, and fully rendered items
+        assert.strictEqual(availableProvider.isSourceLoading('sourceFast', 'project'), false);
+        assert.strictEqual(sourcesProvider.isSourceLoading('sourceFast', 'project'), false);
+        const fastTreeItem = sourcesProvider.getTreeItem(sourceItemFast);
+        assert.notStrictEqual((fastTreeItem.iconPath as any)?.id, 'sync~spin');
+        assert.strictEqual(fastTreeItem.description, 'git-custom');
+        const fastChildren = await sourcesProvider.getChildren(sourceItemFast);
+        assert.strictEqual(fastChildren.length, 1);
+        assert.ok(fastChildren[0] instanceof AvailableArtifactItem);
+        assert.strictEqual((fastChildren[0] as AvailableArtifactItem).artifact.name, 'Fast Artifact');
+
+        // Now resolve slow resolver
+        resolveSlowPromise!();
+        await refreshPromise;
+
+        // After resolution:
+        // Loading flag for sourceSlow is gone, normal icon and description restored, fully rendered items
+        assert.strictEqual(availableProvider.isSourceLoading('sourceSlow', 'project'), false);
+        assert.strictEqual(sourcesProvider.isSourceLoading('sourceSlow', 'project'), false);
+        const slowTreeItemAfter = sourcesProvider.getTreeItem(sourceItemSlow);
+        assert.notStrictEqual((slowTreeItemAfter.iconPath as any)?.id, 'sync~spin');
+        assert.strictEqual(slowTreeItemAfter.description, 'git-custom');
+        const slowChildrenAfter = await sourcesProvider.getChildren(sourceItemSlow);
+        assert.strictEqual(slowChildrenAfter.length, 1);
+        assert.ok(slowChildrenAfter[0] instanceof AvailableArtifactItem);
+        assert.strictEqual((slowChildrenAfter[0] as AvailableArtifactItem).artifact.name, 'Slow Artifact');
+      });
+
+      it('after resolution the loading flag is gone when resolver throws, and failing source shows its diagnostic as before', async () => {
+        await writeManifest(
+          'project',
+          {
+            schemaVersion: SCHEMA_VERSION,
+            sources: [
+              { id: 'sourceFail', type: 'git-custom', scope: 'project', url: 'https://example.com/fail.git' },
+            ],
+            desiredInstallations: [],
+          },
+          testTempDir
+        );
+
+        const availableProvider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+        const sourcesProvider = new SourcesTreeDataProvider(availableProvider);
+
+        let resolveStarted = false;
+        let rejectPromise: () => void;
+        const delayedFail = new Promise<void>((_, reject) => {
+          rejectPromise = () => reject(new Error('SSH git clone timeout after 120s'));
+        });
+
+        (availableProvider as any).resolveSourceGroup = async (src: Source) => {
+          resolveStarted = true;
+          await delayedFail;
+          return {
+            group: new AvailableSourceGroupItem(src, { packages: [], diagnostics: [] }),
+            attempt: { status: 'resolved', source: src, packages: [] },
+          };
+        };
+
+        const refreshPromise = availableProvider.refreshCatalog();
+
+        while (!resolveStarted) {
+          await new Promise((r) => setImmediate(r));
+        }
+
+        const srcFail: Source = { id: 'sourceFail', type: 'git-custom', scope: 'project' };
+        const sourceItemFail = new SourceItem(srcFail, 'sourceFail', 'git-custom');
+
+        // Loading flag is active while delayed
+        assert.strictEqual(availableProvider.isSourceLoading('sourceFail', 'project'), true);
+        assert.strictEqual(sourcesProvider.isSourceLoading('sourceFail', 'project'), true);
+        const treeItemWhileLoading = sourcesProvider.getTreeItem(sourceItemFail);
+        assert.strictEqual((treeItemWhileLoading.iconPath as any)?.id, 'sync~spin');
+        assert.strictEqual(treeItemWhileLoading.description, 'Refreshing...');
+
+        // Trigger rejection
+        rejectPromise!();
+        await refreshPromise;
+
+        // Loading flag is gone
+        assert.strictEqual(availableProvider.isSourceLoading('sourceFail', 'project'), false);
+        assert.strictEqual(sourcesProvider.isSourceLoading('sourceFail', 'project'), false);
+
+        // Tree item restored normal icon
+        const treeItemAfter = sourcesProvider.getTreeItem(sourceItemFail);
+        assert.notStrictEqual((treeItemAfter.iconPath as any)?.id, 'sync~spin');
+        assert.strictEqual(treeItemAfter.description, 'git-custom');
+
+        // Failing source shows diagnostic as before
+        const children = await sourcesProvider.getChildren(sourceItemFail);
+        assert.strictEqual(children.length, 1);
+        assert.ok(children[0] instanceof DiagnosticTreeItem);
+        assert.ok((children[0] as DiagnosticTreeItem).diagnostic.message.includes('SSH git clone timeout'));
+      });
+
+      it('two sources with the same id in different scopes have independent loading flags', async () => {
+        await writeManifest(
+          'project',
+          {
+            schemaVersion: SCHEMA_VERSION,
+            sources: [
+              { id: 'dupSource', type: 'git-custom', scope: 'project', url: 'https://example.com/project.git' },
+            ],
+            desiredInstallations: [],
+          },
+          testTempDir
+        );
+        await writeManifest(
+          'global',
+          {
+            schemaVersion: SCHEMA_VERSION,
+            sources: [
+              { id: 'dupSource', type: 'git-custom', scope: 'global', url: 'https://example.com/global.git' },
+            ],
+            desiredInstallations: [],
+          },
+          undefined,
+          testHomeDir
+        );
+
+        const availableProvider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+        const sourcesProvider = new SourcesTreeDataProvider(availableProvider);
+
+        let refreshProjectStarted = false;
+        let resolveProjectPromise: () => void;
+        const projectDeferred = new Promise<void>((resolve) => {
+          resolveProjectPromise = resolve;
+        });
+
+        (availableProvider as any).resolveSourceGroup = async (src: Source) => {
+          if (src.scope === 'project') {
+            refreshProjectStarted = true;
+            await projectDeferred;
+          }
+          const pkg: Package = { id: `p-${src.scope}-${src.id}`, sourceId: src.id, nativeFormat: 'raw', artifacts: [] };
+          return {
+            group: new AvailableSourceGroupItem(src, { packages: [pkg], diagnostics: [] }),
+            attempt: { status: 'resolved', source: src, packages: [pkg] },
+          };
+        };
+
+        const refreshPromise = availableProvider.refreshSource('dupSource', 'project');
+
+        while (!refreshProjectStarted) {
+          await new Promise((r) => setImmediate(r));
+        }
+
+        const projectSource: Source = { id: 'dupSource', type: 'git-custom', scope: 'project' };
+        const globalSource: Source = { id: 'dupSource', type: 'git-custom', scope: 'global' };
+        const projectItem = new SourceItem(projectSource, 'dupSource', 'git-custom (project)');
+        const globalItem = new SourceItem(globalSource, 'dupSource', 'git-custom (global)');
+
+        // Project source is loading, global source is NOT loading
+        assert.strictEqual(availableProvider.isSourceLoading('dupSource', 'project'), true);
+        assert.strictEqual(availableProvider.isSourceLoading('dupSource', 'global'), false);
+        assert.strictEqual(sourcesProvider.isSourceLoading('dupSource', 'project'), true);
+        assert.strictEqual(sourcesProvider.isSourceLoading('dupSource', 'global'), false);
+
+        const projectTreeItem = sourcesProvider.getTreeItem(projectItem);
+        assert.strictEqual((projectTreeItem.iconPath as any)?.id, 'sync~spin');
+        assert.strictEqual(projectTreeItem.description, 'Refreshing...');
+
+        const globalTreeItem = sourcesProvider.getTreeItem(globalItem);
+        assert.notStrictEqual((globalTreeItem.iconPath as any)?.id, 'sync~spin');
+        assert.strictEqual(globalTreeItem.description, 'git-custom (global)');
+
+        resolveProjectPromise!();
+        await refreshPromise;
+
+        // After resolution, neither is loading
+        assert.strictEqual(availableProvider.isSourceLoading('dupSource', 'project'), false);
+        assert.strictEqual(availableProvider.isSourceLoading('dupSource', 'global'), false);
+        const projectTreeItemAfter = sourcesProvider.getTreeItem(projectItem);
+        assert.notStrictEqual((projectTreeItemAfter.iconPath as any)?.id, 'sync~spin');
+        assert.strictEqual(projectTreeItemAfter.description, 'git-custom (project)');
+      });
+
+      it('fires tree change event after each source resolves', async () => {
+        await writeManifest(
+          'project',
+          {
+            schemaVersion: SCHEMA_VERSION,
+            sources: [
+              { id: 'sourceA', type: 'git-custom', scope: 'project', url: 'https://example.com/a.git' },
+              { id: 'sourceB', type: 'git-custom', scope: 'project', url: 'https://example.com/b.git' },
+            ],
+            desiredInstallations: [],
+          },
+          testTempDir
+        );
+
+        const availableProvider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+        let changeEvents = 0;
+        availableProvider.onDidChangeTreeData(() => {
+          changeEvents++;
+        });
+
+        (availableProvider as any).resolveSourceGroup = async (src: Source) => {
+          const pkg: Package = { id: `p-${src.id}`, sourceId: src.id, nativeFormat: 'raw', artifacts: [] };
+          return {
+            group: new AvailableSourceGroupItem(src, { packages: [pkg], diagnostics: [] }),
+            attempt: { status: 'resolved', source: src, packages: [pkg] },
+          };
+        };
+
+        await availableProvider.refreshCatalog();
+
+        // For each source: 1 event when start loading + 1 event when finished = 4 events + 1 event when final recomputeRecommendedGroup
+        assert.ok(changeEvents >= 4, `Expected at least 4 change events during resolution, got ${changeEvents}`);
+      });
+
+      it('AvailableSourceGroupItem also reflects loading state during resolution and restores item count', () => {
+        const availableProvider = new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+        const src: Source = { id: 'sourceA', type: 'git-custom', scope: 'project' };
+        const pkg: Package = { id: 'p-sourceA', sourceId: src.id, nativeFormat: 'raw', artifacts: [] };
+        const group = new AvailableSourceGroupItem(src, { packages: [pkg], diagnostics: [] });
+
+        // Normal state: item count description
+        const normalItem = availableProvider.getTreeItem(group);
+        assert.strictEqual(normalItem.description, '1 item(s)');
+        assert.notStrictEqual((normalItem.iconPath as any)?.id, 'sync~spin');
+
+        // While loading: spinner icon and "Refreshing..." description
+        (availableProvider as any).loadingSources.add('project:sourceA');
+        const loadingItem = availableProvider.getTreeItem(group);
+        assert.strictEqual(loadingItem.description, 'Refreshing...');
+        assert.strictEqual((loadingItem.iconPath as any)?.id, 'sync~spin');
+
+        // Restored when loading clears
+        (availableProvider as any).loadingSources.delete('project:sourceA');
+        const restoredItem = availableProvider.getTreeItem(group);
+        assert.strictEqual(restoredItem.description, '1 item(s)');
+        assert.notStrictEqual((restoredItem.iconPath as any)?.id, 'sync~spin');
+      });
     });
   });
 

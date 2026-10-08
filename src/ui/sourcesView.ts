@@ -113,6 +113,10 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
     this._onDidChangeTreeData.fire();
   }
 
+  isSourceLoading(sourceId: string, scope: Scope): boolean {
+    return this.availableProvider.isSourceLoading(sourceId, scope);
+  }
+
   getTreeItem(element: SourceTreeItem): vscode.TreeItem {
     if (element instanceof ScopeGroupItem) {
       const item = new vscode.TreeItem(
@@ -129,9 +133,14 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
         element.label,
         vscode.TreeItemCollapsibleState.Collapsed
       );
-      item.description = element.description;
+      if (this.availableProvider.isSourceLoading(source.id, source.scope)) {
+        item.description = 'Refreshing...';
+        item.iconPath = new vscode.ThemeIcon('sync~spin');
+      } else {
+        item.description = element.description;
+        item.iconPath = getSourceTypeIcon(source.type);
+      }
       item.contextValue = 'sourceItem';
-      item.iconPath = getSourceTypeIcon(source.type);
       item.tooltip = `ID: ${source.id}\nType: ${source.type}\nScope: ${source.scope}${
         source.url ? `\nURL: ${source.url}` : ''
       }${source.localPath ? `\nPath: ${source.localPath}` : ''}`;
@@ -144,7 +153,9 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
 
   async getChildren(element?: SourceTreeItem): Promise<SourceTreeItem[]> {
     if (!element) {
-      await this.availableProvider.ensureCatalogLoaded();
+      if (!this.availableProvider.isRefreshing()) {
+        await this.availableProvider.ensureCatalogLoaded();
+      }
       const children: SourceTreeItem[] = [];
       const recommended = this.availableProvider.getCachedRecommendedGroup();
       if (recommended) {
@@ -199,14 +210,23 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
     }
 
     if (element instanceof SourceItem) {
-      await this.availableProvider.ensureCatalogLoaded();
       const group = this.availableProvider
         .getCachedSourceGroups()
         .find((g) => g.source.id === element.source.id && g.source.scope === element.source.scope);
-      if (!group) return [];
+      if (group) {
+        return this.availableProvider.getChildren(group) as unknown as SourceTreeItem[];
+      }
+      if (this.availableProvider.isSourceLoading(element.source.id, element.source.scope)) {
+        return [];
+      }
+      await this.availableProvider.ensureCatalogLoaded();
+      const fallbackGroup = this.availableProvider
+        .getCachedSourceGroups()
+        .find((g) => g.source.id === element.source.id && g.source.scope === element.source.scope);
+      if (!fallbackGroup) return [];
       // A source group's children are always diagnostics/folders/artifacts,
       // never another AvailableSourceGroupItem (which this union excludes).
-      return this.availableProvider.getChildren(group) as unknown as SourceTreeItem[];
+      return this.availableProvider.getChildren(fallbackGroup) as unknown as SourceTreeItem[];
     }
 
     return this.availableProvider.getChildren(element as AvailableTreeItem) as unknown as SourceTreeItem[];
