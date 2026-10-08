@@ -2,6 +2,16 @@
 
 All notable changes to the "AI Swissknife" extension are documented in this file.
 
+## [0.5.0] - 2026-10-09
+
+- Added: **Update All** (command palette, a button in the title bar of each environment view, and in the Dashboard acting on the current filters, plus a clickable "Updates Available" card). Summary first; items modified locally are skipped unless you opt in, in which case your version is saved to the trash first (47.1, 47.2).
+- Added: a refresh button on each source (sidebar and Dashboard) that re-resolves only that source (38.1, 38.2); a loading spinner per source while it resolves (44.5).
+- Changed: Add Source can target Global and Workspace at once, with one local path per scope and a "Replace?" prompt for an existing id (36.3).
+- Fixed: installing an MCP server into Kilo wrote to a file Kilo does not read and in a shape Kilo rejects; it now writes the `mcp` entry of `kilo.jsonc` in Kilo's `local`/`remote` shape, preserving comments (44.3).
+- Fixed: skill frontmatter with folded/literal block scalars (`description: >`) was read as `">"` (44.4).
+- Added: a read-only command-line interface (`dist/cli.js`, `ai-swissknife` bin) for agents and scripts (46.1) and a cross-process lock for manifest/state writes (46.3).
+- Internal: drift checks resolve each source once (47.4); object-to-places model for the upcoming collapsible tree (40.1).
+
 ## [0.4.0] - 2026-10-08
 
 - Changed: the Dashboard item detail panel now shows a header (kind, assistant,
