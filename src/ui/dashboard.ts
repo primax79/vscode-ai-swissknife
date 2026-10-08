@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { ManagedInstallation, ObservedArtifact, Source, AssistantId, Scope } from '../domain/types';
+import type { ManagedInstallation, ObservedArtifact, ObservedSourceMatch, Source, AssistantId, Scope } from '../domain/types';
 import { readManifest, fromDesiredSource } from '../domain/registry';
 import { scanInstalledInventory, promoteObservedArtifact } from '../engine/discovery';
 import { analyzeLocalDrift, checkForUpstreamUpdate } from '../engine/drift';
@@ -13,6 +13,57 @@ import { findRelatedInstallations, groupByIdentityAndScope } from '../engine/cro
 import { ALL_ADAPTERS } from '../adapters/registry';
 import { resolveArtifactPreviewPath } from './artifactFileTree';
 import { handleInstallRecommended, installResolvedArtifacts, unrecommendArtifactForWorkspace } from './recommendations';
+
+export function getScopeLabel(scope: string): string {
+  return scope === 'project' ? 'Workspace' : 'Global';
+}
+
+export function getScopeIconSvg(scope: string): string {
+  if (scope === 'project') {
+    return `<svg class="scope-icon" width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="vertical-align: middle; margin-right: 4px;" aria-hidden="true"><path d="M1.75 2.5h3.69l1.56 1.5h7.25c.97 0 1.75.78 1.75 1.75v6.5c0 .97-.78 1.75-1.75 1.75H1.75C.78 14 0 13.22 0 12.25v-8c0-.97.78-1.75 1.75-1.75z"/></svg>`;
+  }
+  return `<svg class="scope-icon" width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="vertical-align: middle; margin-right: 4px;" aria-hidden="true"><path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zM1.5 8a6.5 6.5 0 0 1 1.05-3.53l2.84 2.84A4.5 4.5 0 0 0 5.3 8H1.5zm6.5-6.5c.87 0 1.7.17 2.46.48l-1.92 1.92a4.49 4.49 0 0 0-1.04-.4A6.5 6.5 0 0 1 8 1.5zm0 13c-.87 0-1.7-.17-2.46-.48l1.92-1.92c.34.05.69.08 1.04.08.35 0 .7-.03 1.04-.08l1.92 1.92A6.5 6.5 0 0 1 8 14.5z"/></svg>`;
+}
+
+export function computeItemOrigin(
+  membership: 'managed' | 'unmanaged',
+  item: ManagedInstallation | ObservedArtifact,
+  candidates?: ObservedSourceMatch[]
+): string {
+  if (membership === 'managed') {
+    const inst = item as ManagedInstallation;
+    if (!inst.sourceId) {
+      return 'Local only: not found in any registered source';
+    }
+    const commit = inst.sourceRevision?.commit;
+    const shortCommit = commit ? (commit.length > 7 ? commit.slice(0, 7) : commit) : '';
+    return `${inst.sourceId}${shortCommit ? '@' + shortCommit : ''}`;
+  }
+
+  const obs = item as ObservedArtifact;
+  const cands = (candidates && candidates.length > 0)
+    ? candidates
+    : (obs.candidates && obs.candidates.length > 0)
+      ? obs.candidates
+      : (obs.match && obs.match.status !== 'unmatched' && obs.match.sourceId)
+        ? [obs.match]
+        : [];
+
+  if (cands.length === 0) {
+    return 'Local only: not found in any registered source';
+  }
+
+  return cands.map(c => {
+    const src = c.sourceId || 'unknown';
+    if (c.status === 'identical') {
+      return `Matches registered source "${src}" — identical`;
+    } else if (c.status === 'different') {
+      return `Matches registered source "${src}" — differs (your copy was changed or is a different version)`;
+    } else {
+      return `Matches registered source "${src}"`;
+    }
+  }).join('\n');
+}
 
 export class DashboardPanel {
   private async getAllSources(): Promise<Source[]> {
@@ -60,6 +111,36 @@ export class DashboardPanel {
       );
     }
     return inst;
+  }
+
+  private async resolveInstallationOrObservedByKey(key: string): Promise<ManagedInstallation | ObservedArtifact | undefined> {
+    const allManaged: ManagedInstallation[] = [];
+    const allObserved: ObservedArtifact[] = [];
+    try {
+      const gInv = await scanInstalledInventory('global');
+      allManaged.push(...gInv.managed);
+      allObserved.push(...gInv.observed);
+    } catch { /* ignore */ }
+    const folders = vscode.workspace.workspaceFolders;
+    if (folders && folders.length > 0) {
+      try {
+        const pInv = await scanInstalledInventory('project', folders[0].uri.fsPath);
+        allManaged.push(...pInv.managed);
+        allObserved.push(...pInv.observed);
+      } catch { /* ignore */ }
+    }
+    const inst = allManaged.find(m => getIdentityKey(m) === key);
+    if (inst) {
+      return inst;
+    }
+    const obs = allObserved.find(o => getIdentityKey(o) === key);
+    if (obs) {
+      return obs;
+    }
+    vscode.window.showErrorMessage(
+      `Couldn't find that item anymore (key: ${key}). It may have been moved, uninstalled, or belong to a workspace folder other than the first one open. Try refreshing the Dashboard.`
+    );
+    return undefined;
   }
 
   public static currentPanel: DashboardPanel | undefined;
@@ -296,13 +377,13 @@ export class DashboardPanel {
           }
           case 'previewInstalledArtifact': {
             if (message.key) {
-              const inst = await this.resolveManagedInstallationByKey(message.key);
-              if (inst) {
-                const p = resolveArtifactPreviewPath(inst.path, inst.kind);
+              const item = await this.resolveInstallationOrObservedByKey(message.key);
+              if (item) {
+                const p = resolveArtifactPreviewPath(item.path, item.kind);
                 if (p) {
                   vscode.commands.executeCommand('vscode.open', vscode.Uri.file(p));
                 } else {
-                  vscode.window.showWarningMessage(`No local file to preview for "${inst.name}".`);
+                  vscode.window.showWarningMessage(`No local file to preview for "${item.name}".`);
                 }
               }
             }
@@ -310,9 +391,9 @@ export class DashboardPanel {
           }
           case 'diffInstalledArtifact': {
             if (message.key) {
-              const inst = await this.resolveManagedInstallationByKey(message.key);
-              if (inst) {
-                await this._provider.doDiffAgainstOriginal(inst);
+              const item = await this.resolveInstallationOrObservedByKey(message.key);
+              if (item) {
+                await this._provider.doDiffAgainstOriginal(item);
               }
             }
             break;
@@ -474,8 +555,8 @@ export class DashboardPanel {
       allManaged.push(...gInv.managed);
       allObserved.push(...gInv.observed);
     } catch {
-        // ignore
-      }
+      // ignore
+    }
 
     const folders = vscode.workspace.workspaceFolders;
     if (folders && folders.length > 0) {
@@ -488,6 +569,24 @@ export class DashboardPanel {
         // ignore
       }
     }
+
+    const allInstallations: ManagedInstallation[] = [
+      ...allManaged,
+      ...allObserved.map(o => ({
+        assistant: o.assistant,
+        scope: o.scope,
+        projectPath: o.projectPath,
+        kind: o.kind,
+        name: o.name,
+        path: o.path,
+        sourceId: o.match?.sourceId,
+        packageId: o.match?.packageId,
+        artifactId: o.match?.artifactId,
+        sourceRevision: o.match?.sourceRevision,
+        installedAt: o.discoveredAt,
+        contentHash: o.contentHash,
+      })),
+    ];
 
     const inst = allManaged.find(m => getIdentityKey(m) === key);
     if (inst) {
@@ -516,13 +615,19 @@ export class DashboardPanel {
         diffAvailable = true;
       }
 
-      const crossFramework = findRelatedInstallations(inst, allManaged).map(r => ({
+      const crossFramework = findRelatedInstallations(inst, allInstallations).map(r => ({
         assistant: r.installation.assistant,
         scope: r.installation.scope,
         strategy: r.strategy
       }));
 
-      const origin = inst.sourceId ? `${inst.sourceId}${inst.sourceRevision?.commit ? '@' + inst.sourceRevision.commit : ''}` : 'local, no known origin';
+      const origin = computeItemOrigin('managed', inst);
+      let assistantIconUri: string | undefined;
+      try {
+        assistantIconUri = this._panel.webview.asWebviewUri(getAssistantIconPath(inst.assistant, this._extensionUri).light).toString();
+      } catch {
+        // ignore
+      }
 
       this._panel.webview.postMessage({
         command: 'itemDetail',
@@ -533,22 +638,55 @@ export class DashboardPanel {
         candidates: [],
         item: inst,
         membership: 'managed',
-        status: report ? report.status : 'up-to-date'
+        status: report ? report.status : 'up-to-date',
+        assistantIconUri
       });
       return;
     }
 
     const obs = allObserved.find(o => getIdentityKey(o) === key);
     if (obs) {
+      const targetAsInst: ManagedInstallation = {
+        assistant: obs.assistant,
+        scope: obs.scope,
+        projectPath: obs.projectPath,
+        kind: obs.kind,
+        name: obs.name,
+        path: obs.path,
+        sourceId: obs.match?.sourceId,
+        packageId: obs.match?.packageId,
+        artifactId: obs.match?.artifactId,
+        sourceRevision: obs.match?.sourceRevision,
+        installedAt: obs.discoveredAt,
+        contentHash: obs.contentHash,
+      };
+
+      const crossFramework = findRelatedInstallations(targetAsInst, allInstallations).map(r => ({
+        assistant: r.installation.assistant,
+        scope: r.installation.scope,
+        strategy: r.strategy
+      }));
+
+      const origin = computeItemOrigin('unmanaged', obs, obs.candidates);
+      const diffAvailable = Boolean(obs.match?.status === 'different' || (obs.candidates && obs.candidates.some(c => c.status === 'different')));
+      let assistantIconUri: string | undefined;
+      try {
+        assistantIconUri = this._panel.webview.asWebviewUri(getAssistantIconPath(obs.assistant, this._extensionUri).light).toString();
+      } catch {
+        // ignore
+      }
+
       this._panel.webview.postMessage({
         command: 'itemDetail',
         key,
-        origin: 'local, no known origin',
-        diffAvailable: obs.match?.status === 'different',
-        crossFramework: [],
+        origin,
+        diffAvailable,
+        crossFramework,
         candidates: obs.candidates ?? [],
         item: obs,
-        membership: 'unmanaged'
+        membership: 'unmanaged',
+        status: obs.match?.status ?? 'unmatched',
+        assistantIconUri
       });
       return;
     }
@@ -1212,13 +1350,29 @@ export class DashboardPanel {
   </table>
 
   <div id="detailPanel">
-    <h3 id="detailTitle">Item Details</h3>
+    <div class="detail-header">
+      <div class="detail-header-title-row">
+        <span id="detailKind" class="kind-pill"></span>
+        <h3 id="detailTitle">Item Details</h3>
+      </div>
+      <div class="detail-header-meta">
+        <span id="detailAssistant" class="detail-meta-item"></span>
+        <span id="detailScope" class="detail-meta-item"></span>
+      </div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-title">Status</div>
+      <div id="detailStatus"></div>
+    </div>
     <div class="detail-section">
       <div class="detail-section-title">Origin</div>
       <div id="detailOrigin"></div>
     </div>
-    <div class="detail-section" id="diffSection" style="display: none;">
-      <button class="btn btn-sm btn-secondary" title="Diff vs. original" onclick="diffItem()">⇄</button>
+    <div class="detail-section" id="locationSection">
+      <div class="detail-section-title">Location</div>
+      <div id="detailLocationContainer">
+        <a href="#" id="detailLocation" class="detail-path-link" title="Click to preview file"></a>
+      </div>
     </div>
     <div class="detail-section" id="crossFrameworkSection" style="display: none;">
       <div class="detail-section-title">Installed also in</div>
@@ -1595,10 +1749,33 @@ export class DashboardPanel {
       border-radius: 6px;
       display: none;
     }
-    #detailPanel h3 {
-      margin: 0 0 12px 0;
-      font-size: 14px;
+    .detail-header {
+      margin-bottom: 14px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .detail-header-title-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .detail-header-title-row h3 {
+      margin: 0;
+      font-size: 15px;
       font-weight: 600;
+    }
+    .detail-header-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 12px;
+      opacity: 0.9;
+    }
+    .detail-meta-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
     }
     .detail-section {
       margin-bottom: 12px;
@@ -1610,6 +1787,23 @@ export class DashboardPanel {
       opacity: 0.8;
       font-size: 11px;
       text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    #detailOrigin {
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.4;
+    }
+    .detail-path-link {
+      color: var(--link-fg, #58a6ff);
+      text-decoration: none;
+      font-family: var(--vscode-editor-font-family, monospace);
+      font-size: 11px;
+      word-break: break-all;
+      cursor: pointer;
+    }
+    .detail-path-link:hover {
+      text-decoration: underline;
     }
     .cross-framework-list {
       margin: 0;
@@ -1632,10 +1826,28 @@ export class DashboardPanel {
     }
     .detail-actions {
       display: flex;
+      flex-wrap: wrap;
+      align-items: center;
       gap: 8px;
       margin-top: 16px;
       padding-top: 12px;
       border-top: 1px solid var(--border);
+    }
+    .action-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .action-group-destructive {
+      margin-left: auto;
+    }
+    .btn-destructive {
+      color: var(--badge-error) !important;
+      border-color: rgba(207, 34, 46, 0.3) !important;
+    }
+    .btn .btn-icon {
+      margin-right: 4px;
     }
   
     .section-tab-btn.active {
@@ -1757,16 +1969,91 @@ export class DashboardPanel {
     let selectedItemKey = null;
     let detailItemData = null;
 
+    function getScopeLabelClient(scope) {
+      return scope === 'project' ? 'Workspace' : 'Global';
+    }
+
+    function getScopeIconSvgClient(scope) {
+      if (scope === 'project') {
+        return '<svg class="scope-icon" width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="vertical-align: middle; margin-right: 4px;" aria-hidden="true"><path d="M1.75 2.5h3.69l1.56 1.5h7.25c.97 0 1.75.78 1.75 1.75v6.5c0 .97-.78 1.75-1.75 1.75H1.75C.78 14 0 13.22 0 12.25v-8c0-.97.78-1.75 1.75-1.75z"/></svg>';
+      }
+      return '<svg class="scope-icon" width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="vertical-align: middle; margin-right: 4px;" aria-hidden="true"><path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zM1.5 8a6.5 6.5 0 0 1 1.05-3.53l2.84 2.84A4.5 4.5 0 0 0 5.3 8H1.5zm6.5-6.5c.87 0 1.7.17 2.46.48l-1.92 1.92a4.49 4.49 0 0 0-1.04-.4A6.5 6.5 0 0 1 8 1.5zm0 13c-.87 0-1.7-.17-2.46-.48l1.92-1.92c.34.05.69.08 1.04.08.35 0 .7-.03 1.04-.08l1.92 1.92A6.5 6.5 0 0 1 8 14.5z"/></svg>';
+    }
+
+    function computeItemOriginClient(membership, item, candidates) {
+      if (membership === 'managed') {
+        if (!item || !item.sourceId) return 'Local only: not found in any registered source';
+        const commit = item.sourceRevision && item.sourceRevision.commit;
+        const shortCommit = commit ? (commit.length > 7 ? commit.slice(0, 7) : commit) : '';
+        return item.sourceId + (shortCommit ? '@' + shortCommit : '');
+      }
+      const cands = (candidates && candidates.length > 0)
+        ? candidates
+        : (item && item.candidates && item.candidates.length > 0)
+          ? item.candidates
+          : (item && item.match && item.match.status !== 'unmatched' && item.match.sourceId)
+            ? [item.match]
+            : [];
+      if (cands.length === 0) {
+        return 'Local only: not found in any registered source';
+      }
+      return cands.map(function(c) {
+        const src = c.sourceId || 'unknown';
+        if (c.status === 'identical') {
+          return 'Matches registered source "' + src + '" — identical';
+        } else if (c.status === 'different') {
+          return 'Matches registered source "' + src + '" — differs (your copy was changed or is a different version)';
+        } else {
+          return 'Matches registered source "' + src + '"';
+        }
+      }).join('\\n');
+    }
+
     function selectRow(rowEl, key) {
       document.querySelectorAll('.item-row').forEach(r => r.classList.remove('selected'));
       rowEl.classList.add('selected');
       selectedItemKey = key;
       document.getElementById('detailPanel').style.display = 'block';
+
+      const name = rowEl.getAttribute('data-name') || '';
+      const kind = rowEl.getAttribute('data-kind') || '';
+      const asst = rowEl.getAttribute('data-assistant') || '';
+      const scope = rowEl.getAttribute('data-scope') || '';
+
+      const kindEl = document.getElementById('detailKind');
+      if (kindEl) {
+        kindEl.textContent = kind;
+        kindEl.className = kind ? 'kind-pill kind-' + kind : 'kind-pill';
+      }
+      const titleEl = document.getElementById('detailTitle');
+      if (titleEl) {
+        titleEl.textContent = name || 'Item Details';
+      }
+      const asstEl = document.getElementById('detailAssistant');
+      if (asstEl) {
+        asstEl.innerHTML = asst ? '<span>' + escapeHtmlClient(asst) + '</span>' : '';
+      }
+      const scopeEl = document.getElementById('detailScope');
+      if (scopeEl) {
+        if (scope) {
+          const scopeLabel = getScopeLabelClient(scope);
+          const scopeIcon = getScopeIconSvgClient(scope);
+          scopeEl.innerHTML = scopeIcon + '<span class="scope-label">' + escapeHtmlClient(scopeLabel) + '</span>';
+        } else {
+          scopeEl.innerHTML = '';
+        }
+      }
+
       document.getElementById('detailOrigin').innerHTML = '<div class="spinner"></div> Loading...';
-      document.getElementById('diffSection').style.display = 'none';
+      const statusEl = document.getElementById('detailStatus');
+      if (statusEl) statusEl.innerHTML = '<span class="badge badge-pending">Loading…</span>';
+      const locEl = document.getElementById('detailLocation');
+      if (locEl) {
+        locEl.textContent = '';
+        locEl.onclick = null;
+      }
       document.getElementById('crossFrameworkSection').style.display = 'none';
       document.getElementById('detailActions').innerHTML = '';
-      document.getElementById('detailTitle').textContent = rowEl.getAttribute('data-name') + ' (' + rowEl.getAttribute('data-kind') + ')';
       
       vscode.postMessage({ command: 'requestDetail', key: key });
     }
@@ -1785,10 +2072,22 @@ export class DashboardPanel {
       if (row) selectRow(row, key);
     }
 
-    function diffItem() {
-      if (detailItemData) {
+    function detailPreviewItem() {
+      if (selectedItemKey) {
+        vscode.postMessage({ command: 'previewInstalledArtifact', key: selectedItemKey });
+      }
+    }
+
+    function detailDiffItem() {
+      if (selectedItemKey) {
+        vscode.postMessage({ command: 'diffInstalledArtifact', key: selectedItemKey });
+      } else if (detailItemData) {
         vscode.postMessage({ command: 'diffItem', item: detailItemData });
       }
+    }
+
+    function diffItem() {
+      detailDiffItem();
     }
 
     function detailEditItem() {
@@ -2156,47 +2455,155 @@ export class DashboardPanel {
           catalogDiv.setAttribute('data-loaded', 'true');
         }
       } else if (msg.command === 'itemDetail') {
-        if (msg.key !== selectedItemKey) return;
-        
+        if (selectedItemKey && msg.key !== selectedItemKey) return;
+        selectedItemKey = msg.key;
         detailItemData = msg.item;
-        document.getElementById('detailOrigin').textContent = msg.origin;
         
-        if (msg.diffAvailable) {
-          document.getElementById('diffSection').style.display = 'block';
-        } else {
-          document.getElementById('diffSection').style.display = 'none';
+        // 1. Header
+        const kindEl = document.getElementById('detailKind');
+        if (kindEl) {
+          kindEl.textContent = (msg.item && msg.item.kind) || '';
+          kindEl.className = (msg.item && msg.item.kind) ? 'kind-pill kind-' + msg.item.kind : 'kind-pill';
         }
-        
+        const titleEl = document.getElementById('detailTitle');
+        if (titleEl) {
+          titleEl.textContent = (msg.item && msg.item.name) || '';
+        }
+        const asstEl = document.getElementById('detailAssistant');
+        if (asstEl) {
+          const asstName = (msg.item && msg.item.assistant) || '';
+          const iconImg = msg.assistantIconUri
+            ? '<img src="' + escapeHtmlClient(msg.assistantIconUri) + '" class="assistant-icon" width="14" height="14" style="vertical-align: middle; margin-right: 4px;" />'
+            : '';
+          asstEl.innerHTML = iconImg + '<span>' + escapeHtmlClient(asstName) + '</span>';
+        }
+        const scopeEl = document.getElementById('detailScope');
+        if (scopeEl && msg.item) {
+          const scopeLabel = getScopeLabelClient(msg.item.scope);
+          const scopeIcon = getScopeIconSvgClient(msg.item.scope);
+          scopeEl.innerHTML = scopeIcon + '<span class="scope-label">' + escapeHtmlClient(scopeLabel) + '</span>';
+        }
+
+        // 2. Status line
+        let badgeClass = 'badge-unmanaged';
+        let badgeText = '◌ Unmanaged · local only';
+
+        if (msg.membership === 'managed') {
+          if (msg.status === 'up-to-date') {
+            badgeClass = 'badge-success';
+            badgeText = '● Managed · up to date';
+          } else if (msg.status === 'update-available') {
+            badgeClass = 'badge-info';
+            badgeText = '● Managed · update available';
+          } else if (msg.status === 'modified-locally') {
+            badgeClass = 'badge-warning';
+            badgeText = '● Managed · modified locally';
+          } else if (msg.status === 'modified-and-update-available') {
+            badgeClass = 'badge-warning';
+            badgeText = '● Managed · modified locally & update available';
+          } else if (msg.status === 'missing-on-disk') {
+            badgeClass = 'badge-error';
+            badgeText = '● Managed · missing on disk';
+          } else {
+            badgeClass = 'badge-error';
+            badgeText = '● Managed · ' + msg.status;
+          }
+        } else {
+          // unmanaged
+          const match = (msg.item && msg.item.match) || (msg.candidates && msg.candidates[0]);
+          if (match && match.status === 'identical') {
+            badgeClass = 'badge-success';
+            badgeText = '◌ Unmanaged · identical to ' + (match.sourceId || '');
+          } else if (match && match.status === 'different') {
+            badgeClass = 'badge-warning';
+            badgeText = '◌ Unmanaged · differs from ' + (match.sourceId || '');
+          } else {
+            badgeClass = 'badge-unmanaged';
+            badgeText = '◌ Unmanaged · local only';
+          }
+        }
+
+        const statusEl = document.getElementById('detailStatus');
+        if (statusEl) {
+          statusEl.innerHTML = '<span class="badge ' + badgeClass + '">' + escapeHtmlClient(badgeText) + '</span>';
+        }
+
+        // 3. Origin
+        const originText = msg.origin || computeItemOriginClient(msg.membership, msg.item, msg.candidates);
+        const originEl = document.getElementById('detailOrigin');
+        if (originEl) {
+          originEl.textContent = originText;
+        }
+
+        // 4. Location
+        const locEl = document.getElementById('detailLocation');
+        if (locEl) {
+          const itemPath = (msg.item && msg.item.path) || '';
+          locEl.textContent = itemPath;
+          locEl.title = itemPath ? 'Click to preview ' + itemPath : '';
+          locEl.onclick = function(e) {
+            if (e && e.preventDefault) e.preventDefault();
+            detailPreviewItem();
+            return false;
+          };
+        }
+
+        // 6. Cross-framework list
         const cfList = document.getElementById('crossFrameworkList');
         if (msg.crossFramework && msg.crossFramework.length > 0) {
-          cfList.innerHTML = msg.crossFramework.map(cf => {
+          cfList.innerHTML = msg.crossFramework.map(function(cf) {
+            const scopeLabel = getScopeLabelClient(cf.scope);
             if (cf.strategy === 'name-fallback') {
-              return '<li class="cross-framework-item fallback" title="Probable match based on name only">? ' + escapeHtmlClient(cf.assistant) + ' (' + escapeHtmlClient(cf.scope) + ')</li>';
+              return '<li class="cross-framework-item fallback" title="Probable match based on name only">? ' + escapeHtmlClient(cf.assistant) + ' (' + escapeHtmlClient(scopeLabel) + ')</li>';
             }
-            return '<li class="cross-framework-item">✓ ' + escapeHtmlClient(cf.assistant) + ' (' + escapeHtmlClient(cf.scope) + ')</li>';
+            return '<li class="cross-framework-item">✓ ' + escapeHtmlClient(cf.assistant) + ' (' + escapeHtmlClient(scopeLabel) + ')</li>';
           }).join('');
           document.getElementById('crossFrameworkSection').style.display = 'block';
         } else {
           document.getElementById('crossFrameworkSection').style.display = 'none';
         }
 
-        const actions = [];
+        // 5. One Action Bar
+        const primaryActions = [];
+        const secondaryActions = [];
+        const destructiveActions = [];
+
         if (msg.membership === 'unmanaged') {
           if (msg.candidates && msg.candidates.length > 0) {
-            actions.push('<button class="btn btn-sm btn-primary" title="Promote" onclick="detailPromoteItem()">⇧</button>');
+            primaryActions.push('<button class="btn btn-sm btn-primary" title="Promote" onclick="detailPromoteItem()"><span class="btn-icon">⇧</span> Promote</button>');
+          }
+          secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Preview" onclick="detailPreviewItem()"><span class="btn-icon">👁</span> Preview</button>');
+          if (msg.diffAvailable) {
+            secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Diff vs. original" onclick="detailDiffItem()"><span class="btn-icon">⇄</span> Diff</button>');
           }
         } else {
-          actions.push('<button class="btn btn-sm btn-secondary" title="Copy to..." onclick="detailCopyItem()">⧉</button>');
-          if (['skill', 'agent', 'command', 'mcp-server'].includes(msg.item.kind)) {
-            actions.push('<button class="btn btn-sm btn-secondary" title="Move to..." onclick="detailMoveItem()">⇥</button>');
-          }
-          actions.push('<button class="btn btn-sm btn-secondary" title="Edit" onclick="detailEditItem()">✎</button>');
+          // managed
           if (msg.status === 'update-available' || msg.status === 'modified-and-update-available') {
-            actions.push('<button class="btn btn-sm btn-primary" title="Update to latest" onclick="detailUpdateItem()">⟳</button>');
+            primaryActions.push('<button class="btn btn-sm btn-primary" title="Update to latest" onclick="detailUpdateItem()"><span class="btn-icon">⟳</span> Update</button>');
           }
-          actions.push('<button class="btn btn-sm btn-secondary" title="Uninstall" style="color: var(--badge-error); border-color: rgba(207, 34, 46, 0.3);" onclick="detailUninstallItem()">🗑</button>');
+          secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Preview" onclick="detailPreviewItem()"><span class="btn-icon">👁</span> Preview</button>');
+          if (msg.diffAvailable) {
+            secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Diff vs. original" onclick="detailDiffItem()"><span class="btn-icon">⇄</span> Diff</button>');
+          }
+          secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Copy to..." onclick="detailCopyItem()"><span class="btn-icon">⧉</span> Copy</button>');
+          if (msg.item && ['skill', 'agent', 'command', 'mcp-server'].includes(msg.item.kind)) {
+            secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Move to..." onclick="detailMoveItem()"><span class="btn-icon">⇥</span> Move</button>');
+          }
+          secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Edit" onclick="detailEditItem()"><span class="btn-icon">✎</span> Edit</button>');
+          destructiveActions.push('<button class="btn btn-sm btn-secondary btn-destructive" title="Uninstall" onclick="detailUninstallItem()"><span class="btn-icon">🗑</span> Uninstall</button>');
         }
-        document.getElementById('detailActions').innerHTML = actions.join('');
+
+        const groups = [];
+        if (primaryActions.length > 0) {
+          groups.push('<div class="action-group action-group-primary">' + primaryActions.join('') + '</div>');
+        }
+        if (secondaryActions.length > 0) {
+          groups.push('<div class="action-group action-group-secondary">' + secondaryActions.join('') + '</div>');
+        }
+        if (destructiveActions.length > 0) {
+          groups.push('<div class="action-group action-group-destructive">' + destructiveActions.join('') + '</div>');
+        }
+        document.getElementById('detailActions').innerHTML = groups.join('');
       } else if (msg.command === 'clearDetail') {
         document.getElementById('detailPanel').style.display = 'none';
         selectedItemKey = null;
