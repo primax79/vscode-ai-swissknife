@@ -34,4 +34,5 @@
 | [44.2](44.2-workspace-trust.md) | Workspace Trust: spike, then declare `limited` and skip project sources when untrusted | - | S | P2 |
 | [44.3](44.3-kilo-mcp-config-path.md) | Kilo MCP config: verify the real target with Kilo, then write to the real `mcp` field (JSONC-safe) | - | M | P1 |
 | [44.4](44.4-frontmatter-block-scalars.md) | Frontmatter block scalars (`>`, `|`) and multi-line values | - | S | P2 |
+| [44.6](44.6-kilo-jsonc-preserve-neighbors.md) | Kilo config edits keep neighbours and their comments untouched (follow-up of 44.3) | 44.3 | S | P3 |
 | [44.5](44.5-sidebar-source-loading.md) | Sidebar: per-source loading state while sources resolve | 38.1 | S | P3 |
