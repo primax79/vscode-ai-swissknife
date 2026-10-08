@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import type { AssistantId } from '../domain/types';
+import type { AssistantId, ItemKind } from '../domain/types';
 import type {
   Adapter,
   CanonicalRule,
@@ -11,6 +11,7 @@ import type {
   CanonicalMcpServer,
   CanonicalHook,
   LocationRef,
+  DisableSupport,
 } from './types';
 import { readSkill as codecReadSkill, writeSkill as codecWriteSkill } from './codec';
 import { parseClaudeCommandMarkdown, serializeClaudeCommandMarkdown } from './claude';
@@ -19,6 +20,11 @@ export class CodexAdapter implements Adapter {
   readonly assistant: AssistantId = 'codex-cli';
   readonly displayName: string = 'Codex CLI';
   readonly iconId: string = 'ai-swissknife-codex-cli';
+  readonly disableSupport: DisableSupport = 'unsupported';
+
+  getDisabledPath(_kind: ItemKind, _name: string, _loc: LocationRef): string | undefined {
+    return undefined;
+  }
 
   constructor(private readonly getHomedir: () => string = os.homedir) {}
 

@@ -17,6 +17,8 @@ import {
   canonicalRuleHash,
   readSkill,
 } from '../adapters/codec';
+import { parseClaudeAgentMarkdown, parseClaudeCommandMarkdown } from '../adapters/claude';
+import { parseKiloAgentMarkdown, parseKiloCommandMarkdown } from '../adapters/kilo';
 import { getAdapter, getAdapterWithHomeRoot } from '../adapters/registry';
 import { getSourceResolver } from '../sources/registry';
 import { resolveAndTranslate } from './plan';
@@ -82,7 +84,31 @@ export async function analyzeLocalDrift(
       };
     }
   } else if (installation.kind === 'agent') {
-    const agent = await adapter.readAgent(installation.name, loc);
+    let agent: CanonicalAgent | null = null;
+    if (installation.disabled) {
+      if (!fs.existsSync(installation.path)) {
+        return {
+          installation,
+          status: 'missing-on-disk',
+          details: `Agent file not found at ${installation.path}`,
+        };
+      }
+      try {
+        const content = await fs.promises.readFile(installation.path, 'utf-8');
+        agent =
+          installation.assistant === 'kilo-code'
+            ? parseKiloAgentMarkdown(content)
+            : parseClaudeAgentMarkdown(content);
+      } catch {
+        return {
+          installation,
+          status: 'missing-on-disk',
+          details: `Failed to read agent at ${installation.path}`,
+        };
+      }
+    } else {
+      agent = await adapter.readAgent(installation.name, loc);
+    }
     if (!agent) {
       return {
         installation,
@@ -92,7 +118,31 @@ export async function analyzeLocalDrift(
     }
     diskHash = canonicalAgentHash(agent);
   } else if (installation.kind === 'command') {
-    const cmd = await adapter.readCommand(installation.name, loc);
+    let cmd: CanonicalCommand | null = null;
+    if (installation.disabled) {
+      if (!fs.existsSync(installation.path)) {
+        return {
+          installation,
+          status: 'missing-on-disk',
+          details: `Command file not found at ${installation.path}`,
+        };
+      }
+      try {
+        const content = await fs.promises.readFile(installation.path, 'utf-8');
+        cmd =
+          installation.assistant === 'kilo-code'
+            ? parseKiloCommandMarkdown(content, installation.name)
+            : parseClaudeCommandMarkdown(content, installation.name);
+      } catch {
+        return {
+          installation,
+          status: 'missing-on-disk',
+          details: `Failed to read command at ${installation.path}`,
+        };
+      }
+    } else {
+      cmd = await adapter.readCommand(installation.name, loc);
+    }
     if (!cmd) {
       return {
         installation,
