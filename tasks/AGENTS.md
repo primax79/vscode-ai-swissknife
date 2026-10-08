@@ -62,3 +62,14 @@ and `CONTEXT.md` (global facts) — not the whole `tasks/` tree. Use
 `isolation='worktree'` for anything beyond a trivial single-file edit.
 After the report, verify against that task's own Verification section
 specifically, then update `00-INDEX.md`.
+
+## Emergent tasks
+
+Short copy of the `macroplan-authoring` skill, section "Emergent tasks" (common-tools >= 0.2.1). These are `T###` tasks that appear mid-session, beside the `NN.T` tasks of the initiatives.
+
+- **Capture first, then continue**: write the task file at once; do not keep it only in the session.
+- **Ids** `T###`, unique including `done/`; reserve by creating the file. Layout `tasks/<category>/T###-<slug>.md`, or a folder with README/CONTEXT/PROGRESS when there is context. Each category has a `README.md` and `notes/`.
+- **Header** (one `key: value` per line): `id`, `title`, `category`, `priority` (P0-P3) with `priority-reason`, `next-up`, `state`, `executor`, `depends-on`, `decider`, `sources`, `paths`, `handoff`.
+- **States**: open, in progress, waiting, blocked, delivered, verified, done, dropped. Only someone other than the executor sets `verified`.
+- **Registry**: `00-INDEX.md` sections Next up (<= 5), Tasks by category, Decisions waiting, Done are the state; update them with every change.
+- Finished tasks move with `git mv` to `tasks/done/<category>/`.

@@ -174,6 +174,27 @@ hands-on testing round.
 | 34       | 34  | [Dashboard: Recommendations + Installed action parity](34-dashboard-recommendations-parity/plan.md) | ✅ done (34.1-34.3 merged)   | 31, 32                 | M    |
 | 35       | 35  | [Dashboard: hands-on testing fixes](35-dashboard-hands-on-fixes/plan.md)                   | ✅ done (35.1-35.5 merged)             | 31, 32, 33, 34         | M    |
 
+## Next up
+
+Emergent tasks (`T###`) sit beside the initiatives; see [`AGENTS.md`](AGENTS.md), "Emergent tasks". None open today: all initiatives are done and the next work is expected from a hands-on testing round.
+
+| Id | Priority | Task | Executor | Handoff |
+| --- | --- | --- | --- | --- |
+
+## Tasks by category
+
+No emergent tasks yet. Add a category folder (`tasks/<category>/` with a `README.md` and `notes/`) with the first task.
+
+## Decisions waiting
+
+| Task | Question (exact) | Decider | Blocks |
+| --- | --- | --- | --- |
+
+## Done
+
+| Id | Task | Closed |
+| --- | --- | --- |
+
 ## Specs
 
 | Spec                                                         | Drives                     |
