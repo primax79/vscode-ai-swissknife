@@ -204,7 +204,7 @@ import { ArtifactFileItem } from './artifactFileTree';
 import { InstalledTreeDataProvider, ScopeGroupItem as InstalledScopeGroupItem, InstalledInstallationItem, KindGroupItem } from './installedView';
 import { getAssistantIconPath } from './assistantIcons';
 import { setupFileWatchers } from './watchers';
-import { DashboardPanel } from './dashboard';
+import { DashboardPanel, computeItemOrigin, getScopeLabel } from './dashboard';
 import { FormEditorPanel } from './formEditor';
 import { handleRecommendForWorkspace, handleUnrecommendForWorkspace } from '../extension';
 import { RecommendedGroupItem, RecommendedBrokenItem } from './availableView';
@@ -1863,6 +1863,310 @@ describe('UI TreeDataProviders', () => {
       assert.strictEqual(elements.observedTableBody.innerHTML, observedRowsHtml);
       assert.ok(!elements.unifiedTable.innerHTML.includes('[object Object]'));
       assert.ok(!elements.observedTableBody.innerHTML.includes('[object Object]'));
+
+      panel.dispose();
+    });
+
+    it('computeItemOrigin and getScopeLabel compute expected values', () => {
+      assert.strictEqual(getScopeLabel('project'), 'Workspace');
+      assert.strictEqual(getScopeLabel('global'), 'Global');
+
+      const unmanagedDiff = computeItemOrigin('unmanaged', {
+        assistant: 'claude-code',
+        scope: 'project',
+        kind: 'skill',
+        name: 'test-skill',
+        path: '/test/path',
+        discoveredAt: '2026-10-08T00:00:00.000Z',
+        candidates: [{
+          status: 'different',
+          sourceId: 'gcube-ai-toolkit',
+          details: 'Differs from source'
+        }]
+      });
+      assert.ok(unmanagedDiff.includes('gcube-ai-toolkit'));
+      assert.ok(unmanagedDiff.includes('differs'));
+      assert.ok(!unmanagedDiff.includes('no known origin'));
+
+      const unmanagedLocal = computeItemOrigin('unmanaged', {
+        assistant: 'claude-code',
+        scope: 'project',
+        kind: 'skill',
+        name: 'test-skill',
+        path: '/test/path',
+        discoveredAt: '2026-10-08T00:00:00.000Z',
+        candidates: []
+      });
+      assert.ok(unmanagedLocal.includes('Local only'));
+      assert.ok(!unmanagedLocal.includes('no known origin'));
+
+      const managedOrigin = computeItemOrigin('managed', {
+        assistant: 'claude-code',
+        scope: 'project',
+        kind: 'skill',
+        name: 'test-skill',
+        path: '/test/path',
+        sourceId: 'my-source',
+        sourceRevision: { commit: 'abcdef1234567890' },
+        installedAt: '2026-10-08T00:00:00.000Z'
+      });
+      assert.strictEqual(managedOrigin, 'my-source@abcdef1');
+    });
+
+    it('detail panel HTML has no #diffSection and includes structured detail layout', () => {
+      const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any, {} as any, {} as any, {} as any, () => {});
+      assert.ok(panel);
+      const html = panel.getHtml([], [], [], []);
+
+      assert.ok(html.includes('id="detailPanel"'));
+      assert.ok(!html.includes('id="diffSection"'), '#diffSection must be removed');
+      assert.ok(html.includes('id="detailKind"'));
+      assert.ok(html.includes('id="detailTitle"'));
+      assert.ok(html.includes('id="detailAssistant"'));
+      assert.ok(html.includes('id="detailScope"'));
+      assert.ok(html.includes('id="detailStatus"'));
+      assert.ok(html.includes('id="detailOrigin"'));
+      assert.ok(html.includes('id="detailLocation"'));
+      assert.ok(html.includes('id="detailActions"'));
+      assert.ok(html.includes('id="crossFrameworkList"'));
+
+      panel.dispose();
+    });
+
+    function setupDashboardSandbox() {
+      const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any, {} as any, {} as any, {} as any, () => {});
+      assert.ok(panel);
+
+      const html = panel.getHtml([], [], [], []);
+      const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
+      assert.ok(scriptMatch, 'script tag must be present in dashboard HTML');
+
+      const elements: Record<string, any> = {
+        managedDataJson: { textContent: '[]' },
+        observedDataJson: { textContent: '[]' },
+        sourceFilterJson: { textContent: 'null' },
+        unifiedTable: { innerHTML: '' },
+        observedTableBody: { innerHTML: '' },
+        detailPanel: { style: { display: '' } },
+        detailKind: { textContent: '', className: '' },
+        detailTitle: { textContent: '' },
+        detailAssistant: { innerHTML: '' },
+        detailScope: { innerHTML: '' },
+        detailStatus: { innerHTML: '' },
+        detailOrigin: { textContent: '' },
+        detailLocation: { textContent: '', title: '', onclick: null },
+        crossFrameworkSection: { style: { display: '' } },
+        crossFrameworkList: { innerHTML: '' },
+        detailActions: { innerHTML: '' },
+      };
+
+      const getEl = (id: string) => {
+        if (!elements[id]) {
+          elements[id] = { innerHTML: '', textContent: '', style: {}, setAttribute: () => {}, getAttribute: () => null };
+        }
+        return elements[id];
+      };
+
+      let messageListener: ((event: any) => void) | undefined;
+      const mockWindow = {
+        addEventListener: (event: string, handler: (e: any) => void) => {
+          if (event === 'message') messageListener = handler;
+        },
+      };
+
+      const mockDocument = {
+        getElementById: (id: string) => getEl(id),
+        querySelector: () => null,
+        querySelectorAll: () => [],
+        createElement: () => ({ className: '', id: '', innerHTML: '', style: {} }),
+      };
+
+      const postedMessages: any[] = [];
+      const sandbox: any = {
+        window: mockWindow,
+        document: mockDocument,
+        acquireVsCodeApi: () => ({
+          postMessage: (msg: any) => { postedMessages.push(msg); }
+        }),
+        console,
+        JSON,
+        Array,
+      };
+
+      vm.createContext(sandbox);
+      vm.runInContext(scriptMatch[1], sandbox);
+      assert.ok(messageListener, 'message listener must be registered');
+
+      return {
+        panel,
+        html,
+        elements,
+        postedMessages,
+        postMessage: (data: any) => messageListener!({ data }),
+      };
+    }
+
+    it('detail panel handles unmanaged item with different candidate: origin names source and differs, location click posts preview, diff and promote in action bar', () => {
+      const { panel, elements, postedMessages, postMessage } = setupDashboardSandbox();
+
+      const unmanagedItem = {
+        assistant: 'claude-code',
+        scope: 'project',
+        kind: 'skill',
+        name: 'gcube-sg4-test-migration',
+        path: '/workspace/.claude/skills/gcube-sg4-test-migration',
+        discoveredAt: '2026-10-08T00:00:00.000Z',
+        candidates: [{
+          status: 'different',
+          sourceId: 'gcube-ai-toolkit',
+          details: 'Differs from source gcube-ai-toolkit'
+        }],
+        match: {
+          status: 'different',
+          sourceId: 'gcube-ai-toolkit',
+          details: 'Differs from source gcube-ai-toolkit'
+        }
+      };
+      const unmanagedKey = 'claude-code:project:skill::gcube-sg4-test-migration';
+
+      postMessage({
+        command: 'itemDetail',
+        key: unmanagedKey,
+        origin: computeItemOrigin('unmanaged', unmanagedItem as any, unmanagedItem.candidates as any),
+        diffAvailable: true,
+        crossFramework: [{ assistant: 'kilo-code', scope: 'project', strategy: 'provenance' }],
+        candidates: unmanagedItem.candidates,
+        item: unmanagedItem,
+        membership: 'unmanaged',
+        status: 'different',
+        assistantIconUri: 'vscode-resource:/test/claude.svg'
+      });
+
+      // Origin text names the source and says it differs, never "no known origin"
+      assert.ok(elements.detailOrigin.textContent.includes('gcube-ai-toolkit'), 'origin must name source');
+      assert.ok(elements.detailOrigin.textContent.includes('differs'), 'origin must say differs');
+      assert.ok(!elements.detailOrigin.textContent.includes('no known origin'), 'origin must never say no known origin');
+
+      // Header checks
+      assert.strictEqual(elements.detailKind.textContent, 'skill');
+      assert.strictEqual(elements.detailTitle.textContent, 'gcube-sg4-test-migration');
+      assert.ok(elements.detailAssistant.innerHTML.includes('claude-code'));
+      assert.ok(elements.detailScope.innerHTML.includes('Workspace'));
+
+      // Status in words
+      assert.ok(elements.detailStatus.innerHTML.includes('differs from gcube-ai-toolkit'));
+
+      // Location click posts preview message
+      assert.strictEqual(elements.detailLocation.textContent, unmanagedItem.path);
+      assert.ok(typeof elements.detailLocation.onclick === 'function');
+      elements.detailLocation.onclick({ preventDefault: () => {} });
+      const lastMsg = postedMessages[postedMessages.length - 1];
+      assert.strictEqual(lastMsg?.command, 'previewInstalledArtifact');
+      assert.strictEqual(lastMsg?.key, unmanagedKey);
+
+      // Cross-framework list computed and displays Workspace
+      assert.ok(elements.crossFrameworkList.innerHTML.includes('kilo-code'));
+      assert.ok(elements.crossFrameworkList.innerHTML.includes('Workspace'));
+
+      // Diff inside action bar with icon and text label
+      const actionHtml = elements.detailActions.innerHTML;
+      assert.ok(actionHtml.includes('Diff'), 'Diff must be in action bar');
+      assert.ok(actionHtml.includes('⇄'));
+      assert.ok(actionHtml.includes('Promote'));
+      assert.ok(actionHtml.includes('⇧'));
+      assert.ok(actionHtml.includes('Preview'));
+      assert.ok(actionHtml.includes('👁'));
+
+      // Every button carries icon and text label
+      const buttons = [...actionHtml.matchAll(/<button[^>]*>([\s\S]*?)<\/button>/g)];
+      assert.ok(buttons.length >= 3);
+      for (const btn of buttons) {
+        assert.ok(btn[1].includes('class="btn-icon"'), `Button must have icon: ${btn[1]}`);
+        const label = btn[1].replace(/<[^>]*>/g, '').trim();
+        assert.ok(label.length > 0, `Button must have text: ${btn[1]}`);
+      }
+
+      panel.dispose();
+    });
+
+    it('detail panel handles unmanaged item without candidate: renders Local only and excludes Diff', () => {
+      const { panel, elements, postMessage } = setupDashboardSandbox();
+
+      const localItem = {
+        assistant: 'claude-code',
+        scope: 'project',
+        kind: 'skill',
+        name: 'custom-skill',
+        path: '/workspace/.claude/skills/custom-skill',
+        discoveredAt: '2026-10-08T00:00:00.000Z',
+        candidates: []
+      };
+      const localKey = 'claude-code:project:skill::custom-skill';
+
+      postMessage({
+        command: 'itemDetail',
+        key: localKey,
+        origin: computeItemOrigin('unmanaged', localItem as any, []),
+        diffAvailable: false,
+        crossFramework: [],
+        candidates: [],
+        item: localItem,
+        membership: 'unmanaged',
+        status: 'unmatched',
+      });
+
+      assert.ok(elements.detailOrigin.textContent.includes('Local only'), 'must say Local only');
+      assert.ok(!elements.detailOrigin.textContent.includes('no known origin'), 'never say no known origin');
+      assert.ok(!elements.detailActions.innerHTML.includes('Diff'), 'Diff should not be rendered');
+      assert.ok(!elements.detailActions.innerHTML.includes('Promote'), 'Promote should not be rendered');
+      assert.ok(elements.detailActions.innerHTML.includes('Preview'), 'Preview should be rendered');
+
+      panel.dispose();
+    });
+
+    it('detail panel handles managed item with update available: Update is primary button with icon and text', () => {
+      const { panel, elements, postMessage } = setupDashboardSandbox();
+
+      const managedItem = {
+        assistant: 'kilo-code',
+        scope: 'project',
+        kind: 'skill',
+        name: 'managed-skill',
+        path: '/workspace/.kilo/skills/managed-skill',
+        sourceId: 'gcube-ai-toolkit',
+        sourceRevision: { commit: '1234567890abcdef' },
+        installedAt: '2026-10-08T00:00:00.000Z'
+      };
+      const managedKey = 'kilo-code:project:skill::managed-skill';
+
+      postMessage({
+        command: 'itemDetail',
+        key: managedKey,
+        origin: computeItemOrigin('managed', managedItem as any),
+        diffAvailable: false,
+        crossFramework: [],
+        candidates: [],
+        item: managedItem,
+        membership: 'managed',
+        status: 'update-available',
+      });
+
+      const actionHtml = elements.detailActions.innerHTML;
+      assert.ok(actionHtml.includes('btn-primary'), 'Update button must be primary');
+      assert.ok(actionHtml.includes('Update'));
+      assert.ok(actionHtml.includes('⟳'));
+      assert.ok(actionHtml.includes('Preview'));
+      assert.ok(actionHtml.includes('👁'));
+      assert.ok(actionHtml.includes('Uninstall'));
+      assert.ok(actionHtml.includes('🗑'));
+
+      const buttons = [...actionHtml.matchAll(/<button[^>]*>([\s\S]*?)<\/button>/g)];
+      assert.ok(buttons.length >= 4);
+      for (const btn of buttons) {
+        assert.ok(btn[1].includes('class="btn-icon"'), `Button must have icon: ${btn[1]}`);
+        const label = btn[1].replace(/<[^>]*>/g, '').trim();
+        assert.ok(label.length > 0, `Button must have text: ${btn[1]}`);
+      }
 
       panel.dispose();
     });
