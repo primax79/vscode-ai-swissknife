@@ -13,6 +13,126 @@ import type {
 } from './types';
 
 /**
+ * Helper to parse a scalar value that may be a block scalar (folded `>` or literal `|`)
+ * or a plain/quoted scalar continued across indented lines.
+ */
+function parseFrontmatterValue(
+  lines: string[],
+  startIndex: number,
+  initialRawValue: string
+): { value: string; nextIndex: number } {
+  const trimmedInit = initialRawValue.trim();
+  const blockScalarMatch = trimmedInit.match(/^([>|])([+-]?)(?:\s*#.*)?$/);
+
+  if (blockScalarMatch) {
+    const isFolded = blockScalarMatch[1] === '>';
+    const blockLines: string[] = [];
+    let k = startIndex + 1;
+
+    while (k < lines.length) {
+      const line = lines[k];
+      if (/^\s+\S/.test(line)) {
+        blockLines.push(line);
+        k++;
+      } else if (/^\s*$/.test(line)) {
+        let hasMoreIndented = false;
+        for (let ahead = k + 1; ahead < lines.length; ahead++) {
+          if (/^\s+\S/.test(lines[ahead])) {
+            hasMoreIndented = true;
+            break;
+          }
+          if (/^\S/.test(lines[ahead])) {
+            break;
+          }
+        }
+        if (hasMoreIndented) {
+          blockLines.push(line);
+          k++;
+        } else {
+          break;
+        }
+      } else {
+        break;
+      }
+    }
+
+    if (blockLines.length === 0) {
+      return { value: '', nextIndex: k - 1 };
+    }
+
+    let baseIndent = '';
+    for (const bl of blockLines) {
+      const m = bl.match(/^(\s+)/);
+      if (m) {
+        baseIndent = m[1];
+        break;
+      }
+    }
+
+    const strippedLines = blockLines.map((bl) => {
+      if (bl.trim() === '') return '';
+      if (baseIndent && bl.startsWith(baseIndent)) {
+        return bl.slice(baseIndent.length);
+      }
+      return bl.trimStart();
+    });
+
+    let resultVal = '';
+    if (isFolded) {
+      const paragraphs: string[] = [];
+      let current: string[] = [];
+      for (const l of strippedLines) {
+        if (l === '') {
+          if (current.length > 0) {
+            paragraphs.push(current.join(' '));
+            current = [];
+          }
+        } else {
+          current.push(l.trim());
+        }
+      }
+      if (current.length > 0) {
+        paragraphs.push(current.join(' '));
+      }
+      resultVal = paragraphs.join('\n').trim();
+    } else {
+      resultVal = strippedLines.join('\n').trim();
+    }
+
+    return { value: resultVal, nextIndex: k - 1 };
+  }
+
+  // Plain or quoted scalar: collect any immediately following indented lines
+  const parts: string[] = [];
+  if (trimmedInit) {
+    parts.push(trimmedInit);
+  }
+
+  let k = startIndex + 1;
+  while (k < lines.length) {
+    const line = lines[k];
+    if (/^\s+\S/.test(line)) {
+      parts.push(line.trim());
+      k++;
+    } else {
+      break;
+    }
+  }
+
+  let combined = parts.join(' ').trim();
+  if (
+    (combined.startsWith('"') && combined.endsWith('"')) ||
+    (combined.startsWith("'") && combined.endsWith("'"))
+  ) {
+    if (combined.length >= 2) {
+      combined = combined.slice(1, -1);
+    }
+  }
+
+  return { value: combined, nextIndex: k - 1 };
+}
+
+/**
  * Minimal, self-contained frontmatter parser to extract `name` and optional `description` from a markdown file.
  */
 export function extractSkillFrontmatter(content: string): { name?: string; description?: string } {
@@ -26,30 +146,29 @@ export function extractSkillFrontmatter(content: string): { name?: string; descr
   let description: string | undefined;
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    const nameMatch = line.match(/^name:\s*(.+)$/);
-    if (nameMatch && !name) {
-      let val = nameMatch[1].trim();
-      if (
-        (val.startsWith('"') && val.endsWith('"')) ||
-        (val.startsWith("'") && val.endsWith("'"))
-      ) {
-        val = val.slice(1, -1);
-      }
-      name = val;
+    const rawLine = lines[i];
+    if (/^\s*$/.test(rawLine) || /^\s*#/.test(rawLine) || /^\s/.test(rawLine)) {
+      continue;
     }
-    const descMatch = line.match(/^description:\s*(.*)$/);
-    if (descMatch && !description) {
-      let val = descMatch[1].trim();
-      if (
-        (val.startsWith('"') && val.endsWith('"')) ||
-        (val.startsWith("'") && val.endsWith("'"))
-      ) {
-        val = val.slice(1, -1);
+
+    const nameMatch = rawLine.match(/^name:\s*(.*)$/);
+    if (nameMatch) {
+      const parsed = parseFrontmatterValue(lines, i, nameMatch[1]);
+      if (!name && parsed.value) {
+        name = parsed.value;
       }
-      if (val) {
-        description = val;
+      i = parsed.nextIndex;
+      continue;
+    }
+
+    const descMatch = rawLine.match(/^description:\s*(.*)$/);
+    if (descMatch) {
+      const parsed = parseFrontmatterValue(lines, i, descMatch[1]);
+      if (!description && parsed.value) {
+        description = parsed.value;
       }
+      i = parsed.nextIndex;
+      continue;
     }
   }
 
