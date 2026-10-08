@@ -287,7 +287,7 @@ describe('UI TreeDataProviders', () => {
   });
 
   describe('SourcesTreeDataProvider', () => {
-    it('returns Global and Project scope group items at top level', async () => {
+    it('returns Global and Workspace scope group items at top level', async () => {
       const provider = new SourcesTreeDataProvider(
         new AvailableTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir)
       );
@@ -303,6 +303,10 @@ describe('UI TreeDataProviders', () => {
 
       const item0 = provider.getTreeItem(topLevel[0]);
       assert.strictEqual(item0.label, 'Global Sources');
+      assert.strictEqual((item0.iconPath as { id: string }).id, 'globe');
+      const item1 = provider.getTreeItem(topLevel[1]);
+      assert.strictEqual(item1.label, 'Workspace Sources');
+      assert.strictEqual((item1.iconPath as { id: string }).id, 'folder');
     });
 
     it('returns SourceItems for global sources from manifest', async () => {
@@ -2241,6 +2245,7 @@ describe('UI TreeDataProviders', () => {
       );
       const treeGroup = provider.getTreeItem(groupItem);
       assert.strictEqual(treeGroup.label, 'global');
+      assert.strictEqual((treeGroup.iconPath as { id: string }).id, 'globe');
       assert.strictEqual(treeGroup.description, '3 managed, 0 unmanaged');
 
       const treeInstAgent = provider.getTreeItem(new InstalledInstallationItem(inst2));

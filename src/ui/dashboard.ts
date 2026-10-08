@@ -13,16 +13,9 @@ import { findRelatedInstallations, groupByIdentityAndScope } from '../engine/cro
 import { ALL_ADAPTERS } from '../adapters/registry';
 import { resolveArtifactPreviewPath } from './artifactFileTree';
 import { handleInstallRecommended, installResolvedArtifacts, unrecommendArtifactForWorkspace } from './recommendations';
-import { getScopeLabel } from './scopeLabel';
+import { getScopeLabel, getScopeIconSvg } from './scopeIcons';
 
-export { getScopeLabel };
-
-export function getScopeIconSvg(scope: string): string {
-  if (scope === 'project') {
-    return `<svg class="scope-icon" width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="vertical-align: middle; margin-right: 4px;" aria-hidden="true"><path d="M1.75 2.5h3.69l1.56 1.5h7.25c.97 0 1.75.78 1.75 1.75v6.5c0 .97-.78 1.75-1.75 1.75H1.75C.78 14 0 13.22 0 12.25v-8c0-.97.78-1.75 1.75-1.75z"/></svg>`;
-  }
-  return `<svg class="scope-icon" width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="vertical-align: middle; margin-right: 4px;" aria-hidden="true"><path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zM1.5 8a6.5 6.5 0 0 1 1.05-3.53l2.84 2.84A4.5 4.5 0 0 0 5.3 8H1.5zm6.5-6.5c.87 0 1.7.17 2.46.48l-1.92 1.92a4.49 4.49 0 0 0-1.04-.4A6.5 6.5 0 0 1 8 1.5zm0 13c-.87 0-1.7-.17-2.46-.48l1.92-1.92c.34.05.69.08 1.04.08.35 0 .7-.03 1.04-.08l1.92 1.92A6.5 6.5 0 0 1 8 14.5z"/></svg>`;
-}
+export { getScopeLabel, getScopeIconSvg };
 
 export function computeItemOrigin(
   membership: 'managed' | 'unmanaged',
@@ -777,7 +770,7 @@ export class DashboardPanel {
             <tr class="item-row parent-row" onclick="toggleFolder('subrows-${groupIdx}', this)">
                <td><span class="folder-icon" style="transition: transform 0.2s; font-size: 10px; opacity: 0.8; display: inline-block;">▶</span> <span class="kind-pill kind-${this.escapeHtml(group.kind)}">${this.escapeHtml(group.kind)}</span></td>
                <td><strong>${this.escapeHtml(group.name)}</strong></td>
-               <td><span class="scope-pill scope-${this.escapeHtml(group.scope)}">${this.escapeHtml(group.scope)}</span></td>
+               <td><span class="scope-pill scope-${this.escapeHtml(group.scope)}">${this.escapeHtml(getScopeLabel(group.scope))}</span></td>
                <td class="parent-status-cell">
                  ${sortedInstallations.map(inst => `
                    <span class="badge badge-pending parent-badge" data-parent-key="${this.escapeHtml(getIdentityKey(inst))}" title="${this.escapeHtml(inst.assistant)}: checking…">
@@ -845,7 +838,7 @@ export class DashboardPanel {
             <td><span class="kind-pill kind-${this.escapeHtml(obs.kind)}">${this.escapeHtml(obs.kind)}</span></td>
             <td><strong>${this.escapeHtml(obs.name)}</strong></td>
             <td>${this.escapeHtml(obs.assistant)}</td>
-            <td><span class="scope-pill scope-${this.escapeHtml(obs.scope)}">${this.escapeHtml(obs.scope)}</span></td>
+            <td><span class="scope-pill scope-${this.escapeHtml(obs.scope)}">${this.escapeHtml(getScopeLabel(obs.scope))}</span></td>
             <td><span class="badge ${badgeClass}"${tooltip}>${this.escapeHtml(badgeText)}</span></td>
             <td>
               ${actionBtn}
@@ -969,7 +962,7 @@ export class DashboardPanel {
           <td><span class="kind-pill kind-${this.escapeHtml(x.inst.kind)}">${this.escapeHtml(x.inst.kind)}</span></td>
           <td><strong>${this.escapeHtml(x.inst.name)}</strong></td>
           <td>${this.escapeHtml(x.inst.assistant)}</td>
-          <td><span class="scope-pill scope-${this.escapeHtml(x.inst.scope)}">${this.escapeHtml(x.inst.scope)}</span></td>
+          <td><span class="scope-pill scope-${this.escapeHtml(x.inst.scope)}">${this.escapeHtml(getScopeLabel(x.inst.scope))}</span></td>
           <td><span class="badge ${badgeClass}">${this.escapeHtml(badgeText)}</span></td>
         </tr>
       `;
@@ -1162,11 +1155,11 @@ export class DashboardPanel {
 
     html += `<div class="scope-group" style="margin-top: 24px;">
       <div class="scope-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 8px;">
-        <h3 style="margin: 0; font-size: 13px;">Project Sources</h3>
-        <button class="btn btn-sm btn-secondary" title="Add Project Source" onclick="vscode.postMessage({ command: 'addSource', scope: 'project' })">＋</button>
+        <h3 style="margin: 0; font-size: 13px;">Workspace Sources</h3>
+        <button class="btn btn-sm btn-secondary" title="Add Workspace Source" onclick="vscode.postMessage({ command: 'addSource', scope: 'project' })">＋</button>
       </div>
       <div class="source-list">
-        ${projectSources.length > 0 ? projectSources.map(renderSourceRow).join('') : '<div class="empty-state" style="padding: 20px;">No project sources</div>'}
+        ${projectSources.length > 0 ? projectSources.map(renderSourceRow).join('') : '<div class="empty-state" style="padding: 20px;">No workspace sources</div>'}
       </div>
     </div>`;
 
@@ -1446,8 +1439,8 @@ export class DashboardPanel {
         <tbody class="matrix-group item-row-group" data-kind="${this.escapeHtml(group.kind)}" data-name="${this.escapeHtml(group.name.toLowerCase())}" data-scope="${this.escapeHtml(group.scope)}" data-membership="managed" data-worst-status="checking…">
           <tr class="item-row parent-row" onclick="toggleFolder('subrows-init-${groupIdx}', this)">
              <td><span class="folder-icon" style="transition: transform 0.2s; font-size: 10px; opacity: 0.8; display: inline-block;">▶</span> <span class="kind-pill kind-${this.escapeHtml(group.kind)}">${this.escapeHtml(group.kind)}</span></td>
-             <td><strong>${this.escapeHtml(group.name)}</strong></td>
-             <td><span class="scope-pill scope-${this.escapeHtml(group.scope)}">${this.escapeHtml(group.scope)}</span></td>
+              <td><strong>${this.escapeHtml(group.name)}</strong></td>
+              <td><span class="scope-pill scope-${this.escapeHtml(group.scope)}">${this.escapeHtml(getScopeLabel(group.scope))}</span></td>
              <td class="parent-status-cell">
                ${sortedInstallations.map(inst => `
                  <span class="badge badge-pending parent-badge" data-parent-key="${this.escapeHtml(getIdentityKey(inst))}" title="${this.escapeHtml(inst.assistant)}: checking…">
@@ -1531,7 +1524,7 @@ export class DashboardPanel {
           <td><span class="kind-pill kind-${this.escapeHtml(obs.kind)}">${this.escapeHtml(obs.kind)}</span></td>
           <td><strong>${this.escapeHtml(obs.name)}</strong></td>
           <td>${this.escapeHtml(obs.assistant)}</td>
-          <td><span class="scope-pill scope-${this.escapeHtml(obs.scope)}">${this.escapeHtml(obs.scope)}</span></td>
+          <td><span class="scope-pill scope-${this.escapeHtml(obs.scope)}">${this.escapeHtml(getScopeLabel(obs.scope))}</span></td>
           <td><span class="badge ${badgeClass}"${tooltip}>${this.escapeHtml(badgeText)}</span></td>
           <td>
             ${actionBtn}
@@ -1734,6 +1727,19 @@ export class DashboardPanel {
     }
     .scope-project { background: rgba(255, 255, 255, 0.1); }
     .scope-global { background: rgba(0, 150, 255, 0.15); }
+    .scope-icon {
+      vertical-align: middle;
+      display: inline-block;
+      color: inherit;
+    }
+    .scope-icon.scope-icon-global,
+    .scope-icon.scope-global {
+      color: var(--vscode-charts-blue, #58a6ff);
+    }
+    .scope-icon.scope-icon-project,
+    .scope-icon.scope-project {
+      color: inherit;
+    }
     .badge {
       display: inline-block;
       padding: 2px 7px;
@@ -1983,15 +1989,14 @@ export class DashboardPanel {
     let selectedItemKey = null;
     let detailItemData = null;
 
+    const scopeProjectSvg = ${JSON.stringify(getScopeIconSvg('project'))};
+    const scopeGlobalSvg = ${JSON.stringify(getScopeIconSvg('global'))};
     function getScopeLabelClient(scope) {
       return scope === 'project' ? 'Workspace' : 'Global';
     }
 
     function getScopeIconSvgClient(scope) {
-      if (scope === 'project') {
-        return '<svg class="scope-icon" width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="vertical-align: middle; margin-right: 4px;" aria-hidden="true"><path d="M1.75 2.5h3.69l1.56 1.5h7.25c.97 0 1.75.78 1.75 1.75v6.5c0 .97-.78 1.75-1.75 1.75H1.75C.78 14 0 13.22 0 12.25v-8c0-.97.78-1.75 1.75-1.75z"/></svg>';
-      }
-      return '<svg class="scope-icon" width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="vertical-align: middle; margin-right: 4px;" aria-hidden="true"><path d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0zM1.5 8a6.5 6.5 0 0 1 1.05-3.53l2.84 2.84A4.5 4.5 0 0 0 5.3 8H1.5zm6.5-6.5c.87 0 1.7.17 2.46.48l-1.92 1.92a4.49 4.49 0 0 0-1.04-.4A6.5 6.5 0 0 1 8 1.5zm0 13c-.87 0-1.7-.17-2.46-.48l1.92-1.92c.34.05.69.08 1.04.08.35 0 .7-.03 1.04-.08l1.92 1.92A6.5 6.5 0 0 1 8 14.5z"/></svg>';
+      return scope === 'project' ? scopeProjectSvg : scopeGlobalSvg;
     }
 
     function computeItemOriginClient(membership, item, candidates) {

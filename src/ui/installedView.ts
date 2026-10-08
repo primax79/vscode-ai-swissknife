@@ -17,7 +17,7 @@ import {
 } from '../engine/update';
 import { softDeletePath } from '../engine/softDelete';
 import { getAdapter, getEnabledAdapters, ALL_ADAPTERS } from '../adapters/registry';
-import { getScopeLabel } from './scopeLabel';
+import { getScopeLabel, getScopeIconName, getScopeQuickPickItems } from './scopeIcons';
 import type { DriftReport } from '../engine/types';
 import { getWorkspaceRoot } from './workspacePicker';
 import { getKindIconName } from './kindIcons';
@@ -223,6 +223,7 @@ export class InstalledTreeDataProvider {
       );
       item.description = `${element.managed.length} managed, ${element.observed.length} unmanaged`;
       item.contextValue = 'scopeGroup';
+      item.iconPath = new vscode.ThemeIcon(getScopeIconName(element.scope));
       return item;
     }
 
@@ -394,7 +395,7 @@ export class InstalledTreeDataProvider {
         const observed = observedByScope.get(scope) ?? [];
         // Use overrideAssistantId, or if somehow missing, take from the first managed/observed item or fallback
         const assistant = overrideAssistantId ?? managed[0]?.assistant ?? observed[0]?.assistant ?? 'claude-code';
-        scopeGroups.push(new ScopeGroupItem(assistant, scope, scope, managed, observed));
+        scopeGroups.push(new ScopeGroupItem(assistant, scope, getScopeLabel(scope), managed, observed));
       }
 
       return scopeGroups;
@@ -787,11 +788,11 @@ export class InstalledTreeDataProvider {
     if (!assistantPick) return;
     const targetAssistant = assistantPick.label as AssistantId;
 
-    const scopePick = await vscode.window.showQuickPick(['project', 'global'], {
+    const scopePick = await vscode.window.showQuickPick(getScopeQuickPickItems(), {
       placeHolder: `Select target scope for copied ${sourceItem.kind}`,
     });
     if (!scopePick) return;
-    const targetScope = scopePick as Scope;
+    const targetScope = typeof scopePick === 'string' ? (scopePick as Scope) : scopePick.value;
 
     let targetProjectRoot: string | undefined;
     if (targetScope === 'project') {
@@ -924,11 +925,11 @@ export class InstalledTreeDataProvider {
     if (!assistantPick) return;
     const targetAssistant = assistantPick.label as AssistantId;
 
-    const scopePick = await vscode.window.showQuickPick(['project', 'global'], {
+    const scopePick = await vscode.window.showQuickPick(getScopeQuickPickItems(), {
       placeHolder: `Select target scope for moved ${inst.kind}`,
     });
     if (!scopePick) return;
-    const targetScope = scopePick as Scope;
+    const targetScope = typeof scopePick === 'string' ? (scopePick as Scope) : scopePick.value;
 
     let targetProjectRoot: string | undefined;
     if (targetScope === 'project') {

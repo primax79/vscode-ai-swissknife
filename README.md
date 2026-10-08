@@ -33,7 +33,7 @@ The extension adds an **AI Swissknife** container to the Activity Bar (`resource
 
 ```text
 AI Swissknife (Activity Bar)
-├── 📁 Sources      (Manage global & project source manifests)
+├── 📁 Sources      (Manage global & workspace source manifests)
 ├── 📦 Available    (Browse detected artifacts with folder hierarchy & batch install)
 ├── ✅ Installed    (View installed items, drift badges, unmanaged items, sync & edit)
 ├── 📊 Dashboard    (Open visual management dashboard with search, metrics & bulk actions)
