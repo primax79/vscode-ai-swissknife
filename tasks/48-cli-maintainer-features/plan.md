@@ -4,7 +4,7 @@
 
 | Task (outline) | Wishlist item | Size | Notes |
 | --- | --- | --- | --- |
-| 48.1 Multi-root scanning with ignore rules | 5 | M | `--roots` repeatable, default ignore list, bounded depth; foundation of 48.3 and 48.5 |
+| [48.1](48.1-scan-roots.md) Multi-root scanning with ignore rules (**specified 2026-10-09**) | 5 | M | `--roots` repeatable, default ignore list, bounded depth; foundation of 48.3 and 48.5 |
 | 48.2 `installed` flags: link vs copy, broken link, orphan (gone from source), installed twice | 3 | M | adapters currently skip symlinks silently; add `lstat`-based flags; new engine status for "artifact removed from source" |
 | 48.3 Shadowing report: identical / stale / ahead / unique, and the `--force` guard before deleting ahead/unique | 4, 12 | L | stale vs ahead needs source history: hash the artifact at past commits of the source clone |
 | 48.4 Doctor checks (Kilo-skip rules, name = folder, malformed metadata, duplicates across scopes) | 7 | M | builds on study B4 and 44.4 |
