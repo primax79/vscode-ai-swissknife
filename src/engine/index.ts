@@ -48,3 +48,7 @@ export {
   type ApplyInstallMatrixOptions,
 } from './installMatrix';
 export * from './claudeCli';
+export * from './fileTree';
+export * from './uninstall';
+export * from './sourceManifest';
+

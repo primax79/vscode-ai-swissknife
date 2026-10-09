@@ -28,6 +28,7 @@ import {
   type ExportedConfigFile,
 } from '../engine/configTransfer';
 import { ALL_SOURCE_RESOLVERS, getSourceResolver } from '../sources/registry';
+import { addSourceToManifest, removeSourceFromManifest } from '../engine/sourceManifest';
 import { deriveSourceDefaults, validateLocation, validateLocalFolder } from '../sources/sourceDefaults';
 import { getScopeLabel, getScopeIconName, getScopeQuickPickItems } from './scopeIcons';
 
@@ -434,13 +435,7 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
           ...(root ? { projectPath: root } : {}),
         };
 
-        const desired = toDesiredSource(runtimeSource, root);
-        await withStateLock(scope, root, async () => {
-          const curManifest = await readManifest(scope, root);
-          curManifest.sources = curManifest.sources.filter((s) => s.id !== desired.id);
-          curManifest.sources.push(desired);
-          await writeManifest(scope, curManifest, root);
-        });
+        await addSourceToManifest(runtimeSource, { projectRoot: root, replace: true });
 
         succeededScopes.push(scope);
         if (!firstWrittenSource) {
@@ -508,12 +503,7 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
       }
 
       // Remove from manifest and remove dependent desired installations
-      await withStateLock(source.scope, projectRoot, async () => {
-        const manifest = await readManifest(source.scope, projectRoot);
-        manifest.sources = manifest.sources.filter((s) => s.id !== source.id);
-        manifest.desiredInstallations = manifest.desiredInstallations.filter((d) => d.sourceId !== source.id);
-        await writeManifest(source.scope, manifest, projectRoot);
-      });
+      await removeSourceFromManifest(source.id, source.scope, { projectRoot });
 
       await this.availableProvider.refreshCatalog();
       this.refresh();

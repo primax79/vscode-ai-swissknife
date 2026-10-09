@@ -1,24 +1,51 @@
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import type {
   AssistantId,
   ItemKind,
   Scope,
   Source,
+  SourceType,
   ManagedInstallation,
   ObservedArtifact,
 } from '../domain/types';
 import {
   readManifest,
+  writeManifest,
   readState,
   fromDesiredSource,
+  withStateLock,
+  manifestPath,
 } from '../domain/registry';
 import { ALL_ADAPTERS, getAdapterWithHomeRoot, getAdapter } from '../adapters/registry';
 import { getSourceResolver } from '../sources/registry';
 import { scanInstalledInventory } from '../engine/discovery';
 import { checkForUpstreamUpdate, analyzeLocalDrift } from '../engine/drift';
 import { planInstallMatrix } from '../engine/installMatrix';
-import { resolveAndTranslate } from '../engine/plan';
+import { planInstall, resolveAndTranslate } from '../engine/plan';
+import { applyInstall } from '../engine/apply';
+import { planUpdateAll, backupItemToTrash } from '../engine/update';
+import { uninstallInstallation } from '../engine/uninstall';
+import { addSourceToManifest, removeSourceFromManifest } from '../engine/sourceManifest';
+import {
+  snapshotTree,
+  diffSnapshots,
+  computePlanChangedFiles,
+  type ChangedFilesMap,
+} from '../engine/fileTree';
+import {
+  copyToTrash,
+  listTrash,
+  restoreFromTrash,
+  emptyTrash,
+  type TrashEntry,
+} from '../engine/softDelete';
+import {
+  validateLocation,
+  validateLocalFolder,
+  deriveSourceDefaults,
+} from '../sources/sourceDefaults';
 import { findWorkspaces, scanInventoryAcrossRoots } from '../engine/scanRoots';
 import { serializeSkillMarkdown } from '../adapters/claude';
 import { readSkill } from '../adapters/codec';
@@ -981,5 +1008,894 @@ export async function runRedistribute(
     homeRoot,
     projectRoot: workspaceRoot,
   });
+}
+
+export async function runApplyInstall(
+  opts: GlobalCliOptions & {
+    source: string;
+    artifact: string;
+    assistants?: string;
+    scopes?: string;
+    overwrite?: boolean;
+    write?: boolean;
+    allowCodeKinds?: boolean;
+  }
+) {
+  const { homeRoot, workspaceRoot } = resolveRoots(opts);
+
+  if (!opts.source) {
+    throw new CliError('INVALID_ARGUMENT', 'Missing required option --source <id>');
+  }
+  if (!opts.artifact) {
+    throw new CliError('INVALID_ARGUMENT', 'Missing required option --artifact <id>');
+  }
+  if (!opts.assistants) {
+    throw new CliError('INVALID_ARGUMENT', 'Missing required option --assistants <ids>');
+  }
+  if (!opts.scopes) {
+    throw new CliError('INVALID_ARGUMENT', 'Missing required option --scopes <scopes>');
+  }
+
+  const assistantIds = parseAssistantFilter(opts.assistants);
+  if (!assistantIds || assistantIds.length === 0) {
+    throw new CliError('INVALID_ARGUMENT', 'At least one assistant must be specified in --assistants');
+  }
+
+  const rawScopes = opts.scopes.split(',').map((s) => s.trim()).filter(Boolean);
+  const scopeList: Scope[] = [];
+  for (const s of rawScopes) {
+    const validated = validateScope(s);
+    if (validated) scopeList.push(validated);
+  }
+  if (scopeList.length === 0) {
+    throw new CliError('INVALID_ARGUMENT', 'At least one scope must be specified in --scopes');
+  }
+
+  // Find source
+  const registeredSources: Source[] = [];
+  try {
+    const gManifest = await readManifest('global', undefined, homeRoot);
+    registeredSources.push(...gManifest.sources.map((d) => fromDesiredSource(d, undefined, homeRoot)));
+  } catch {
+    // ignore
+  }
+  if (workspaceRoot) {
+    try {
+      const pManifest = await readManifest('project', workspaceRoot, homeRoot);
+      registeredSources.push(...pManifest.sources.map((d) => fromDesiredSource(d, workspaceRoot, homeRoot)));
+    } catch {
+      // ignore
+    }
+  }
+
+  const source = registeredSources.find((s) => s.id === opts.source);
+  if (!source) {
+    throw new CliError('NOT_FOUND', `Source "${opts.source}" not found`);
+  }
+
+  let resolution;
+  try {
+    const resolver = getSourceResolver(source.type);
+    resolution = await resolver.resolve(source, { homeRoot });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new CliError('SOURCE_RESOLUTION_FAILED', `Failed to resolve source "${opts.source}": ${msg}`);
+  }
+
+  if (!resolution) {
+    throw new CliError('SOURCE_RESOLUTION_FAILED', `Failed to resolve source "${opts.source}"`);
+  }
+
+  let foundPkg;
+  let foundArt;
+  for (const pkg of resolution.packages) {
+    for (const art of pkg.artifacts) {
+      if (art.id === opts.artifact || art.name === opts.artifact) {
+        foundPkg = pkg;
+        foundArt = art;
+        break;
+      }
+    }
+    if (foundArt) break;
+  }
+
+  if (!foundPkg || !foundArt) {
+    throw new CliError('NOT_FOUND', `Artifact "${opts.artifact}" not found in source "${opts.source}"`);
+  }
+
+  // Gate: refuse executable/code kinds unless --allow-code-kinds is given
+  refuseCodeKinds([foundArt.kind], opts.allowCodeKinds);
+
+  const planResult = await planInstallMatrix({
+    items: [{ source, pkg: foundPkg, artifact: foundArt }],
+    assistants: assistantIds,
+    scopes: scopeList,
+    projectRoot: workspaceRoot,
+    homeRoot,
+  });
+
+  if (!opts.write) {
+    return {
+      mode: 'plan',
+      targets: planResult.targets.map((t) => {
+        const isConflict = t.prepared.supported && Boolean(t.prepared.plan.conflict);
+        const action = !t.prepared.supported
+          ? 'skip'
+          : isConflict
+          ? (opts.overwrite ? 'overwrite' : 'skip')
+          : 'install';
+        return {
+          item: foundArt!.name,
+          kind: foundArt!.kind,
+          assistant: t.assistant,
+          scope: t.scope,
+          status: !t.prepared.supported
+            ? 'unsupported'
+            : isConflict
+            ? 'conflict'
+            : 'new',
+          action,
+          reason: !t.prepared.supported
+            ? t.prepared.plan.reason
+            : isConflict && !opts.overwrite
+            ? 'Installation already exists (conflict)'
+            : undefined,
+        };
+      }),
+    };
+  }
+
+  // Applied mode
+  const appliedTargets: Array<{
+    item: string;
+    kind: ItemKind;
+    assistant: AssistantId;
+    scope: Scope;
+    status: string;
+    changedFiles?: ChangedFilesMap;
+    backupPath?: string;
+    reason?: string;
+    warnings?: string[];
+  }> = [];
+
+  for (const target of planResult.targets) {
+    if (!target.prepared.supported) {
+      appliedTargets.push({
+        item: foundArt.name,
+        kind: foundArt.kind,
+        assistant: target.assistant,
+        scope: target.scope,
+        status: 'unsupported',
+        reason: target.prepared.plan.reason,
+      });
+      continue;
+    }
+
+    const isConflict = target.prepared.supported && Boolean(target.prepared.plan.conflict);
+    if (isConflict && !opts.overwrite) {
+      appliedTargets.push({
+        item: foundArt.name,
+        kind: foundArt.kind,
+        assistant: target.assistant,
+        scope: target.scope,
+        status: 'skipped',
+        reason: 'Installation already exists (conflict)',
+      });
+      continue;
+    }
+
+    let backupPath: string | undefined;
+    const targetPath = target.prepared.supported ? target.prepared.plan.targetDir : undefined;
+    if (isConflict && opts.overwrite && targetPath && fs.existsSync(targetPath)) {
+      try {
+        backupPath = await copyToTrash(
+          targetPath,
+          foundArt.kind,
+          foundArt.name,
+          target.scope,
+          target.scope === 'project' ? workspaceRoot : undefined,
+          homeRoot,
+          { assistant: target.assistant }
+        );
+      } catch {
+        // ignore trash backup failure
+      }
+    }
+
+    const beforeTree = targetPath ? snapshotTree(targetPath) : new Map<string, string>();
+    const root = target.scope === 'project' ? workspaceRoot : undefined;
+
+    try {
+      const outcome = await withStateLock(target.scope, root, homeRoot, async () => {
+        return await applyInstall(target.prepared, homeRoot);
+      });
+
+      const afterTree = targetPath ? snapshotTree(targetPath) : new Map<string, string>();
+      const changedFiles = diffSnapshots(beforeTree, afterTree);
+
+      appliedTargets.push({
+        item: foundArt.name,
+        kind: foundArt.kind,
+        assistant: target.assistant,
+        scope: target.scope,
+        status: outcome.status,
+        changedFiles,
+        ...(backupPath ? { backupPath } : {}),
+        ...(outcome.status === 'applied' && outcome.warnings ? { warnings: outcome.warnings } : {}),
+        ...(outcome.status !== 'applied' && 'reason' in outcome && outcome.reason ? { reason: outcome.reason } : {}),
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      appliedTargets.push({
+        item: foundArt.name,
+        kind: foundArt.kind,
+        assistant: target.assistant,
+        scope: target.scope,
+        status: 'failed',
+        reason: msg,
+        ...(backupPath ? { backupPath } : {}),
+      });
+    }
+  }
+
+  return {
+    mode: 'applied',
+    targets: appliedTargets,
+  };
+}
+
+export async function runUninstall(
+  key: string,
+  opts: GlobalCliOptions & {
+    hard?: boolean;
+    write?: boolean;
+    allowCodeKinds?: boolean;
+  }
+) {
+  if (!key) {
+    throw new CliError('INVALID_ARGUMENT', 'Item key is required');
+  }
+
+  const { homeRoot, workspaceRoot } = resolveRoots(opts);
+
+  const allInstallations: ManagedInstallation[] = [];
+  try {
+    const gState = await readState('global', undefined, homeRoot);
+    allInstallations.push(...gState.installations);
+  } catch {
+    // ignore
+  }
+  if (workspaceRoot) {
+    try {
+      const pState = await readState('project', workspaceRoot, homeRoot);
+      allInstallations.push(...pState.installations);
+    } catch {
+      // ignore
+    }
+  }
+
+  const inst = allInstallations.find((i) => {
+    const itemKey = `${i.assistant}:${i.scope}:${i.kind}:${i.name}`;
+    return itemKey === key || i.name === key;
+  });
+
+  if (!inst) {
+    throw new CliError('NOT_FOUND', `Managed installation "${key}" not found`);
+  }
+
+  // Gate: refuse executable/code kinds unless --allow-code-kinds is given
+  refuseCodeKinds(inst.kind, opts.allowCodeKinds);
+
+  const itemKey = `${inst.assistant}:${inst.scope}:${inst.kind}:${inst.name}`;
+
+  if (!opts.write) {
+    return {
+      mode: 'plan',
+      key: itemKey,
+      item: inst.name,
+      kind: inst.kind,
+      assistant: inst.assistant,
+      scope: inst.scope,
+      path: inst.path,
+      hard: Boolean(opts.hard),
+      action: opts.hard ? 'remove' : 'trash',
+    };
+  }
+
+  const beforeTree = snapshotTree(inst.path);
+  const result = await uninstallInstallation(inst, {
+    mode: opts.hard ? 'hard' : 'soft',
+    homeRoot,
+    projectRoot: workspaceRoot,
+  });
+
+  const removedFiles = Array.from(beforeTree.keys()).sort();
+
+  return {
+    mode: 'applied',
+    key: itemKey,
+    item: inst.name,
+    kind: inst.kind,
+    assistant: inst.assistant,
+    scope: inst.scope,
+    path: inst.path,
+    hard: Boolean(opts.hard),
+    changedFiles: {
+      added: [],
+      changed: [],
+      removed: removedFiles.length > 0 ? removedFiles : [path.basename(inst.path)],
+    },
+    ...(result.backupPath ? { backupPath: result.backupPath } : {}),
+  };
+}
+
+export async function runSourceAdd(
+  type: string,
+  location: string,
+  opts: GlobalCliOptions & {
+    id?: string;
+    name?: string;
+    scope?: string;
+    replace?: boolean;
+    write?: boolean;
+  }
+) {
+  if (!type) {
+    throw new CliError('INVALID_ARGUMENT', 'Source type is required');
+  }
+  if (!location) {
+    throw new CliError('INVALID_ARGUMENT', 'Source location is required');
+  }
+
+  const validTypes: SourceType[] = [
+    'local-folder',
+    'git-custom',
+    'git-marketplace',
+    'git-single-item',
+    'remote-url',
+  ];
+  if (!validTypes.includes(type as SourceType)) {
+    throw new CliError(
+      'INVALID_ARGUMENT',
+      `Invalid source type "${type}". Supported types: ${validTypes.join(', ')}`
+    );
+  }
+
+  const { homeRoot, workspaceRoot } = resolveRoots(opts);
+  let scope: Scope;
+  if (opts.scope) {
+    const validated = validateScope(opts.scope);
+    if (!validated) {
+      throw new CliError('INVALID_ARGUMENT', `Invalid scope "${opts.scope}". Must be global or project`);
+    }
+    scope = validated;
+  } else {
+    scope = workspaceRoot ? 'project' : 'global';
+  }
+
+  const defaults = deriveSourceDefaults(type as SourceType, location);
+  const id = (opts.id && opts.id.trim()) ? opts.id.trim() : defaults.id;
+  const name = (opts.name && opts.name.trim()) ? opts.name.trim() : defaults.name;
+
+  const runtimeSource: Source = {
+    id,
+    type: type as SourceType,
+    scope,
+    ...(name ? { name } : {}),
+    ...(type === 'local-folder' ? { localPath: location } : { url: location }),
+    ...(scope === 'project' && workspaceRoot ? { projectPath: workspaceRoot } : {}),
+  };
+
+  // Validate location
+  const locErr = validateLocation(runtimeSource.type, location);
+  if (locErr) {
+    throw new CliError('INVALID_ARGUMENT', locErr);
+  }
+
+  if (runtimeSource.type === 'local-folder') {
+    const rootDir = scope === 'project' ? workspaceRoot : (homeRoot ?? os.homedir());
+    const folderErr = validateLocalFolder(location, scope, rootDir);
+    if (folderErr) {
+      throw new CliError('INVALID_ARGUMENT', folderErr);
+    }
+  }
+
+  const root = scope === 'project' ? workspaceRoot : undefined;
+  const manifest = await readManifest(scope, root, homeRoot);
+  const existing = manifest.sources.find((s) => s.id === id);
+
+  if (existing && !opts.replace) {
+    throw new CliError('DUPLICATE_ID', `Source "${id}" already exists in ${scope} scope`);
+  }
+
+  if (!opts.write) {
+    return {
+      mode: 'plan',
+      action: existing ? 'replace' : 'add',
+      source: {
+        id,
+        type: runtimeSource.type,
+        scope,
+        name,
+        location,
+      },
+    };
+  }
+
+  await addSourceToManifest(runtimeSource, {
+    projectRoot: root,
+    homeRoot,
+    replace: Boolean(opts.replace),
+  });
+
+  return {
+    mode: 'applied',
+    action: existing ? 'replaced' : 'added',
+    source: {
+      id,
+      type: runtimeSource.type,
+      scope,
+      name,
+      location,
+    },
+    changedFiles: {
+      added: [],
+      changed: [manifestPath(scope, root, homeRoot)],
+      removed: [],
+    },
+  };
+}
+
+export async function runSourceRemove(
+  id: string,
+  opts: GlobalCliOptions & {
+    scope?: string;
+    write?: boolean;
+  }
+) {
+  if (!id) {
+    throw new CliError('INVALID_ARGUMENT', 'Source ID is required');
+  }
+  if (!opts.scope) {
+    throw new CliError('INVALID_ARGUMENT', 'Missing required option --scope <scope>');
+  }
+
+  const scope = validateScope(opts.scope);
+  if (!scope) {
+    throw new CliError('INVALID_ARGUMENT', `Invalid scope "${opts.scope}". Must be global or project`);
+  }
+
+  const { homeRoot, workspaceRoot } = resolveRoots(opts);
+  const root = scope === 'project' ? workspaceRoot : undefined;
+
+  const manifest = await readManifest(scope, root, homeRoot);
+  const existing = manifest.sources.find((s) => s.id === id);
+  if (!existing) {
+    throw new CliError('NOT_FOUND', `Source "${id}" not found in ${scope} scope`);
+  }
+
+  if (!opts.write) {
+    return {
+      mode: 'plan',
+      action: 'remove',
+      source: existing,
+    };
+  }
+
+  const removed = await removeSourceFromManifest(id, scope, {
+    projectRoot: root,
+    homeRoot,
+  });
+
+  return {
+    mode: 'applied',
+    action: 'removed',
+    source: removed,
+    changedFiles: {
+      added: [],
+      changed: [manifestPath(scope, root, homeRoot)],
+      removed: [],
+    },
+  };
+}
+
+export async function runUpdate(
+  keyOrOpts?: string | (GlobalCliOptions & Record<string, any>),
+  options?: GlobalCliOptions & Record<string, any>
+) {
+  let key: string | undefined;
+  let opts: GlobalCliOptions & {
+    all?: boolean;
+    scope?: string;
+    assistant?: string;
+    source?: string;
+    kind?: string;
+    includeModified?: boolean;
+    write?: boolean;
+    allowCodeKinds?: boolean;
+  };
+
+  if (typeof keyOrOpts === 'string') {
+    key = keyOrOpts;
+    opts = options ?? {};
+  } else {
+    opts = { ...(typeof keyOrOpts === 'object' ? keyOrOpts : {}), ...(options ?? {}) } as any;
+    key = (opts as any).key;
+  }
+
+  if (!key && !opts.all) {
+    throw new CliError('INVALID_ARGUMENT', 'Specify an item key to update or pass --all');
+  }
+
+  const { homeRoot, workspaceRoot } = resolveRoots(opts);
+
+  const allInstallations: ManagedInstallation[] = [];
+  const allSources: Source[] = [];
+
+  try {
+    const gState = await readState('global', undefined, homeRoot);
+    allInstallations.push(...gState.installations);
+    const gManifest = await readManifest('global', undefined, homeRoot);
+    allSources.push(...gManifest.sources.map((d) => fromDesiredSource(d, undefined, homeRoot)));
+  } catch {
+    // ignore
+  }
+
+  if (workspaceRoot) {
+    try {
+      const pState = await readState('project', workspaceRoot, homeRoot);
+      allInstallations.push(...pState.installations);
+      const pManifest = await readManifest('project', workspaceRoot, homeRoot);
+      allSources.push(...pManifest.sources.map((d) => fromDesiredSource(d, workspaceRoot, homeRoot)));
+    } catch {
+      // ignore
+    }
+  }
+
+  let targetInstallations: ManagedInstallation[];
+  if (key) {
+    const found = allInstallations.find((i) => {
+      const itemKey = `${i.assistant}:${i.scope}:${i.kind}:${i.name}`;
+      return itemKey === key || i.name === key;
+    });
+    if (!found) {
+      throw new CliError('NOT_FOUND', `Managed installation "${key}" not found`);
+    }
+    targetInstallations = [found];
+  } else {
+    targetInstallations = allInstallations;
+  }
+
+  const filterScope = validateScope(opts.scope);
+  const filterAssistant = opts.assistant ? (opts.assistant as AssistantId) : undefined;
+  const filterKind = opts.kind && VALID_KINDS.includes(opts.kind as ItemKind) ? (opts.kind as ItemKind) : undefined;
+
+  // Gate: refuse executable/code kinds unless --allow-code-kinds is given
+  refuseCodeKinds(targetInstallations.map((i) => i.kind), opts.allowCodeKinds);
+
+  const planResult = await planUpdateAll({
+    installations: targetInstallations,
+    sources: allSources,
+    filter: {
+      scope: filterScope,
+      assistant: filterAssistant,
+      sourceId: opts.source,
+      kind: filterKind,
+    },
+    includeModified: Boolean(opts.includeModified),
+    homeRoot,
+    projectRoot: workspaceRoot,
+  });
+
+  if (!opts.write) {
+    return {
+      mode: 'plan',
+      targets: [
+        ...planResult.toUpdate.map((u) => ({
+          key: `${u.installation.assistant}:${u.installation.scope}:${u.installation.kind}:${u.installation.name}`,
+          item: u.installation.name,
+          kind: u.installation.kind,
+          assistant: u.installation.assistant,
+          scope: u.installation.scope,
+          status: 'update-available',
+          action: 'update',
+          oldRevision: u.installation.sourceRevision,
+          newRevision: u.prepared.supported ? u.prepared.plan.sourceRevision : undefined,
+          changedFiles: computePlanChangedFiles(u.prepared),
+        })),
+        ...planResult.skippedModified.map((s) => ({
+          key: `${s.installation.assistant}:${s.installation.scope}:${s.installation.kind}:${s.installation.name}`,
+          item: s.installation.name,
+          kind: s.installation.kind,
+          assistant: s.installation.assistant,
+          scope: s.installation.scope,
+          status: s.status,
+          action: 'skip',
+          reason: 'Modified locally (use --include-modified to overwrite)',
+          oldRevision: s.installation.sourceRevision,
+          changedFiles: { added: [], changed: [], removed: [] },
+        })),
+        ...planResult.upToDate.map((utd) => ({
+          key: `${utd.installation.assistant}:${utd.installation.scope}:${utd.installation.kind}:${utd.installation.name}`,
+          item: utd.installation.name,
+          kind: utd.installation.kind,
+          assistant: utd.installation.assistant,
+          scope: utd.installation.scope,
+          status: 'up-to-date',
+          action: 'skip',
+          oldRevision: utd.installation.sourceRevision,
+          changedFiles: { added: [], changed: [], removed: [] },
+        })),
+        ...planResult.cannotUpdate.map((c) => ({
+          key: `${c.installation.assistant}:${c.installation.scope}:${c.installation.kind}:${c.installation.name}`,
+          item: c.installation.name,
+          kind: c.installation.kind,
+          assistant: c.installation.assistant,
+          scope: c.installation.scope,
+          status: 'cannot-update',
+          action: 'skip',
+          reason: c.reason,
+          oldRevision: c.installation.sourceRevision,
+          changedFiles: { added: [], changed: [], removed: [] },
+        })),
+      ],
+    };
+  }
+
+  // Applied mode
+  const appliedTargets: Array<{
+    key: string;
+    item: string;
+    kind: ItemKind;
+    assistant: AssistantId;
+    scope: Scope;
+    status: string;
+    action?: string;
+    oldRevision?: any;
+    newRevision?: any;
+    changedFiles: ChangedFilesMap;
+    backupPath?: string;
+    reason?: string;
+  }> = [];
+
+  for (const u of planResult.toUpdate) {
+    let backupPath: string | undefined;
+    const isModified =
+      u.report?.status === 'modified-locally' ||
+      u.report?.status === 'modified-and-update-available';
+
+    if (isModified) {
+      try {
+        backupPath = await backupItemToTrash(u.installation, homeRoot);
+      } catch {
+        // ignore backup error
+      }
+    }
+
+    const beforeTree = snapshotTree(u.installation.path);
+    const root = u.installation.scope === 'project' ? (u.installation.projectPath ?? workspaceRoot) : undefined;
+
+    try {
+      const outcome = await withStateLock(u.installation.scope, root, homeRoot, async () => {
+        return await applyInstall(u.prepared, homeRoot);
+      });
+
+      const afterTree = snapshotTree(u.installation.path);
+      const changedFiles = diffSnapshots(beforeTree, afterTree);
+
+      appliedTargets.push({
+        key: `${u.installation.assistant}:${u.installation.scope}:${u.installation.kind}:${u.installation.name}`,
+        item: u.installation.name,
+        kind: u.installation.kind,
+        assistant: u.installation.assistant,
+        scope: u.installation.scope,
+        status: outcome.status === 'applied' ? 'updated' : 'failed',
+        action: outcome.status === 'applied' ? 'updated' : 'failed',
+        oldRevision: u.installation.sourceRevision,
+        newRevision: u.prepared.supported ? u.prepared.plan.sourceRevision : undefined,
+        changedFiles,
+        ...(backupPath ? { backupPath } : {}),
+        ...(outcome.status !== 'applied' && outcome.reason ? { reason: outcome.reason } : {}),
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      appliedTargets.push({
+        key: `${u.installation.assistant}:${u.installation.scope}:${u.installation.kind}:${u.installation.name}`,
+        item: u.installation.name,
+        kind: u.installation.kind,
+        assistant: u.installation.assistant,
+        scope: u.installation.scope,
+        status: 'failed',
+        action: 'failed',
+        oldRevision: u.installation.sourceRevision,
+        newRevision: u.prepared.supported ? u.prepared.plan.sourceRevision : undefined,
+        changedFiles: { added: [], changed: [], removed: [] },
+        reason: msg,
+        ...(backupPath ? { backupPath } : {}),
+      });
+    }
+  }
+
+  // Include skipped items
+  for (const s of planResult.skippedModified) {
+    appliedTargets.push({
+      key: `${s.installation.assistant}:${s.installation.scope}:${s.installation.kind}:${s.installation.name}`,
+      item: s.installation.name,
+      kind: s.installation.kind,
+      assistant: s.installation.assistant,
+      scope: s.installation.scope,
+      status: s.status,
+      action: 'skipped',
+      reason: 'Modified locally (use --include-modified to overwrite)',
+      oldRevision: s.installation.sourceRevision,
+      changedFiles: { added: [], changed: [], removed: [] },
+    });
+  }
+
+  for (const utd of planResult.upToDate) {
+    appliedTargets.push({
+      key: `${utd.installation.assistant}:${utd.installation.scope}:${utd.installation.kind}:${utd.installation.name}`,
+      item: utd.installation.name,
+      kind: utd.installation.kind,
+      assistant: utd.installation.assistant,
+      scope: utd.installation.scope,
+      status: 'up-to-date',
+      action: 'skipped',
+      oldRevision: utd.installation.sourceRevision,
+      changedFiles: { added: [], changed: [], removed: [] },
+    });
+  }
+
+  for (const c of planResult.cannotUpdate) {
+    appliedTargets.push({
+      key: `${c.installation.assistant}:${c.installation.scope}:${c.installation.kind}:${c.installation.name}`,
+      item: c.installation.name,
+      kind: c.installation.kind,
+      assistant: c.installation.assistant,
+      scope: c.installation.scope,
+      status: 'cannot-update',
+      action: 'skipped',
+      reason: c.reason,
+      oldRevision: c.installation.sourceRevision,
+      changedFiles: { added: [], changed: [], removed: [] },
+    });
+  }
+
+  return {
+    mode: 'applied',
+    targets: appliedTargets,
+  };
+}
+
+export async function runTrashList(
+  opts: GlobalCliOptions & { scope?: string }
+) {
+  const { homeRoot, workspaceRoot } = resolveRoots(opts);
+  const filterScope = validateScope(opts.scope);
+
+  const entries: TrashEntry[] = [];
+  if (!filterScope || filterScope === 'global') {
+    entries.push(...(await listTrash('global', undefined, homeRoot)));
+  }
+  if ((!filterScope || filterScope === 'project') && workspaceRoot) {
+    entries.push(...(await listTrash('project', workspaceRoot, homeRoot)));
+  }
+
+  entries.sort(
+    (a, b) => new Date(b.deletedAt).getTime() - new Date(a.deletedAt).getTime()
+  );
+
+  return entries.map((e) => ({
+    id: path.basename(e.trashPath),
+    kind: e.kind,
+    name: e.name,
+    assistant: e.assistant,
+    scope: e.scope,
+    deletedAt: e.deletedAt,
+    originalPath: e.originalPath,
+    trashPath: e.trashPath,
+  }));
+}
+
+export async function runTrashRestore(
+  id: string,
+  opts: GlobalCliOptions & { to?: string; write?: boolean }
+) {
+  if (!id) {
+    throw new CliError('INVALID_ARGUMENT', 'Trash entry ID is required');
+  }
+
+  const { homeRoot, workspaceRoot } = resolveRoots(opts);
+  const allEntries: TrashEntry[] = [
+    ...(await listTrash('global', undefined, homeRoot)),
+    ...(workspaceRoot ? await listTrash('project', workspaceRoot, homeRoot) : []),
+  ];
+
+  const entry = allEntries.find(
+    (e) => path.basename(e.trashPath) === id || e.trashPath === id || e.name === id
+  );
+
+  if (!entry) {
+    throw new CliError('NOT_FOUND', `Trash entry "${id}" not found`);
+  }
+
+  const targetPath = opts.to ? path.resolve(opts.to) : entry.originalPath;
+  if (!targetPath) {
+    throw new CliError(
+      'INVALID_ARGUMENT',
+      `Trash entry "${id}" has no original path recorded; specify destination path using --to <path>`
+    );
+  }
+
+  if (!opts.write) {
+    return {
+      mode: 'plan',
+      id: path.basename(entry.trashPath),
+      name: entry.name,
+      kind: entry.kind,
+      scope: entry.scope,
+      targetPath,
+      trashPath: entry.trashPath,
+      action: 'restore',
+    };
+  }
+
+  const outcome = await restoreFromTrash(entry, targetPath);
+  if (outcome.status === 'conflict') {
+    throw new CliError('CONFLICT', outcome.message);
+  }
+
+  return {
+    mode: 'applied',
+    id: path.basename(entry.trashPath),
+    name: entry.name,
+    kind: entry.kind,
+    scope: entry.scope,
+    targetPath: outcome.restoredPath,
+    changedFiles: {
+      added: [outcome.restoredPath],
+      changed: [],
+      removed: [],
+    },
+  };
+}
+
+export async function runTrashEmpty(
+  opts: GlobalCliOptions & { scope?: string; write?: boolean }
+) {
+  const { homeRoot, workspaceRoot } = resolveRoots(opts);
+  const filterScope = validateScope(opts.scope);
+
+  if (!opts.write) {
+    const entries: TrashEntry[] = [];
+    if (!filterScope || filterScope === 'global') {
+      entries.push(...(await listTrash('global', undefined, homeRoot)));
+    }
+    if ((!filterScope || filterScope === 'project') && workspaceRoot) {
+      entries.push(...(await listTrash('project', workspaceRoot, homeRoot)));
+    }
+    return {
+      mode: 'plan',
+      action: 'empty',
+      scope: filterScope ?? 'all',
+      count: entries.length,
+    };
+  }
+
+  const result = await emptyTrash(
+    filterScope,
+    filterScope === 'project' || !filterScope ? workspaceRoot : undefined,
+    homeRoot
+  );
+
+  return {
+    mode: 'applied',
+    count: result.count,
+    failed: result.failed.map((f) => ({
+      name: f.name,
+      kind: f.kind,
+      error: f.error,
+    })),
+  };
 }
 

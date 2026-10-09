@@ -9,7 +9,9 @@ export type ErrorCode =
   | 'INTERNAL'
   | 'WRITE_NOT_ENABLED'
   | 'KIND_NOT_ALLOWED'
-  | 'NOT_A_LOCAL_FOLDER_SOURCE';
+  | 'NOT_A_LOCAL_FOLDER_SOURCE'
+  | 'DUPLICATE_ID'
+  | 'CONFLICT';
 
 export interface CliErrorResponse {
   error: {

@@ -2,7 +2,9 @@ import { Command, CommanderError } from 'commander';
 import { emit, fail, CliError } from './output';
 import { COMMAND_DEFINITIONS, runDescribe } from './definitions';
 
-const KNOWN_COMMANDS = new Set(COMMAND_DEFINITIONS.map((d) => d.name));
+const KNOWN_COMMANDS = new Set(
+  COMMAND_DEFINITIONS.flatMap((d) => [d.name, d.name.split(' ')[0]])
+);
 
 export function normalizeArgv(argv: string[]): string[] {
   const flags = ['--roots', '--ignore', '--extra-ignore'];
@@ -58,7 +60,22 @@ export function createProgram(): Command {
     .exitOverride();
 
   for (const def of COMMAND_DEFINITIONS) {
-    const cmd = program.command(def.name);
+    let cmd: Command;
+    const parts = def.name.split(' ');
+    if (parts.length > 1) {
+      let parent = program.commands.find((c) => c.name() === parts[0]);
+      if (!parent) {
+        parent = program.command(parts[0]);
+        if (parts[0] === 'source') {
+          parent.description('Manage artifact sources in manifests');
+        } else if (parts[0] === 'trash') {
+          parent.description('Inspect, restore, or empty soft-deleted items');
+        }
+      }
+      cmd = parent.command(parts[1]);
+    } else {
+      cmd = program.command(def.name);
+    }
     cmd.description(def.description);
 
     if (def.arguments) {
@@ -100,9 +117,12 @@ export function createProgram(): Command {
         } else {
           cmdOpts = actionArgs[0] || {};
         }
+        const effectiveGlobalOpts = typeof (cmd as any).optsWithGlobals === 'function'
+          ? (cmd as any).optsWithGlobals()
+          : globalOpts;
         const result = await def.run(
-          { ...globalOpts, ...cmdOpts, ...cmdArgs },
-          globalOpts
+          { ...effectiveGlobalOpts, ...cmdOpts, ...cmdArgs },
+          effectiveGlobalOpts
         );
         emit(result);
       } catch (err: unknown) {
