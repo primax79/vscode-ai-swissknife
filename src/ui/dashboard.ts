@@ -1355,6 +1355,7 @@ export class DashboardPanel {
         <tbody class="matrix-group item-row-group"
           data-kind="${this.escapeHtml(obj.kind)}"
           data-name="${this.escapeHtml(obj.name.toLowerCase())}"
+          data-identity="${this.escapeHtml(obj.kind + '|' + obj.name)}"
           data-worst-status="${this.escapeHtml(worstState)}"
           data-assistants="${this.escapeHtml(assistantsList)}"
           data-scopes="${this.escapeHtml(scopesList)}"
@@ -1363,6 +1364,8 @@ export class DashboardPanel {
             onclick="toggleFolder('${subrowsId}', this)"
             data-kind="${this.escapeHtml(obj.kind)}"
             data-name="${this.escapeHtml(obj.name.toLowerCase())}"
+            data-identity="${this.escapeHtml(obj.kind + '|' + obj.name)}"
+            data-subrows-id="${subrowsId}"
             data-worst-status="${this.escapeHtml(worstState)}"
             data-assistants="${this.escapeHtml(assistantsList)}"
             data-scopes="${this.escapeHtml(scopesList)}"
@@ -1381,7 +1384,7 @@ export class DashboardPanel {
               <span class="badge ${worstBadgeClass} worst-badge" title="${placesWithState.length} place${placesWithState.length === 1 ? '' : 's'}">${this.escapeHtml(worstBadgeText)}</span>
             </td>
           </tr>
-          <tr id="${subrowsId}" style="display: none;">
+          <tr id="${subrowsId}" class="subrows-row" style="display: none;">
             <td colspan="4" style="padding: 0; border: none;">
               <table style="margin: 0; background: rgba(0,0,0,0.1); width: 100%;">
                 <tbody>
@@ -1468,6 +1471,8 @@ export class DashboardPanel {
       <input type="text" class="search-input" id="searchBox" placeholder="Filter by name..." oninput="filterTable()">
     </div>
     <div class="filter-actions">
+      <button class="btn btn-sm btn-secondary expand-all-btn" id="expandAllBtn" title="Expand all" onclick="expandAll()"><svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="vertical-align: middle;" aria-hidden="true"><path d="M7.976 5.928l4.357-4.357.62.618L8.284 6.857h-.618L2.998 2.19l.618-.62 4.36 4.358zM7.976 12.928l4.357-4.357.62.618L8.284 13.857h-.618L2.998 9.19l.618-.62 4.36 4.358z"/></svg></button>
+      <button class="btn btn-sm btn-secondary collapse-all-btn" id="collapseAllBtn" title="Collapse all" onclick="collapseAll()"><svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="vertical-align: middle;" aria-hidden="true"><path d="M7.976 10.072l4.357 4.357.62-.618L8.284 9.143h-.618L2.998 13.81l.618.62 4.36-4.358zM7.976 3.072l4.357 4.357.62-.618L8.284 2.143h-.618L2.998 6.81l.618.62 4.36-4.358z"/></svg></button>
       <button class="btn btn-sm btn-primary update-all-btn" id="updateAllBtn" title="Update all (${updatesAvailable})" ${updatesAvailable === 0 ? 'disabled' : ''} onclick="triggerUpdateAll()">⟳</button>
     </div>
   </div>
@@ -1658,6 +1663,11 @@ export class DashboardPanel {
       gap: 8px;
       align-items: center;
       margin-bottom: 16px;
+    }
+    .filter-actions {
+      display: inline-flex;
+      gap: 4px;
+      align-items: center;
     }
     .filter-group {
       display: inline-flex;
@@ -2046,18 +2056,179 @@ export class DashboardPanel {
       }
     }
 
-    function toggleFolder(folderId, rowEl) {
-      const folderDiv = document.getElementById(folderId);
-      const caret = rowEl ? rowEl.querySelector('.folder-icon') : null;
-      if (!folderDiv) return;
-      if (folderDiv.style.display === 'none') {
-        folderDiv.style.display = '';
-        if (caret) caret.style.transform = 'rotate(90deg)';
-      } else {
-        folderDiv.style.display = 'none';
-        if (caret) caret.style.transform = 'rotate(0deg)';
+    function loadExpandedState() {
+      try {
+        if (typeof vscode !== 'undefined' && vscode && typeof vscode.getState === 'function') {
+          const state = vscode.getState();
+          if (state && Array.isArray(state.expandedParents)) {
+            return new Set(state.expandedParents);
+          }
+        }
+      } catch (e) {
+        // state may be unavailable
+      }
+      return new Set();
+    }
+
+    function saveExpandedState(set) {
+      try {
+        if (typeof vscode !== 'undefined' && vscode && typeof vscode.setState === 'function') {
+          let state = {};
+          try {
+            if (typeof vscode.getState === 'function') {
+              state = vscode.getState() || {};
+            }
+          } catch (e) {
+            state = {};
+          }
+          if (typeof state !== 'object' || state === null) {
+            state = {};
+          }
+          state = Object.assign({}, state, { expandedParents: Array.from(set) });
+          vscode.setState(state);
+        }
+      } catch (e) {
+        // state may be unavailable
       }
     }
+
+    let expandedParents = loadExpandedState();
+
+    function getParentIdentity(el) {
+      if (!el) return '';
+      let target = el;
+      if (typeof el.closest === 'function') {
+        target = el.closest('.matrix-group') || el.closest('.parent-row') || el;
+      }
+      if (target.getAttribute && target.getAttribute('data-identity')) {
+        return target.getAttribute('data-identity');
+      }
+      const kind = (target.getAttribute && target.getAttribute('data-kind')) || '';
+      const name = (target.getAttribute && target.getAttribute('data-name')) || '';
+      if (!kind && !name) return '';
+      return kind + '|' + name;
+    }
+
+    function getSubrowsEl(group) {
+      if (!group) return null;
+      if (group.subrowsEl) return group.subrowsEl;
+      if (typeof group.querySelector === 'function') {
+        const byClass = group.querySelector('.subrows-row');
+        if (byClass) return byClass;
+        const byAttr = group.querySelector('tr[id^="subrows-"]') || group.querySelector('[id^="subrows-"]');
+        if (byAttr) return byAttr;
+      }
+      const parentRow = group.querySelector ? (group.querySelector('.parent-row') || group.querySelector('tr')) : null;
+      const subrowsId = parentRow && parentRow.getAttribute ? parentRow.getAttribute('data-subrows-id') : null;
+      if (subrowsId && typeof document.getElementById === 'function') {
+        const el = document.getElementById(subrowsId);
+        if (el) return el;
+      }
+      if (group.children && group.children.length > 1) {
+        return group.children[1];
+      }
+      return null;
+    }
+
+    function getCaretEl(group) {
+      if (!group) return null;
+      if (group.caretEl) return group.caretEl;
+      if (typeof group.querySelector === 'function') {
+        const caret = group.querySelector('.folder-icon');
+        if (caret) return caret;
+      }
+      const parentRow = group.querySelector ? group.querySelector('.parent-row') : null;
+      if (parentRow && typeof parentRow.querySelector === 'function') {
+        return parentRow.querySelector('.folder-icon');
+      }
+      return null;
+    }
+
+    function applyExpandedState() {
+      const groups = document.querySelectorAll('.matrix-group');
+      if (!groups || typeof groups.forEach !== 'function') return;
+      groups.forEach(group => {
+        const identity = getParentIdentity(group);
+        const subrows = getSubrowsEl(group);
+        const caret = getCaretEl(group);
+        if (!subrows) return;
+        if (identity && expandedParents.has(identity)) {
+          subrows.style.display = '';
+          if (caret && caret.style) caret.style.transform = 'rotate(90deg)';
+        } else {
+          subrows.style.display = 'none';
+          if (caret && caret.style) caret.style.transform = 'rotate(0deg)';
+        }
+      });
+    }
+
+    function expandAll() {
+      const groups = document.querySelectorAll('.matrix-group');
+      if (!groups || typeof groups.forEach !== 'function') return;
+      groups.forEach(group => {
+        if (group.style && group.style.display === 'none') {
+          return;
+        }
+        const subrows = getSubrowsEl(group);
+        const caret = getCaretEl(group);
+        if (subrows) {
+          subrows.style.display = '';
+          if (caret && caret.style) caret.style.transform = 'rotate(90deg)';
+          const identity = getParentIdentity(group);
+          if (identity) {
+            expandedParents.add(identity);
+          }
+        }
+      });
+      saveExpandedState(expandedParents);
+    }
+
+    function collapseAll() {
+      const groups = document.querySelectorAll('.matrix-group');
+      if (!groups || typeof groups.forEach !== 'function') return;
+      groups.forEach(group => {
+        if (group.style && group.style.display === 'none') {
+          return;
+        }
+        const subrows = getSubrowsEl(group);
+        const caret = getCaretEl(group);
+        if (subrows) {
+          subrows.style.display = 'none';
+          if (caret && caret.style) caret.style.transform = 'rotate(0deg)';
+          const identity = getParentIdentity(group);
+          if (identity) {
+            expandedParents.delete(identity);
+          }
+        }
+      });
+      saveExpandedState(expandedParents);
+    }
+
+    function toggleFolder(folderId, rowEl) {
+      const folderDiv = document.getElementById(folderId);
+      const caret = rowEl ? (rowEl.querySelector ? rowEl.querySelector('.folder-icon') : null) : (folderDiv && folderDiv.parentElement && folderDiv.parentElement.querySelector ? folderDiv.parentElement.querySelector('.folder-icon') : null);
+      if (!folderDiv) return;
+      const isCollapsed = folderDiv.style.display === 'none';
+      if (isCollapsed) {
+        folderDiv.style.display = '';
+        if (caret && caret.style) caret.style.transform = 'rotate(90deg)';
+      } else {
+        folderDiv.style.display = 'none';
+        if (caret && caret.style) caret.style.transform = 'rotate(0deg)';
+      }
+      const parentEl = rowEl || (folderDiv.closest ? folderDiv.closest('.matrix-group') : (folderDiv.parentElement && folderDiv.parentElement.querySelector ? folderDiv.parentElement.querySelector('.parent-row') : null));
+      const identity = getParentIdentity(parentEl);
+      if (identity) {
+        if (isCollapsed) {
+          expandedParents.add(identity);
+        } else {
+          expandedParents.delete(identity);
+        }
+        saveExpandedState(expandedParents);
+      }
+    }
+
+    applyExpandedState();
 
     let managedData = JSON.parse(document.getElementById('managedDataJson').textContent);
     let observedData = JSON.parse(document.getElementById('observedDataJson').textContent);
@@ -2511,6 +2682,7 @@ export class DashboardPanel {
             tbody.innerHTML = typeof rows === 'string' ? rows : '';
           }
         }
+        applyExpandedState();
         const manStat = document.getElementById('stat-managed');
         if (manStat) manStat.textContent = msg.totalInstalled;
         const unmanStat = document.getElementById('stat-unmanaged');
