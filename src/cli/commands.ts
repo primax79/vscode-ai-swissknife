@@ -19,6 +19,7 @@ import { scanInstalledInventory } from '../engine/discovery';
 import { checkForUpstreamUpdate, analyzeLocalDrift } from '../engine/drift';
 import { planInstallMatrix } from '../engine/installMatrix';
 import { resolveAndTranslate } from '../engine/plan';
+import { findWorkspaces, scanInventoryAcrossRoots } from '../engine/scanRoots';
 import { serializeSkillMarkdown } from '../adapters/claude';
 import { readSkill } from '../adapters/codec';
 import type { CanonicalSkill } from '../adapters/types';
@@ -40,6 +41,7 @@ import type {
   CatalogArtifact,
   CatalogDiagnostic,
   CliInstalledItem,
+  CliInstalledRootsResult,
   CliUpdateItem,
   CliItemDetail,
   CliPlanInstallSummary,
@@ -55,6 +57,29 @@ const VALID_KINDS: readonly ItemKind[] = [
 ];
 
 const VALID_SCOPES: readonly Scope[] = ['global', 'project'];
+
+function parseScanOptions(opts: GlobalCliOptions): {
+  maxDepth?: number;
+  ignore?: string[];
+  extraIgnore?: string[];
+} {
+  return {
+    maxDepth:
+      opts.maxDepth !== undefined
+        ? parseInt(String(opts.maxDepth), 10)
+        : undefined,
+    ignore: opts.ignore
+      ? Array.isArray(opts.ignore)
+        ? opts.ignore
+        : [opts.ignore]
+      : undefined,
+    extraIgnore: opts.extraIgnore
+      ? Array.isArray(opts.extraIgnore)
+        ? opts.extraIgnore
+        : [opts.extraIgnore]
+      : undefined,
+  };
+}
 
 function resolveRoots(opts: GlobalCliOptions): { homeRoot?: string; workspaceRoot: string } {
   const homeRoot = opts.home ? path.resolve(opts.home) : undefined;
@@ -219,10 +244,14 @@ export async function runCatalog(
   return { artifacts, diagnostics };
 }
 
+export async function runInstalled<
+  T extends GlobalCliOptions & { scope?: string; assistant?: string; kind?: string }
+>(
+  opts: T
+): Promise<T extends { roots: string[] } ? CliInstalledRootsResult : CliInstalledItem[]>;
 export async function runInstalled(
   opts: GlobalCliOptions & { scope?: string; assistant?: string; kind?: string }
-): Promise<CliInstalledItem[]> {
-  const { homeRoot, workspaceRoot } = resolveRoots(opts);
+): Promise<CliInstalledItem[] | CliInstalledRootsResult> {
   const filterScope = validateScope(opts.scope);
   const filterKind = validateKind(opts.kind);
 
@@ -233,6 +262,33 @@ export async function runInstalled(
   } else if (opts.assistants) {
     assistantFilter = parseAssistantFilter(opts.assistants);
   }
+
+  // When --roots is specified: multi-root scanning
+  if (opts.roots && opts.roots.length > 0) {
+    const homeRoot = opts.home ? path.resolve(opts.home) : undefined;
+    const scanOpts = parseScanOptions(opts);
+    const roots = Array.isArray(opts.roots) ? opts.roots : [opts.roots];
+
+    const scanResult = await scanInventoryAcrossRoots(roots, {
+      assistants: assistantFilter,
+      scopes: filterScope ? [filterScope] : undefined,
+      homeRoot,
+      options: scanOpts,
+    });
+
+    const items = filterKind
+      ? scanResult.items.filter((i) => i.kind === filterKind)
+      : scanResult.items;
+
+    return {
+      items,
+      installed: items,
+      workspaces: scanResult.workspaces,
+      skipped: scanResult.skipped,
+    };
+  }
+
+  const { homeRoot, workspaceRoot } = resolveRoots(opts);
 
   const scopesToScan: Scope[] = filterScope
     ? [filterScope]
@@ -260,6 +316,7 @@ export async function runInstalled(
           membership: 'managed',
           path: m.path,
           ...(m.sourceId ? { sourceId: m.sourceId } : {}),
+          workspace: sc === 'global' ? null : workspaceRoot,
         });
       }
 
@@ -283,6 +340,7 @@ export async function runInstalled(
           path: o.path,
           ...(o.match?.sourceId ? { sourceId: o.match.sourceId } : {}),
           ...(matchedStatus ? { match: matchedStatus } : {}),
+          workspace: sc === 'global' ? null : workspaceRoot,
         });
       }
     } catch {
@@ -296,18 +354,110 @@ export async function runInstalled(
 export async function runUpdates(
   opts: GlobalCliOptions & { scope?: string; assistant?: string; kind?: string }
 ): Promise<CliUpdateItem[]> {
-  const { homeRoot, workspaceRoot } = resolveRoots(opts);
   const filterScope = validateScope(opts.scope);
   const filterKind = validateKind(opts.kind);
   const filterAssistant = opts.assistant ? parseAssistantFilter(opts.assistant)?.[0] : undefined;
 
-  const allInstallations: ManagedInstallation[] = [];
+  // When --roots is specified: multi-root drift check
+  if (opts.roots && opts.roots.length > 0) {
+    const homeRoot = opts.home ? path.resolve(opts.home) : undefined;
+    const scanOpts = parseScanOptions(opts);
+    const roots = Array.isArray(opts.roots) ? opts.roots : [opts.roots];
+    const { workspaces } = await findWorkspaces(roots, scanOpts);
+
+    const updates: CliUpdateItem[] = [];
+
+    // Global scope
+    if (!filterScope || filterScope === 'global') {
+      try {
+        const gState = await readState('global', undefined, homeRoot);
+        const gManifest = await readManifest('global', undefined, homeRoot);
+        const gSources = gManifest.sources.map((d) => fromDesiredSource(d, undefined, homeRoot));
+
+        for (const inst of gState.installations) {
+          if (filterAssistant && inst.assistant !== filterAssistant) continue;
+          if (filterKind && inst.kind !== filterKind) continue;
+
+          const matchingSource = gSources.find((s) => s.id === inst.sourceId);
+          let report;
+          if (matchingSource) {
+            report = await checkForUpstreamUpdate(inst, matchingSource, homeRoot);
+          } else {
+            report = await analyzeLocalDrift(inst, homeRoot);
+          }
+
+          updates.push({
+            key: `${inst.assistant}:${inst.scope}:${inst.kind}:${inst.name}`,
+            kind: inst.kind,
+            name: inst.name,
+            assistant: inst.assistant,
+            scope: inst.scope,
+            status: report.status,
+            ...(inst.sourceId ? { sourceId: inst.sourceId } : {}),
+            ...(report.details ? { details: report.details } : {}),
+            workspace: null,
+          });
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    // Workspace scope for each found workspace
+    if (!filterScope || filterScope === 'project') {
+      const multiWorkspace = workspaces.length > 1;
+
+      for (const ws of workspaces) {
+        const suffix = multiWorkspace ? `@${path.basename(ws)}` : '';
+        try {
+          const pState = await readState('project', ws, homeRoot);
+          const pManifest = await readManifest('project', ws, homeRoot);
+          const pSources = pManifest.sources.map((d) => fromDesiredSource(d, ws, homeRoot));
+
+          for (const inst of pState.installations) {
+            if (filterAssistant && inst.assistant !== filterAssistant) continue;
+            if (filterKind && inst.kind !== filterKind) continue;
+
+            const matchingSource = pSources.find((s) => s.id === inst.sourceId);
+            let report;
+            if (matchingSource) {
+              report = await checkForUpstreamUpdate(inst, matchingSource, homeRoot);
+            } else {
+              report = await analyzeLocalDrift(inst, homeRoot);
+            }
+
+            updates.push({
+              key: `${inst.assistant}:${inst.scope}:${inst.kind}:${inst.name}${suffix}`,
+              kind: inst.kind,
+              name: inst.name,
+              assistant: inst.assistant,
+              scope: inst.scope,
+              status: report.status,
+              ...(inst.sourceId ? { sourceId: inst.sourceId } : {}),
+              ...(report.details ? { details: report.details } : {}),
+              workspace: ws,
+            });
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    return updates;
+  }
+
+  const { homeRoot, workspaceRoot } = resolveRoots(opts);
+
+  const allInstallations: Array<{ inst: ManagedInstallation; wsRoot?: string }> = [];
   const allSources: Source[] = [];
 
   // Global state & manifest
   try {
     const gState = await readState('global', undefined, homeRoot);
-    allInstallations.push(...gState.installations);
+    for (const inst of gState.installations) {
+      allInstallations.push({ inst });
+    }
     const gManifest = await readManifest('global', undefined, homeRoot);
     allSources.push(...gManifest.sources.map((d) => fromDesiredSource(d, undefined, homeRoot)));
   } catch {
@@ -318,7 +468,9 @@ export async function runUpdates(
   if (workspaceRoot) {
     try {
       const pState = await readState('project', workspaceRoot, homeRoot);
-      allInstallations.push(...pState.installations);
+      for (const inst of pState.installations) {
+        allInstallations.push({ inst, wsRoot: workspaceRoot });
+      }
       const pManifest = await readManifest('project', workspaceRoot, homeRoot);
       allSources.push(...pManifest.sources.map((d) => fromDesiredSource(d, workspaceRoot, homeRoot)));
     } catch {
@@ -328,7 +480,7 @@ export async function runUpdates(
 
   const updates: CliUpdateItem[] = [];
 
-  for (const inst of allInstallations) {
+  for (const { inst, wsRoot } of allInstallations) {
     if (filterScope && inst.scope !== filterScope) continue;
     if (filterAssistant && inst.assistant !== filterAssistant) continue;
     if (filterKind && inst.kind !== filterKind) continue;
@@ -350,6 +502,7 @@ export async function runUpdates(
       status: report.status,
       ...(inst.sourceId ? { sourceId: inst.sourceId } : {}),
       ...(report.details ? { details: report.details } : {}),
+      workspace: inst.scope === 'global' ? null : (wsRoot ?? null),
     });
   }
 
@@ -360,20 +513,61 @@ export async function runItem(
   key: string,
   opts: GlobalCliOptions & { diff?: boolean }
 ): Promise<CliItemDetail> {
-  const { homeRoot, workspaceRoot } = resolveRoots(opts);
-
   if (!key || typeof key !== 'string') {
     throw new CliError('INVALID_ARGUMENT', 'Item key argument is required');
+  }
+
+  let baseKey = key;
+  let workspaceFolderName: string | undefined;
+  const atIndex = key.lastIndexOf('@');
+  if (atIndex !== -1) {
+    baseKey = key.slice(0, atIndex);
+    workspaceFolderName = key.slice(atIndex + 1);
+  }
+
+  const homeRoot = opts.home ? path.resolve(opts.home) : undefined;
+  let targetWorkspaces: string[] = [];
+
+  if (opts.roots && opts.roots.length > 0) {
+    const scanOpts = parseScanOptions(opts);
+    const roots = Array.isArray(opts.roots) ? opts.roots : [opts.roots];
+    const { workspaces } = await findWorkspaces(roots, scanOpts);
+    if (workspaceFolderName) {
+      const match = workspaces.find((ws) => path.basename(ws) === workspaceFolderName);
+      if (!match) {
+        throw new CliError('NOT_FOUND', `Item "${key}" not found`);
+      }
+      targetWorkspaces = [match];
+    } else {
+      targetWorkspaces = workspaces;
+    }
+  } else if (workspaceFolderName) {
+    if (opts.workspace && path.basename(opts.workspace) === workspaceFolderName) {
+      targetWorkspaces = [path.resolve(opts.workspace)];
+    } else if (path.basename(process.cwd()) === workspaceFolderName) {
+      targetWorkspaces = [process.cwd()];
+    } else {
+      targetWorkspaces = [resolveRoots(opts).workspaceRoot];
+    }
+  } else {
+    targetWorkspaces = [resolveRoots(opts).workspaceRoot];
   }
 
   // Gather inventory from all scopes
   const managedItems: ManagedInstallation[] = [];
   const observedItems: ObservedArtifact[] = [];
 
-  for (const sc of ['global', 'project'] as const) {
-    const pRoot = sc === 'project' ? workspaceRoot : undefined;
+  try {
+    const inv = await scanInstalledInventory('global', undefined, homeRoot);
+    managedItems.push(...inv.managed);
+    observedItems.push(...inv.observed);
+  } catch {
+    // ignore
+  }
+
+  for (const ws of targetWorkspaces) {
     try {
-      const inv = await scanInstalledInventory(sc, pRoot, homeRoot);
+      const inv = await scanInstalledInventory('project', ws, homeRoot);
       managedItems.push(...inv.managed);
       observedItems.push(...inv.observed);
     } catch {
@@ -381,12 +575,31 @@ export async function runItem(
     }
   }
 
-  const targetManaged = managedItems.find(
-    (m) => `${m.assistant}:${m.scope}:${m.kind}:${m.name}` === key
-  );
-  const targetObserved = observedItems.find(
-    (o) => `${o.assistant}:${o.scope}:${o.kind}:${o.name}` === key
-  );
+  const targetManaged = managedItems.find((m) => {
+    const mBaseKey = `${m.assistant}:${m.scope}:${m.kind}:${m.name}`;
+    if (m.scope === 'global') {
+      return mBaseKey === key;
+    }
+    const wsFolder = m.projectPath ? path.basename(m.projectPath) : '';
+    const suffixedKey = `${mBaseKey}@${wsFolder}`;
+    if (key === suffixedKey) return true;
+    if (key === mBaseKey && !workspaceFolderName) return true;
+    if (mBaseKey === baseKey && workspaceFolderName && wsFolder === workspaceFolderName) return true;
+    return false;
+  });
+
+  const targetObserved = observedItems.find((o) => {
+    const oBaseKey = `${o.assistant}:${o.scope}:${o.kind}:${o.name}`;
+    if (o.scope === 'global') {
+      return oBaseKey === key;
+    }
+    const wsFolder = o.projectPath ? path.basename(o.projectPath) : '';
+    const suffixedKey = `${oBaseKey}@${wsFolder}`;
+    if (key === suffixedKey) return true;
+    if (key === oBaseKey && !workspaceFolderName) return true;
+    if (oBaseKey === baseKey && workspaceFolderName && wsFolder === workspaceFolderName) return true;
+    return false;
+  });
 
   if (!targetManaged && !targetObserved) {
     throw new CliError('NOT_FOUND', `Item "${key}" not found`);
@@ -400,10 +613,10 @@ export async function runItem(
   } catch {
     // ignore
   }
-  if (workspaceRoot) {
+  for (const ws of targetWorkspaces) {
     try {
-      const pManifest = await readManifest('project', workspaceRoot, homeRoot);
-      allSources.push(...pManifest.sources.map((d) => fromDesiredSource(d, workspaceRoot, homeRoot)));
+      const pManifest = await readManifest('project', ws, homeRoot);
+      allSources.push(...pManifest.sources.map((d) => fromDesiredSource(d, ws, homeRoot)));
     } catch {
       // ignore
     }
@@ -439,24 +652,26 @@ export async function runItem(
   const installedIn: CliItemDetail['installedIn'] = [];
   for (const m of managedItems) {
     if (m.name === item.name && m.kind === item.kind) {
-      if (!(m.assistant === item.assistant && m.scope === item.scope)) {
+      if (!(m.assistant === item.assistant && m.scope === item.scope && m.projectPath === item.projectPath)) {
         installedIn.push({
           assistant: m.assistant,
           scope: m.scope,
           membership: 'managed',
           path: m.path,
+          workspace: m.scope === 'global' ? null : (m.projectPath ?? null),
         });
       }
     }
   }
   for (const o of observedItems) {
     if (o.name === item.name && o.kind === item.kind) {
-      if (!(o.assistant === item.assistant && o.scope === item.scope)) {
+      if (!(o.assistant === item.assistant && o.scope === item.scope && o.projectPath === item.projectPath)) {
         installedIn.push({
           assistant: o.assistant,
           scope: o.scope,
           membership: 'observed',
           path: o.path,
+          workspace: o.scope === 'global' ? null : (o.projectPath ?? null),
         });
       }
     }
@@ -556,6 +771,7 @@ export async function runItem(
     scope: item.scope,
     membership,
     path: item.path,
+    workspace: item.scope === 'global' ? null : (item.projectPath ?? null),
     ...(origin ? { origin } : {}),
     installedIn,
     diffAvailable,

@@ -2,6 +2,27 @@ import { Command, CommanderError } from 'commander';
 import { emit, fail, CliError } from './output';
 import { COMMAND_DEFINITIONS, runDescribe } from './definitions';
 
+const KNOWN_COMMANDS = new Set(COMMAND_DEFINITIONS.map((d) => d.name));
+
+export function normalizeArgv(argv: string[]): string[] {
+  const flags = ['--roots', '--ignore', '--extra-ignore'];
+  for (const flag of flags) {
+    const idx = argv.indexOf(flag);
+    if (idx !== -1) {
+      for (let i = idx + 1; i < argv.length; i++) {
+        if (KNOWN_COMMANDS.has(argv[i])) {
+          const cmd = argv[i];
+          const newArgv = [...argv];
+          newArgv.splice(i, 1);
+          newArgv.splice(idx, 0, cmd);
+          return normalizeArgv(newArgv);
+        }
+      }
+    }
+  }
+  return argv;
+}
+
 export function createProgram(): Command {
   const program = new Command();
 
@@ -9,11 +30,30 @@ export function createProgram(): Command {
     .name('ai-swissknife')
     .description('Cross-assistant AI artifact manager CLI')
     .version('0.4.0')
-    .option('--workspace <path>', 'Workspace root folder path (used for Workspace scope)')
+    .option(
+      '--workspace <path>',
+      'Workspace root folder path (used for Workspace scope; ignored when --roots is used)'
+    )
     .option('--home <path>', 'User home directory path (used for Global scope)')
     .option(
       '--assistants <ids>',
       'Comma-separated active assistant ids (e.g. claude-code,kilo-code)'
+    )
+    .option(
+      '--roots <dirs...>',
+      'Workspace root directories to scan (repeatable; overrides --workspace)'
+    )
+    .option(
+      '--max-depth <n>',
+      'Maximum directory search depth for workspaces (default: 4)'
+    )
+    .option(
+      '--ignore <names...>',
+      'Directory names to ignore (replaces defaults)'
+    )
+    .option(
+      '--extra-ignore <names...>',
+      'Additional directory names to ignore (adds to defaults)'
     )
     .exitOverride();
 
@@ -91,8 +131,9 @@ export async function main(argv: string[] = process.argv): Promise<void> {
     return;
   }
   const program = createProgram();
+  const normalizedArgv = normalizeArgv(argv);
   try {
-    await program.parseAsync(argv);
+    await program.parseAsync(normalizedArgv);
   } catch (err: unknown) {
     if (err instanceof CommanderError) {
       if (
