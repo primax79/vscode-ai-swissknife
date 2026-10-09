@@ -164,4 +164,52 @@ describe('scanRoots engine (Task 48.1)', () => {
     assert.strictEqual(resAdd.workspaces.includes(oldW), false);
     assert.strictEqual(resAdd.workspaces.includes(customC), false);
   });
+
+  it('regression 48.1b (a): a tree located under a directory literally named .kilo/worktrees/x still finds its workspaces', async () => {
+    const treeUnderKilo = path.join(tempTree, '.kilo', 'worktrees', 'x');
+    const wsA = path.join(treeUnderKilo, 'projA');
+    const wsB = path.join(treeUnderKilo, 'projB');
+    await fs.promises.mkdir(path.join(wsA, '.claude', 'skills', 'sa'), { recursive: true });
+    await fs.promises.mkdir(path.join(wsB, '.kilo', 'skills', 'sb'), { recursive: true });
+
+    const res = await findWorkspaces([treeUnderKilo]);
+    assert.strictEqual(res.workspaces.length, 2);
+    assert.ok(res.workspaces.includes(wsA));
+    assert.ok(res.workspaces.includes(wsB));
+  });
+
+  it('regression 48.1b (b): a tree located under a directory named old or node_modules still finds its workspaces', async () => {
+    const treeUnderOld = path.join(tempTree, 'old', 'my-tree');
+    const treeUnderNodeModules = path.join(tempTree, 'node_modules', 'my-tree');
+    const wsOld = path.join(treeUnderOld, 'proj-old');
+    const wsNm = path.join(treeUnderNodeModules, 'proj-nm');
+    await fs.promises.mkdir(path.join(wsOld, '.claude'), { recursive: true });
+    await fs.promises.mkdir(path.join(wsNm, '.kilo', 'skills'), { recursive: true });
+
+    const resOld = await findWorkspaces([treeUnderOld]);
+    assert.strictEqual(resOld.workspaces.length, 1);
+    assert.ok(resOld.workspaces.includes(wsOld));
+
+    const resNm = await findWorkspaces([treeUnderNodeModules]);
+    assert.strictEqual(resNm.workspaces.length, 1);
+    assert.ok(resNm.workspaces.includes(wsNm));
+  });
+
+  it('regression 48.1b (d): a root whose own name is in the ignore list is still scanned', async () => {
+    const oldRoot = path.join(tempTree, 'old');
+    const wsInOld = path.join(oldRoot, 'my-proj');
+    await fs.promises.mkdir(path.join(wsInOld, '.claude'), { recursive: true });
+
+    const res = await findWorkspaces([oldRoot]);
+    assert.strictEqual(res.workspaces.length, 1);
+    assert.ok(res.workspaces.includes(wsInOld));
+
+    const nmRoot = path.join(tempTree, 'node_modules');
+    const wsInNm = path.join(nmRoot, 'my-proj-nm');
+    await fs.promises.mkdir(path.join(wsInNm, '.claude'), { recursive: true });
+
+    const resNm = await findWorkspaces([nmRoot]);
+    assert.strictEqual(resNm.workspaces.length, 1);
+    assert.ok(resNm.workspaces.includes(wsInNm));
+  });
 });
