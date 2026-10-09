@@ -19,6 +19,10 @@ export interface GlobalCliOptions {
   workspace?: string;
   home?: string;
   assistants?: string;
+  roots?: string[];
+  maxDepth?: number | string;
+  ignore?: string[];
+  extraIgnore?: string[];
 }
 
 export interface CliOptionDefinition {
@@ -90,6 +94,14 @@ export interface CliInstalledItem {
   path: string;
   sourceId?: string;
   match?: 'identical' | 'different';
+  workspace?: string | null;
+}
+
+export interface CliInstalledRootsResult {
+  items: CliInstalledItem[];
+  installed: CliInstalledItem[];
+  workspaces: string[];
+  skipped: Array<{ path: string; reason: string }>;
 }
 
 export interface CliUpdateItem {
@@ -101,6 +113,7 @@ export interface CliUpdateItem {
   status: DriftReport['status'];
   sourceId?: string;
   details?: string;
+  workspace?: string | null;
 }
 
 export interface CliItemDetail {
@@ -111,6 +124,7 @@ export interface CliItemDetail {
   scope: Scope;
   membership: 'managed' | 'observed';
   path: string;
+  workspace?: string | null;
   origin?: {
     sourceId?: string;
     packageId?: string;
@@ -124,6 +138,7 @@ export interface CliItemDetail {
     scope: Scope;
     membership: 'managed' | 'observed';
     path: string;
+    workspace?: string | null;
   }>;
   diffAvailable: boolean;
   diff?: string;

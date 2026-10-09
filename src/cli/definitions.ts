@@ -122,6 +122,22 @@ export const COMMAND_DEFINITIONS: CliCommandDefinition[] = [
         description:
           'Filter by kind (skill, agent, command, mcp-server, hook, rule)',
       },
+      {
+        flags: '--roots <dirs...>',
+        description: 'Workspace root directories to scan (overrides --workspace)',
+      },
+      {
+        flags: '--max-depth <n>',
+        description: 'Maximum directory search depth (default 4)',
+      },
+      {
+        flags: '--ignore <names...>',
+        description: 'Directory names to ignore (replaces defaults)',
+      },
+      {
+        flags: '--extra-ignore <names...>',
+        description: 'Additional directory names to ignore',
+      },
     ],
     examples: [
       'ai-swissknife installed',
@@ -162,6 +178,11 @@ export const COMMAND_DEFINITIONS: CliCommandDefinition[] = [
             enum: ['identical', 'different'],
             optional: true,
           },
+          workspace: {
+            type: 'string',
+            optional: true,
+            description: 'Workspace root path (null for Global scope)',
+          },
         },
       },
     },
@@ -180,6 +201,22 @@ export const COMMAND_DEFINITIONS: CliCommandDefinition[] = [
         flags: '--kind <kind>',
         description:
           'Filter by kind (skill, agent, command, mcp-server, hook, rule)',
+      },
+      {
+        flags: '--roots <dirs...>',
+        description: 'Workspace root directories to scan (overrides --workspace)',
+      },
+      {
+        flags: '--max-depth <n>',
+        description: 'Maximum directory search depth (default 4)',
+      },
+      {
+        flags: '--ignore <names...>',
+        description: 'Directory names to ignore (replaces defaults)',
+      },
+      {
+        flags: '--extra-ignore <names...>',
+        description: 'Additional directory names to ignore',
       },
     ],
     examples: [
@@ -226,6 +263,11 @@ export const COMMAND_DEFINITIONS: CliCommandDefinition[] = [
           },
           sourceId: { type: 'string', optional: true },
           details: { type: 'string', optional: true },
+          workspace: {
+            type: 'string',
+            optional: true,
+            description: 'Workspace root path (null for Global scope)',
+          },
         },
       },
     },
@@ -246,6 +288,22 @@ export const COMMAND_DEFINITIONS: CliCommandDefinition[] = [
       {
         flags: '--diff',
         description: 'Include size-capped unified diff against upstream original',
+      },
+      {
+        flags: '--roots <dirs...>',
+        description: 'Workspace root directories to scan (overrides --workspace)',
+      },
+      {
+        flags: '--max-depth <n>',
+        description: 'Maximum directory search depth (default 4)',
+      },
+      {
+        flags: '--ignore <names...>',
+        description: 'Directory names to ignore (replaces defaults)',
+      },
+      {
+        flags: '--extra-ignore <names...>',
+        description: 'Additional directory names to ignore',
       },
     ],
     examples: [
@@ -279,6 +337,11 @@ export const COMMAND_DEFINITIONS: CliCommandDefinition[] = [
         scope: { type: 'string', enum: ['global', 'project'] },
         membership: { type: 'string', enum: ['managed', 'observed'] },
         path: { type: 'string', description: 'Filesystem path' },
+        workspace: {
+          type: 'string',
+          optional: true,
+          description: 'Workspace root path (null for Global scope)',
+        },
         origin: {
           type: 'object',
           optional: true,
