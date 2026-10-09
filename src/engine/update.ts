@@ -181,7 +181,7 @@ export async function planUpdate(
     artifact: fakeArtifact,
     targetAdapter,
     targetScope: inst.scope,
-    projectRoot: inst.projectPath ?? options?.projectRoot,
+    projectRoot: inst.scope === 'project' ? (inst.projectPath ?? options?.projectRoot) : undefined,
     resolverOpts: options?.resolverOpts,
   });
 }

@@ -27,6 +27,7 @@ import {
   canonicalHookHash,
   canonicalRuleHash,
 } from '../adapters/codec';
+import { readState } from '../domain/registry';
 import { ALL_ADAPTERS } from '../adapters/registry';
 import { localFolderResolver } from '../sources/localFolder';
 import { planInstallMatrix } from './installMatrix';
@@ -409,6 +410,7 @@ export async function planRedistribute(
   }
 
   const targets: RedistributeTarget[] = [];
+  const seenTargets = new Set<string>();
 
   // 4. Classify managed installations matching this source
   const relevantInstallations = installations.filter((inst) => {
@@ -420,6 +422,10 @@ export async function planRedistribute(
   });
 
   for (const inst of relevantInstallations) {
+    const targetKey = `${inst.assistant}:${inst.scope}:${inst.kind}:${inst.name}`;
+    if (seenTargets.has(targetKey)) continue;
+    seenTargets.add(targetKey);
+
     // Find matching artifact in the source
     const foundEntry = allSourceArtifacts.find(
       (entry) =>
@@ -481,7 +487,7 @@ export async function planRedistribute(
       prepared = await planUpdate(inst, matchedSource, {
         resolution,
         homeRoot,
-        projectRoot,
+        projectRoot: inst.scope === 'project' ? (inst.projectPath ?? projectRoot) : undefined,
         resolverOpts,
       });
     } catch {
@@ -563,12 +569,15 @@ export async function planRedistribute(
     for (const entry of filteredArtifacts) {
       for (const assistant of targetAssistants) {
         for (const scope of targetScopes) {
+          const targetKey = `${assistant}:${scope}:${entry.artifact.kind}:${entry.artifact.name}`;
+          if (seenTargets.has(targetKey)) continue;
+
           const alreadyManaged = installations.some(
             (i) =>
-              i.sourceId === matchedSource!.id &&
               i.assistant === assistant &&
               i.scope === scope &&
-              (i.artifactId === entry.artifact.id || i.name === entry.artifact.name)
+              (i.name === entry.artifact.name ||
+                (i.artifactId && i.artifactId === entry.artifact.id))
           );
 
           if (!alreadyManaged) {
@@ -577,13 +586,14 @@ export async function planRedistribute(
                 items: [{ source: matchedSource, pkg: entry.pkg, artifact: entry.artifact }],
                 assistants: [assistant],
                 scopes: [scope],
-                projectRoot,
+                projectRoot: scope === 'project' ? projectRoot : undefined,
                 homeRoot,
                 resolverOpts,
               });
 
               const matrixTarget = matrixResult.targets[0];
               if (matrixTarget && matrixTarget.prepared.supported) {
+                seenTargets.add(targetKey);
                 const translatedResult = await resolveAndTranslate(
                   matchedSource,
                   entry.pkg,
@@ -660,12 +670,47 @@ export async function applyRedistribute(
       const beforeTree = snapshotTree(target.path);
 
       try {
+        const isUpdate = target.classification !== 'missing';
+        let beforeCount = 0;
+        const projectPath =
+          target.scope === 'project'
+            ? (target.installation?.projectPath ?? options?.projectRoot)
+            : undefined;
+
+        if (isUpdate) {
+          try {
+            const beforeState = await readState(target.scope, projectPath, options?.homeRoot);
+            beforeCount = beforeState.installations.length;
+          } catch {
+            // ignore
+          }
+        }
+
         if (target.classification === 'modified-locally' && target.installation) {
           backupPath = await backupItemToTrash(target.installation, options?.homeRoot);
         }
 
         const outcome = await applyInstall(target.prepared, options?.homeRoot);
         if (outcome.status === 'applied') {
+          // Guard: record count must not grow on updates
+          if (isUpdate && beforeCount > 0) {
+            try {
+              const afterState = await readState(target.scope, projectPath, options?.homeRoot);
+              if (afterState.installations.length > beforeCount) {
+                throw new Error(
+                  `Installation record count increased from ${beforeCount} to ${afterState.installations.length} during update of "${target.item}"`
+                );
+              }
+            } catch (guardErr: unknown) {
+              if (
+                guardErr instanceof Error &&
+                guardErr.message.includes('Installation record count increased')
+              ) {
+                throw guardErr;
+              }
+            }
+          }
+
           const afterTree = snapshotTree(target.path);
           const changedFiles = diffSnapshots(beforeTree, afterTree);
 

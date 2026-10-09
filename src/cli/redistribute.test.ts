@@ -667,4 +667,301 @@ describe('CLI redistribute command (Task 46.5)', () => {
     assert.ok(found.options.some((o) => o.flags.includes('--allow-code-kinds')));
     assert.ok(found.outputShape && typeof found.outputShape === 'object');
   });
+
+  describe('Regression tests (Round 46.5 fix: no duplicate records, false modified-locally)', () => {
+    it('(1) after --write the state has the same number of installation records as before and the new hash', async () => {
+      const gStateBefore = await readState('global', undefined, tempHome);
+      const pStateBefore = await readState('project', tempWorkspace, tempHome);
+      const gCountBefore = gStateBefore.installations.length;
+      const pCountBefore = pStateBefore.installations.length;
+
+      // Edit skill-a in the folder
+      const skillADir = path.join(localSourceDir, 'skill-a');
+      await fs.promises.writeFile(
+        path.join(skillADir, 'SKILL.md'),
+        '---\nname: skill-a\ndescription: Skill A v2\n---\n# Skill A v2\n',
+        'utf-8'
+      );
+      const skillAObj = await readSkill(skillADir);
+      const expectedHash = canonicalSkillHash(skillAObj);
+
+      const res = await runCli([
+        '--home',
+        tempHome,
+        '--workspace',
+        tempWorkspace,
+        'redistribute',
+        localSourceDir,
+        '--item',
+        'skill-a',
+        '--write',
+      ]);
+
+      assert.strictEqual(res.code, 0, `CLI failed: ${res.stderr}`);
+      assert.strictEqual(res.json.mode, 'applied');
+      assert.strictEqual(res.json.targets.length, 2);
+
+      const gStateAfter = await readState('global', undefined, tempHome);
+      const pStateAfter = await readState('project', tempWorkspace, tempHome);
+
+      // (1) Number of installation records must be unchanged!
+      assert.strictEqual(
+        gStateAfter.installations.length,
+        gCountBefore,
+        `Global installation count changed: before was ${gCountBefore}, after is ${gStateAfter.installations.length}`
+      );
+      assert.strictEqual(
+        pStateAfter.installations.length,
+        pCountBefore,
+        `Project installation count changed: before was ${pCountBefore}, after is ${pStateAfter.installations.length}`
+      );
+
+      // Verify the new hash
+      const globalInst = gStateAfter.installations.find((i) => i.name === 'skill-a');
+      assert.ok(globalInst);
+      assert.strictEqual(globalInst.contentHash, expectedHash);
+
+      const projectInst = pStateAfter.installations.find((i) => i.name === 'skill-a');
+      assert.ok(projectInst);
+      assert.strictEqual(projectInst.contentHash, expectedHash);
+    });
+
+    it('(2) a second redistribute plan right after a successful --write returns only identical targets, one per installation', async () => {
+      // Edit skill-a in the folder
+      const skillADir = path.join(localSourceDir, 'skill-a');
+      await fs.promises.writeFile(
+        path.join(skillADir, 'SKILL.md'),
+        '---\nname: skill-a\ndescription: Skill A v2\n---\n# Skill A v2\n',
+        'utf-8'
+      );
+
+      // First run --write
+      const resWrite = await runCli([
+        '--home',
+        tempHome,
+        '--workspace',
+        tempWorkspace,
+        'redistribute',
+        localSourceDir,
+        '--item',
+        'skill-a',
+        '--write',
+      ]);
+      assert.strictEqual(resWrite.code, 0);
+
+      // Second run (plan mode) immediately after
+      const resPlan = await runCli([
+        '--home',
+        tempHome,
+        '--workspace',
+        tempWorkspace,
+        'redistribute',
+        localSourceDir,
+        '--item',
+        'skill-a',
+      ]);
+
+      assert.strictEqual(resPlan.code, 0);
+      assert.strictEqual(resPlan.json.mode, 'plan');
+      // Exactly 2 targets (one for claude global, one for kilo project), both identical
+      assert.strictEqual(resPlan.json.targets.length, 2);
+      for (const t of resPlan.json.targets) {
+        assert.strictEqual(t.classification, 'identical');
+        assert.strictEqual(t.action, 'skip');
+        assert.strictEqual(t.oldHash, t.newHash);
+      }
+    });
+
+    it('(3) updates right after --write reports up-to-date (one row per item)', async () => {
+      // Edit skill-a in the folder
+      const skillADir = path.join(localSourceDir, 'skill-a');
+      await fs.promises.writeFile(
+        path.join(skillADir, 'SKILL.md'),
+        '---\nname: skill-a\ndescription: Skill A v2\n---\n# Skill A v2\n',
+        'utf-8'
+      );
+
+      // Run redistribute --write
+      const resWrite = await runCli([
+        '--home',
+        tempHome,
+        '--workspace',
+        tempWorkspace,
+        'redistribute',
+        localSourceDir,
+        '--item',
+        'skill-a',
+        '--write',
+      ]);
+      assert.strictEqual(resWrite.code, 0);
+
+      // Run updates command
+      const resUpdates = await runCli([
+        '--home',
+        tempHome,
+        '--workspace',
+        tempWorkspace,
+        'updates',
+      ]);
+
+      assert.strictEqual(resUpdates.code, 0);
+      assert.ok(Array.isArray(resUpdates.json));
+
+      // Exactly 3 managed items total (skill-a global, skill-a project, skill-b project)
+      assert.strictEqual(resUpdates.json.length, 3);
+      for (const item of resUpdates.json) {
+        assert.strictEqual(item.status, 'up-to-date');
+      }
+    });
+
+    it('(4) hand-edit one of two copies, edit folder: plan has 1 row per installation, --write keeps hand edit, --force overwrites with backup only for hand-edited', async () => {
+      // skill-a is installed in claude global and kilo project.
+      // Hand-edit ONLY claude global copy
+      const claudeGlobalPath = path.join(tempHome, '.claude', 'skills', 'skill-a', 'SKILL.md');
+      const handEditedText = '---\nname: skill-a\ndescription: Hand edit\n---\n# Hand Edit\n';
+      await fs.promises.writeFile(claudeGlobalPath, handEditedText, 'utf-8');
+
+      // Edit the source folder to v2
+      const skillADir = path.join(localSourceDir, 'skill-a');
+      await fs.promises.writeFile(
+        path.join(skillADir, 'SKILL.md'),
+        '---\nname: skill-a\ndescription: Upstream v2\n---\n# Upstream v2\n',
+        'utf-8'
+      );
+
+      // Check plan mode: exactly one row per installation
+      const resPlan = await runCli([
+        '--home',
+        tempHome,
+        '--workspace',
+        tempWorkspace,
+        'redistribute',
+        localSourceDir,
+        '--item',
+        'skill-a',
+      ]);
+
+      assert.strictEqual(resPlan.code, 0);
+      assert.strictEqual(resPlan.json.targets.length, 2);
+
+      const modifiedTarget = resPlan.json.targets.find(
+        (t: any) => t.assistant === 'claude-code' && t.scope === 'global'
+      );
+      assert.ok(modifiedTarget);
+      assert.strictEqual(modifiedTarget.classification, 'modified-locally');
+      assert.strictEqual(modifiedTarget.action, 'skip');
+
+      const untouchedTarget = resPlan.json.targets.find(
+        (t: any) => t.assistant === 'kilo-code' && t.scope === 'project'
+      );
+      assert.ok(untouchedTarget);
+      assert.strictEqual(untouchedTarget.classification, 'stale');
+      assert.strictEqual(untouchedTarget.action, 'update');
+
+      // Run --write WITHOUT --force: keeps hand edit, updates the other
+      const resWriteNoForce = await runCli([
+        '--home',
+        tempHome,
+        '--workspace',
+        tempWorkspace,
+        'redistribute',
+        localSourceDir,
+        '--item',
+        'skill-a',
+        '--write',
+      ]);
+
+      assert.strictEqual(resWriteNoForce.code, 0);
+      assert.strictEqual(resWriteNoForce.json.targets.length, 2);
+
+      // Verify hand-edited copy remains unchanged on disk
+      assert.strictEqual(fs.readFileSync(claudeGlobalPath, 'utf-8'), handEditedText);
+
+      // Verify untouched copy was updated on disk
+      const kiloProjectPath = path.join(
+        tempWorkspace,
+        '.kilo',
+        'skills',
+        'skill-a',
+        'SKILL.md'
+      );
+      assert.ok(fs.readFileSync(kiloProjectPath, 'utf-8').includes('Upstream v2'));
+
+      // Now run with --force --write: overwrites hand-edited copy, backs up to trash
+      const resWriteForce = await runCli([
+        '--home',
+        tempHome,
+        '--workspace',
+        tempWorkspace,
+        'redistribute',
+        localSourceDir,
+        '--item',
+        'skill-a',
+        '--force',
+        '--write',
+      ]);
+
+      assert.strictEqual(resWriteForce.code, 0);
+      const forcedModified = resWriteForce.json.targets.find(
+        (t: any) => t.assistant === 'claude-code' && t.scope === 'global'
+      );
+      assert.ok(forcedModified);
+      assert.strictEqual(forcedModified.action, 'updated');
+      assert.ok(forcedModified.backupPath, 'backupPath must be present for hand-edited copy');
+      assert.strictEqual(
+        fs.readFileSync(path.join(forcedModified.backupPath, 'SKILL.md'), 'utf-8'),
+        handEditedText
+      );
+
+      // Untouched copy was identical in this run so it was skipped without backupPath
+      const untouchedInForced = resWriteForce.json.targets.find(
+        (t: any) => t.assistant === 'kilo-code' && t.scope === 'project'
+      );
+      assert.ok(untouchedInForced);
+      assert.strictEqual(untouchedInForced.backupPath, undefined);
+    });
+
+    it('(5) outcome list has no failed entries and no duplicates across redistribute and --install-missing', async () => {
+      // Edit skill-a in the folder
+      const skillADir = path.join(localSourceDir, 'skill-a');
+      await fs.promises.writeFile(
+        path.join(skillADir, 'SKILL.md'),
+        '---\nname: skill-a\ndescription: Skill A v3\n---\n# Skill A v3\n',
+        'utf-8'
+      );
+
+      const res = await runCli([
+        '--home',
+        tempHome,
+        '--workspace',
+        tempWorkspace,
+        'redistribute',
+        localSourceDir,
+        '--item',
+        'skill-a',
+        '--install-missing',
+        '--assistants',
+        'claude-code,kilo-code',
+        '--write',
+      ]);
+
+      assert.strictEqual(res.code, 0);
+      const targets = res.json.targets;
+      assert.ok(targets.length > 0);
+
+      // Check no failed entries
+      for (const t of targets) {
+        assert.notStrictEqual(t.action, 'failed', `Target ${t.item} had failed action`);
+      }
+
+      // Check no duplicate target keys
+      const keys = targets.map((t: any) => `${t.assistant}:${t.scope}:${t.kind}:${t.item}`);
+      const uniqueKeys = new Set(keys);
+      assert.strictEqual(
+        keys.length,
+        uniqueKeys.size,
+        `Duplicate targets found: ${JSON.stringify(keys)}`
+      );
+    });
+  });
 });

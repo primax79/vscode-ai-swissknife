@@ -161,7 +161,7 @@ export async function applyInstall(
             !(
               inst.assistant === plan.targetAssistant &&
               inst.scope === plan.targetScope &&
-              inst.projectPath === plan.projectRoot &&
+              (plan.targetScope === 'global' || inst.projectPath === plan.projectRoot) &&
               inst.path === targetFilePath &&
               inst.name === installation.name
             )
@@ -285,7 +285,7 @@ export async function applyInstall(
             !(
               inst.assistant === plan.targetAssistant &&
               inst.scope === plan.targetScope &&
-              inst.projectPath === plan.projectRoot &&
+              (plan.targetScope === 'global' || inst.projectPath === plan.projectRoot) &&
               inst.path === targetFilePath &&
               inst.name === hook.name
             )
@@ -427,7 +427,7 @@ export async function applyInstall(
             !(
               inst.assistant === plan.targetAssistant &&
               inst.scope === plan.targetScope &&
-              inst.projectPath === plan.projectRoot &&
+              (plan.targetScope === 'global' || inst.projectPath === plan.projectRoot) &&
               inst.path === targetFilePath &&
               inst.name === mcp.id
             )
@@ -662,7 +662,7 @@ export async function applyInstall(
             !(
               inst.assistant === plan.targetAssistant &&
               inst.scope === plan.targetScope &&
-              inst.projectPath === plan.projectRoot &&
+              (plan.targetScope === 'global' || inst.projectPath === plan.projectRoot) &&
               inst.path === targetFilePath &&
               inst.name === cmd.name
             )
@@ -901,7 +901,7 @@ export async function applyInstall(
             !(
               inst.assistant === plan.targetAssistant &&
               inst.scope === plan.targetScope &&
-              inst.projectPath === plan.projectRoot &&
+              (plan.targetScope === 'global' || inst.projectPath === plan.projectRoot) &&
               inst.path === targetFilePath &&
               inst.name === agent.name
             )
@@ -1195,7 +1195,7 @@ export async function applyInstall(
           !(
             inst.assistant === plan.targetAssistant &&
             inst.scope === plan.targetScope &&
-            inst.projectPath === plan.projectRoot &&
+            (plan.targetScope === 'global' || inst.projectPath === plan.projectRoot) &&
             inst.path === plan.targetDir &&
             inst.name === content.name
           )
