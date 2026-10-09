@@ -234,7 +234,7 @@ Module.prototype.require = function (id: string, ...rest: unknown[]) {
   return originalRequire.apply(this, [id, ...rest]);
 };
 
-import type { ManagedInstallation, Source, Package, Artifact, Scope } from '../domain/types';
+import type { ManagedInstallation, ObservedArtifact, Source, Package, Artifact, Scope } from '../domain/types';
 import {
   readManifest,
   writeManifest,
@@ -248,7 +248,7 @@ import { ArtifactFileItem } from './artifactFileTree';
 import { InstalledTreeDataProvider, ScopeGroupItem as InstalledScopeGroupItem, InstalledInstallationItem, KindGroupItem } from './installedView';
 import { getAssistantIconPath } from './assistantIcons';
 import { setupFileWatchers } from './watchers';
-import { DashboardPanel, computeItemOrigin, getScopeLabel } from './dashboard';
+import { DashboardPanel, computeItemOrigin, getScopeLabel, buildInstalledTree } from './dashboard';
 import { FormEditorPanel } from './formEditor';
 import { handleRecommendForWorkspace, handleUnrecommendForWorkspace } from '../extension';
 import { RecommendedGroupItem, RecommendedBrokenItem } from './availableView';
@@ -2416,7 +2416,7 @@ describe('UI TreeDataProviders', () => {
       panel.dispose();
     });
 
-    it('updates unifiedTable and observedTableBody when handling inventoryData message without [object Object]', () => {
+    it('updates unifiedTable when handling inventoryData message without [object Object]', () => {
       const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any, {} as any, {} as any, {} as any, () => {});
       assert.ok(panel);
 
@@ -2429,7 +2429,6 @@ describe('UI TreeDataProviders', () => {
         observedDataJson: { textContent: '[]' },
         sourceFilterJson: { textContent: 'null' },
         unifiedTable: { innerHTML: 'initial-managed' },
-        observedTableBody: { innerHTML: 'initial-observed' },
         'stat-managed': { textContent: '' },
         'stat-unmanaged': { textContent: '' },
         'stat-unmanaged-lbl': { textContent: '' },
@@ -2483,15 +2482,14 @@ describe('UI TreeDataProviders', () => {
 
       assert.ok(messageListener, 'message listener must be registered');
 
-      const managedRowsHtml = '<tr><td>managed-test-row</td></tr>';
-      const observedRowsHtml = '<tr><td>observed-test-row</td></tr>';
+      const unifiedRowsHtml = '<tr><td>unified-test-row</td></tr>';
 
       messageListener({
         data: {
           command: 'inventoryData',
           managedData: [],
           observedData: [],
-          rowsHtml: { managedRowsHtml, observedRowsHtml },
+          rowsHtml: unifiedRowsHtml,
           totalInstalled: 1,
           totalUnmanaged: 1,
           identicalCount: 0,
@@ -2502,10 +2500,8 @@ describe('UI TreeDataProviders', () => {
         },
       });
 
-      assert.strictEqual(elements.unifiedTable.innerHTML, managedRowsHtml);
-      assert.strictEqual(elements.observedTableBody.innerHTML, observedRowsHtml);
+      assert.strictEqual(elements.unifiedTable.innerHTML, unifiedRowsHtml);
       assert.ok(!elements.unifiedTable.innerHTML.includes('[object Object]'));
-      assert.ok(!elements.observedTableBody.innerHTML.includes('[object Object]'));
 
       panel.dispose();
     });
@@ -2589,7 +2585,6 @@ describe('UI TreeDataProviders', () => {
         observedDataJson: { textContent: '[]' },
         sourceFilterJson: { textContent: 'null' },
         unifiedTable: { innerHTML: '' },
-        observedTableBody: { innerHTML: '' },
         detailPanel: { style: { display: '' } },
         detailKind: { textContent: '', className: '' },
         detailTitle: { textContent: '' },
@@ -2810,6 +2805,399 @@ describe('UI TreeDataProviders', () => {
         const label = btn[1].replace(/<[^>]*>/g, '').trim();
         assert.ok(label.length > 0, `Button must have text: ${btn[1]}`);
       }
+
+      panel.dispose();
+    });
+
+    it('renders exactly one parent row and 3 child rows for an object in 3 places with chip strip, scope icons and worst badge', () => {
+      const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any, {} as any, {} as any, {} as any, () => {});
+      assert.ok(panel);
+
+      const managedInsts: ManagedInstallation[] = [
+        {
+          assistant: 'claude-code',
+          scope: 'global',
+          kind: 'skill',
+          name: 'multi-place-skill',
+          path: '/tmp/claude/global/multi-place-skill',
+          installedAt: '2026-10-09T00:00:00.000Z',
+        },
+        {
+          assistant: 'kilo-code',
+          scope: 'project',
+          kind: 'skill',
+          name: 'multi-place-skill',
+          path: '/tmp/kilo/project/multi-place-skill',
+          installedAt: '2026-10-09T00:00:00.000Z',
+        },
+      ];
+
+      const observedArts: ObservedArtifact[] = [
+        {
+          assistant: 'github-copilot',
+          scope: 'project',
+          kind: 'skill',
+          name: 'multi-place-skill',
+          path: '/tmp/copilot/project/multi-place-skill',
+          discoveredAt: '2026-10-09T00:00:00.000Z',
+          match: { status: 'identical', sourceId: 'team-repo' },
+        },
+      ];
+
+      const html = panel.getHtml([], managedInsts, observedArts, []);
+      // 1. Exactly one parent row
+      const parentMatches = [...html.matchAll(/<tr class="item-row parent-row"[^>]*>/g)];
+      assert.strictEqual(parentMatches.length, 1, 'Should have exactly one parent row');
+
+      // 2. Exactly 3 child rows
+      const childMatches = [...html.matchAll(/<tr class="item-row sub-row"[^>]*>/g)];
+      assert.strictEqual(childMatches.length, 3, 'Should have exactly 3 child rows');
+
+      // 3. Chip strip in parent row has 3 chips with assistant and scope icons
+      const chipMatches = [...html.matchAll(/class="badge[^"]*parent-chip[^"]*"/g)];
+      assert.strictEqual(chipMatches.length, 3, 'Should have 3 chips in chip strip');
+
+      // 4. Parent row has worst badge
+      assert.ok(html.includes('class="badge badge-success worst-badge"'));
+
+      // 5. Parent row carries aggregated data attributes
+      assert.ok(html.includes('data-kind="skill"'));
+      assert.ok(html.includes('data-name="multi-place-skill"'));
+      assert.ok(html.includes('data-worst-status="identical"'));
+      assert.ok(html.includes('data-assistants="claude-code,kilo-code,github-copilot"'));
+      assert.ok(html.includes('data-scopes="global,project"'));
+      assert.ok(html.includes('data-memberships="managed,unmanaged"'));
+
+      // 6. Child rows have assistant name in text and scope icon
+      assert.ok(html.includes('title="Global"'));
+      assert.ok(html.includes('title="Workspace"'));
+
+      panel.dispose();
+    });
+
+    it('initial HTML and inventoryData message produce identical markup for the same data', () => {
+      const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any, {} as any, {} as any, {} as any, () => {});
+      assert.ok(panel);
+
+      const managedInsts: ManagedInstallation[] = [
+        {
+          assistant: 'claude-code',
+          scope: 'global',
+          kind: 'skill',
+          name: 'shared-skill',
+          path: '/tmp/claude/global/shared-skill',
+          installedAt: '2026-10-09T00:00:00.000Z',
+        },
+      ];
+      const observedArts: ObservedArtifact[] = [
+        {
+          assistant: 'kilo-code',
+          scope: 'project',
+          kind: 'skill',
+          name: 'shared-skill',
+          path: '/tmp/kilo/project/shared-skill',
+          discoveredAt: '2026-10-09T00:00:00.000Z',
+        },
+      ];
+
+      // Initial HTML with scanning=true (matches Phase A state)
+      const initialHtml = panel.getHtml([], managedInsts, observedArts, [], true);
+      const startIdx = initialHtml.indexOf('<tbody id="unifiedTable">') + '<tbody id="unifiedTable">'.length;
+      const endIdx = initialHtml.indexOf('</tbody>\n  </table>');
+      assert.ok(startIdx > 0 && endIdx > startIdx, 'unifiedTable tbody must exist in initial HTML');
+      const initialMarkup = initialHtml.slice(startIdx, endIdx).trim();
+
+      // inventoryData message payload from Phase A
+      const tree = buildInstalledTree(managedInsts, observedArts);
+      const inventoryMarkup = panel.renderInstalledTree(tree).trim();
+
+      assert.strictEqual(initialMarkup, inventoryMarkup, 'Initial HTML and inventoryData must produce identical markup');
+
+      panel.dispose();
+    });
+
+    it('no #observedTable or #observedTableBody remains anywhere in dashboard HTML', () => {
+      const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any, {} as any, {} as any, {} as any, () => {});
+      assert.ok(panel);
+
+      const html = panel.getHtml(
+        [],
+        [
+          {
+            assistant: 'claude-code',
+            scope: 'project',
+            kind: 'skill',
+            name: 'test-skill',
+            path: '/tmp/skill',
+            installedAt: '2026-10-09T00:00:00.000Z',
+          },
+        ],
+        [
+          {
+            assistant: 'kilo-code',
+            scope: 'project',
+            kind: 'skill',
+            name: 'test-obs',
+            path: '/tmp/obs',
+            discoveredAt: '2026-10-09T00:00:00.000Z',
+          },
+        ],
+        []
+      );
+
+      assert.ok(!html.includes('id="observedTable"'), '#observedTable must not exist');
+      assert.ok(!html.includes('id="observedTableBody"'), '#observedTableBody must not exist');
+      assert.ok(!html.includes('Unmanaged (Discovered)'), 'Unmanaged heading must not exist');
+
+      panel.dispose();
+    });
+
+    it('env filter hides non-matching children and hides parent when no children match in VM', () => {
+      const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any, {} as any, {} as any, {} as any, () => {});
+      assert.ok(panel);
+
+      const html = panel.getHtml([], [], [], []);
+      const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
+      assert.ok(scriptMatch);
+
+      const childClaude = {
+        style: { display: '' },
+        getAttribute: (attr: string) => {
+          if (attr === 'data-assistant') return 'claude-code';
+          if (attr === 'data-scope') return 'project';
+          if (attr === 'data-membership') return 'managed';
+          if (attr === 'data-status') return 'up-to-date';
+          return '';
+        },
+      };
+      const childKilo = {
+        style: { display: '' },
+        getAttribute: (attr: string) => {
+          if (attr === 'data-assistant') return 'kilo-code';
+          if (attr === 'data-scope') return 'global';
+          if (attr === 'data-membership') return 'managed';
+          if (attr === 'data-status') return 'up-to-date';
+          return '';
+        },
+      };
+
+      const groupEl = {
+        style: { display: '' },
+        innerText: 'multi-skill',
+        getAttribute: (attr: string) => {
+          if (attr === 'data-kind') return 'skill';
+          if (attr === 'data-name') return 'multi-skill';
+          if (attr === 'data-assistants') return 'claude-code,kilo-code';
+          if (attr === 'data-worst-status') return 'up-to-date';
+          return '';
+        },
+        querySelectorAll: (sel: string) => {
+          if (sel === '.sub-row') return [childClaude, childKilo];
+          return [];
+        },
+      };
+
+      const elements: Record<string, any> = {
+        managedDataJson: { textContent: '[]' },
+        observedDataJson: { textContent: '[]' },
+        sourceFilterJson: { textContent: 'null' },
+        searchBox: { value: '' },
+        breadcrumb: { style: { display: '' } },
+        'breadcrumb-chips': { innerHTML: '' },
+        'stat-managed': { textContent: '' },
+        'stat-updates-available': { textContent: '' },
+        'stat-modified-locally': { textContent: '' },
+        'stat-unmanaged': { textContent: '' },
+        'stat-unmanaged-lbl': { textContent: '' },
+        updateAllBtn: { title: '', disabled: false },
+      };
+
+      const mockDocument = {
+        getElementById: (id: string) => elements[id] || { style: {}, textContent: '', innerHTML: '' },
+        querySelectorAll: (sel: string) => {
+          if (sel === '.matrix-group') return [groupEl];
+          if (sel === '.env-pill') return [];
+          return [];
+        },
+        querySelector: () => null,
+      };
+
+      const sandbox: any = {
+        window: { addEventListener: () => {} },
+        document: mockDocument,
+        acquireVsCodeApi: () => ({ postMessage: () => {} }),
+        console,
+        JSON,
+        Array,
+      };
+
+      vm.createContext(sandbox);
+      vm.runInContext(scriptMatch[1], sandbox);
+
+      sandbox.setEnvFilter('claude-code');
+      assert.strictEqual(groupEl.style.display, '');
+      assert.strictEqual(childClaude.style.display, '');
+      assert.strictEqual(childKilo.style.display, 'none');
+      assert.strictEqual(elements['stat-managed'].textContent, 1);
+
+      sandbox.setEnvFilter('github-copilot');
+      assert.strictEqual(groupEl.style.display, 'none');
+      assert.strictEqual(childClaude.style.display, 'none');
+      assert.strictEqual(childKilo.style.display, 'none');
+      assert.strictEqual(elements['stat-managed'].textContent, 0);
+
+      panel.dispose();
+    });
+
+    it('drift status message updates child badge, parent chip, data-worst-status and worst badge in VM', () => {
+      const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any, {} as any, {} as any, {} as any, () => {});
+      assert.ok(panel);
+
+      const html = panel.getHtml([], [], [], []);
+      const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
+      assert.ok(scriptMatch);
+
+      let childBadgeHtml = '<span class="badge badge-pending">● Managed · checking…</span>';
+      let childRowStatus = 'checking…';
+
+      const childRow = {
+        style: { display: '' },
+        setAttribute: (_k: string, v: string) => { childRowStatus = v; },
+        getAttribute: (k: string) => k === 'data-status' ? childRowStatus : '',
+        querySelector: () => null,
+      };
+
+      const childCell = {
+        closest: (sel: string) => sel === 'tr' ? childRow : null,
+        set innerHTML(val: string) { childBadgeHtml = val; },
+        get innerHTML() { return childBadgeHtml; },
+      };
+
+      let parentChipClass = 'badge badge-pending parent-chip parent-badge';
+      let parentChipTitle = 'claude-code · Global · checking…';
+      let groupWorstStatus = 'checking…';
+
+      const worstBadge = {
+        className: 'badge badge-pending worst-badge',
+        textContent: 'checking…',
+      };
+
+      const groupEl = {
+        style: { display: '' },
+        setAttribute: (_k: string, v: string) => { groupWorstStatus = v; },
+        getAttribute: (k: string) => k === 'data-worst-status' ? groupWorstStatus : 'skill',
+        innerText: 'skill my-skill',
+        querySelectorAll: (sel: string) => {
+          if (sel === '.sub-row') return [childRow];
+          return [];
+        },
+        querySelector: (sel: string) => {
+          if (sel === '.worst-badge') return worstBadge;
+          return null;
+        },
+      };
+
+      const parentChip = {
+        setAttribute: (attr: string, val: string) => { if (attr === 'title') parentChipTitle = val; },
+        getAttribute: (attr: string) => attr === 'title' ? parentChipTitle : null,
+        set className(v: string) { parentChipClass = v; },
+        get className() { return parentChipClass; },
+        closest: (sel: string) => sel === '.matrix-group' ? groupEl : null,
+      };
+
+      let messageListener: ((event: any) => void) | undefined;
+      const elements: Record<string, any> = {
+        managedDataJson: { textContent: '[]' },
+        observedDataJson: { textContent: '[]' },
+        sourceFilterJson: { textContent: 'null' },
+        searchBox: { value: '' },
+        breadcrumb: { style: { display: '' } },
+        'breadcrumb-chips': { innerHTML: '' },
+        'stat-managed': { textContent: '' },
+        'stat-updates-available': { textContent: '' },
+        'stat-modified-locally': { textContent: '' },
+        'stat-unmanaged': { textContent: '' },
+        'stat-unmanaged-lbl': { textContent: '' },
+        updateAllBtn: { title: '', disabled: false },
+      };
+
+      const mockDocument = {
+        getElementById: (id: string) => elements[id] || { style: {}, textContent: '', innerHTML: '' },
+        querySelector: (sel: string) => {
+          if (sel.includes('data-drift-key="test-key"')) return childCell;
+          if (sel.includes('data-parent-key="test-key"')) return parentChip;
+          return null;
+        },
+        querySelectorAll: (sel: string) => {
+          if (sel === '.matrix-group') return [groupEl];
+          return [];
+        },
+      };
+
+      const sandbox: any = {
+        window: {
+          addEventListener: (evt: string, fn: any) => {
+            if (evt === 'message') messageListener = fn;
+          },
+        },
+        document: mockDocument,
+        acquireVsCodeApi: () => ({ postMessage: () => {} }),
+        console,
+        JSON,
+        Array,
+      };
+
+      vm.createContext(sandbox);
+      vm.runInContext(scriptMatch[1], sandbox);
+
+      assert.ok(messageListener);
+
+      messageListener({
+        data: {
+          command: 'driftResult',
+          key: 'test-key',
+          status: 'update-available',
+        },
+      });
+
+      // 1. Child badge updated
+      assert.ok(childBadgeHtml.includes('badge-info'));
+      assert.ok(childBadgeHtml.includes('● Managed · update available'));
+      assert.strictEqual(childRowStatus, 'update-available');
+
+      // 2. Parent chip updated
+      assert.ok(parentChipClass.includes('badge-info'));
+      assert.ok(parentChipTitle.includes('update-available'));
+
+      // 3. Parent data-worst-status updated
+      assert.strictEqual(groupWorstStatus, 'update-available');
+
+      // 4. Worst badge updated
+      assert.ok(worstBadge.className.includes('badge-info'));
+      assert.strictEqual(worstBadge.textContent, 'Update available');
+
+      panel.dispose();
+    });
+
+    it('names with apostrophes keep working safely in markup and actions', () => {
+      const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any, {} as any, {} as any, {} as any, () => {});
+      assert.ok(panel);
+
+      const managedInsts: ManagedInstallation[] = [
+        {
+          assistant: 'claude-code',
+          scope: 'project',
+          kind: 'skill',
+          name: "developer's-skill",
+          path: "/tmp/developer's-skill",
+          installedAt: '2026-10-09T00:00:00.000Z',
+        },
+      ];
+
+      const html = panel.getHtml([], managedInsts, [], []);
+      assert.ok(html.includes("developer&#039;s-skill") || html.includes("developer's-skill"));
+      assert.ok(!html.includes('onclick="selectRow(this, \'developer\'s-skill\')"'));
+      assert.ok(html.includes('&quot;claude-code:project:skill::developer&#039;s-skill&quot;'));
 
       panel.dispose();
     });
@@ -3683,13 +4071,13 @@ describe('UI TreeDataProviders', () => {
 
     it('Dashboard button posts the current filter and is disabled at 0', async () => {
       const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any, {} as any, {} as any, {} as any, () => {});
-      const htmlZero = (panel as any).getInstalledSectionHtml([], [], [], [], false, 0, 0, 0, 0, 0, '', { managedRowsHtml: '', observedRowsHtml: '' });
+      const htmlZero = (panel as any).getInstalledSectionHtml([], [], [], [], false, 0, 0, 0, 0, 0, '', '');
       assert.ok(htmlZero.includes('id="updateAllBtn"'));
       assert.ok(htmlZero.includes('title="Update all (0)"'));
       assert.ok(htmlZero.includes('disabled'));
       assert.ok(htmlZero.includes('onclick="triggerUpdateAll()"'));
 
-      const htmlTwo = (panel as any).getInstalledSectionHtml([], [], [], [], false, 2, 0, 2, 0, 0, '', { managedRowsHtml: '', observedRowsHtml: '' });
+      const htmlTwo = (panel as any).getInstalledSectionHtml([], [], [], [], false, 2, 0, 2, 0, 0, '', '');
       assert.ok(htmlTwo.includes('title="Update all (2)"'));
       assert.ok(!htmlTwo.includes('title="Update all (2)" disabled'));
 
@@ -3704,6 +4092,7 @@ describe('UI TreeDataProviders', () => {
 
       await (panel as any)._panel.webview.postMessage({ command: 'updateAll', filter: { assistant: 'kilo-code', scope: 'project', kind: 'skill' } });
       assert.deepStrictEqual(receivedFilter, { assistant: 'kilo-code', scope: 'project', kind: 'skill' });
+      panel.dispose();
     });
 
     it('single-item doUpdateInstallation gains locally-modified warning in modal text', async () => {
