@@ -2,6 +2,14 @@
 
 All notable changes to the "AI Swissknife" extension are documented in this file.
 
+## [0.6.0] - 2026-10-09
+
+- Changed: the Dashboard **Installed tab is now a collapsible tree**: one row per object with a strip of icons (assistant + scope) for every place it is installed in and one badge for the worst state, expanding to one row per place (40.2). The separate Unmanaged table is gone: unmanaged items are rows of the same tree.
+- Changed: the project scope is called **Workspace** everywhere, with shared Global / Workspace icons (40.4).
+- Added: **Restore from Trash...** and **Empty Trash...** commands (soft-deleted items now record where they came from) (42.1).
+- Added: `ai-swissknife redistribute <folder> [--write]` for agents: after editing a skill in a folder registered as a local-folder source, push the change to every installed copy (plan first; modified copies skipped unless `--force`, previous version saved to the trash) (46.5). `--roots` scans several workspaces (48.1); `describe` and an `AGENTS.md` document the CLI (46.2).
+- Internal (no UI yet): disable/enable of skills, agents and commands by moving them to a sibling `_disabled` folder (verified with the real Kilo), including inventory of disabled items (43.2, 43.3); a wrapper for the Claude Code plugin CLI (45.2).
+
 ## [0.5.0] - 2026-10-09
 
 - Added: **Update All** (command palette, a button in the title bar of each environment view, and in the Dashboard acting on the current filters, plus a clickable "Updates Available" card). Summary first; items modified locally are skipped unless you opt in, in which case your version is saved to the trash first (47.1, 47.2).
