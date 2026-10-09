@@ -16,6 +16,7 @@ import {
   type UpdateItemOutcome,
 } from '../engine/update';
 import { softDeletePath } from '../engine/softDelete';
+import { uninstallInstallation } from '../engine/uninstall';
 import { getAdapter, getEnabledAdapters, ALL_ADAPTERS } from '../adapters/registry';
 import { getScopeLabel, getScopeIconName, getScopeQuickPickItems } from './scopeIcons';
 import type { DriftReport } from '../engine/types';
@@ -991,22 +992,10 @@ export class InstalledTreeDataProvider {
    * origin after copying to the target) and uninstallItem.
    */
   private async removeManagedInstallation(inst: ManagedInstallation): Promise<void> {
-    if (inst.kind === 'mcp-server') {
-      const originAdapter = getAdapter(inst.assistant);
-      await originAdapter.removeMcpServer(inst.name, {
-        scope: inst.scope,
-        projectRoot: inst.projectPath,
-      });
-    } else {
-      await softDeletePath(inst.path, inst.kind, inst.name, inst.scope, inst.projectPath, this.homeRoot, { assistant: inst.assistant });
-    }
-
-    await withStateLock(inst.scope, inst.projectPath, async () => {
-      const state = await readState(inst.scope, inst.projectPath);
-      state.installations = state.installations.filter(
-        (i) => !(i.assistant === inst.assistant && i.kind === inst.kind && i.name === inst.name)
-      );
-      await writeState(inst.scope, state, inst.projectPath);
+    await uninstallInstallation(inst, {
+      mode: 'soft',
+      homeRoot: this.homeRoot,
+      projectRoot: inst.projectPath,
     });
   }
 

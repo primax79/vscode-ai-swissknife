@@ -6,6 +6,14 @@ import {
   runItem,
   runPlanInstall,
   runRedistribute,
+  runApplyInstall,
+  runUninstall,
+  runSourceAdd,
+  runSourceRemove,
+  runUpdate,
+  runTrashList,
+  runTrashRestore,
+  runTrashEmpty,
 } from './commands';
 import type {
   CliCommandDefinition,
@@ -550,6 +558,412 @@ export const COMMAND_DEFINITIONS: CliCommandDefinition[] = [
       const assistants = opts.assistants || globalOpts.assistants;
       return runRedistribute({ ...globalOpts, ...opts, assistants } as any);
     },
+  },
+  {
+    name: 'apply-install',
+    description: 'Apply installation matrix (plan-only without --write)',
+    options: [
+      { flags: '--source <id>', description: 'Source ID', required: true },
+      { flags: '--artifact <id>', description: 'Artifact ID', required: true },
+      {
+        flags: '--assistants <ids>',
+        description: 'Comma-separated target assistant IDs (e.g. claude-code,kilo-code)',
+      },
+      {
+        flags: '--scopes <scopes>',
+        description: 'Comma-separated target scopes: global,project',
+        required: true,
+      },
+      {
+        flags: '--overwrite',
+        description: 'Overwrite existing installations (previous version saved to trash)',
+      },
+      {
+        flags: '--write',
+        description: 'Apply changes to disk (without this flag, only prints the plan)',
+      },
+      {
+        flags: '--allow-code-kinds',
+        description: 'Allow installing executable/code kinds (hook, mcp-server)',
+      },
+    ],
+    examples: [
+      'ai-swissknife apply-install --source team-repo --artifact dev-tools --assistants claude-code --scopes global',
+      'ai-swissknife apply-install --source team-repo --artifact dev-tools --assistants claude-code --scopes global --write',
+    ],
+    outputShape: {
+      type: 'object',
+      description: 'Installation application result or plan',
+      properties: {
+        mode: { type: 'string', enum: ['plan', 'applied'] },
+        targets: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              item: { type: 'string' },
+              kind: {
+                type: 'string',
+                enum: ['skill', 'agent', 'command', 'mcp-server', 'hook', 'rule'],
+              },
+              assistant: { type: 'string' },
+              scope: { type: 'string', enum: ['global', 'project'] },
+              status: { type: 'string' },
+              action: { type: 'string', optional: true },
+              changedFiles: { type: 'object', optional: true },
+              backupPath: { type: 'string', optional: true },
+              reason: { type: 'string', optional: true },
+              warnings: { type: 'array', optional: true },
+            },
+          },
+        },
+      },
+    },
+    run: async (opts, globalOpts) => {
+      const assistants = opts.assistants || globalOpts.assistants;
+      return runApplyInstall({ ...globalOpts, ...opts, assistants } as any);
+    },
+  },
+  {
+    name: 'uninstall',
+    description:
+      'Uninstall a managed installation (soft delete to trash by default, or permanent with --hard)',
+    arguments: [
+      {
+        name: 'key',
+        required: true,
+        description: 'Item key (e.g. claude-code:global:skill:my-skill) or name',
+      },
+    ],
+    options: [
+      {
+        flags: '--hard',
+        description: 'Permanently delete files instead of moving to trash',
+      },
+      {
+        flags: '--write',
+        description: 'Apply changes to disk (without this flag, only prints the plan)',
+      },
+      {
+        flags: '--allow-code-kinds',
+        description: 'Allow uninstalling executable/code kinds (hook, mcp-server)',
+      },
+    ],
+    examples: [
+      'ai-swissknife uninstall claude-code:global:skill:my-skill',
+      'ai-swissknife uninstall claude-code:global:skill:my-skill --write',
+      'ai-swissknife uninstall claude-code:global:skill:my-skill --hard --write',
+    ],
+    outputShape: {
+      type: 'object',
+      description: 'Uninstallation outcome or plan',
+      properties: {
+        mode: { type: 'string', enum: ['plan', 'applied'] },
+        key: { type: 'string' },
+        item: { type: 'string' },
+        kind: {
+          type: 'string',
+          enum: ['skill', 'agent', 'command', 'mcp-server', 'hook', 'rule'],
+        },
+        assistant: { type: 'string' },
+        scope: { type: 'string', enum: ['global', 'project'] },
+        path: { type: 'string' },
+        hard: { type: 'boolean' },
+        changedFiles: { type: 'object', optional: true },
+        backupPath: { type: 'string', optional: true },
+      },
+    },
+    run: async (opts, globalOpts) => runUninstall(opts.key, { ...globalOpts, ...opts }),
+  },
+  {
+    name: 'source add',
+    description: 'Add or replace a source definition in manifest',
+    arguments: [
+      {
+        name: 'type',
+        required: true,
+        description:
+          'Source type (local-folder, git-custom, git-marketplace, git-single-item, remote-url)',
+      },
+      {
+        name: 'location',
+        required: true,
+        description: 'Source location (URL or local folder path)',
+      },
+    ],
+    options: [
+      {
+        flags: '--id <id>',
+        description: 'Source ID (derived from location if omitted)',
+      },
+      {
+        flags: '--name <name>',
+        description: 'Source display name (derived from location if omitted)',
+      },
+      {
+        flags: '--scope <scope>',
+        description: 'Target scope: global or project (Workspace)',
+      },
+      {
+        flags: '--replace',
+        description: 'Replace existing source if same ID already exists',
+      },
+      {
+        flags: '--write',
+        description: 'Apply changes to disk (without this flag, only prints the plan)',
+      },
+    ],
+    examples: [
+      'ai-swissknife source add git-custom https://github.com/org/skills.git',
+      'ai-swissknife source add git-custom https://github.com/org/skills.git --write',
+      'ai-swissknife source add local-folder ./my-skills --id custom-skills --scope project --write',
+    ],
+    outputShape: {
+      type: 'object',
+      description: 'Result of adding a source to manifest',
+      properties: {
+        mode: { type: 'string', enum: ['plan', 'applied'] },
+        action: {
+          type: 'string',
+          enum: ['add', 'replace', 'added', 'replaced'],
+        },
+        source: { type: 'object' },
+        changedFiles: { type: 'object', optional: true },
+      },
+    },
+    run: async (opts, globalOpts) =>
+      runSourceAdd(opts.type, opts.location, { ...globalOpts, ...opts }),
+  },
+  {
+    name: 'source remove',
+    description:
+      'Remove a source definition and its desired installations from manifest',
+    arguments: [
+      {
+        name: 'id',
+        required: true,
+        description: 'Source identifier',
+      },
+    ],
+    options: [
+      {
+        flags: '--scope <scope>',
+        description: 'Target scope: global or project (Workspace)',
+        required: true,
+      },
+      {
+        flags: '--write',
+        description: 'Apply changes to disk (without this flag, only prints the plan)',
+      },
+    ],
+    examples: [
+      'ai-swissknife source remove my-skills --scope global',
+      'ai-swissknife source remove my-skills --scope global --write',
+    ],
+    outputShape: {
+      type: 'object',
+      description: 'Result of removing a source from manifest',
+      properties: {
+        mode: { type: 'string', enum: ['plan', 'applied'] },
+        action: { type: 'string', enum: ['remove', 'removed'] },
+        source: { type: 'object' },
+        changedFiles: { type: 'object', optional: true },
+      },
+    },
+    run: async (opts, globalOpts) =>
+      runSourceRemove(opts.id, { ...globalOpts, ...opts }),
+  },
+  {
+    name: 'update',
+    description: 'Update managed installation(s) from upstream source(s)',
+    arguments: [
+      {
+        name: 'key',
+        required: false,
+        description: 'Item key (optional if --all is passed)',
+      },
+    ],
+    options: [
+      {
+        flags: '--all',
+        description: 'Update all managed installations matching filters',
+      },
+      {
+        flags: '--scope <scope>',
+        description: 'Filter by scope: global or project',
+      },
+      {
+        flags: '--assistant <id>',
+        description: 'Filter by assistant ID',
+      },
+      {
+        flags: '--source <id>',
+        description: 'Filter by source ID',
+      },
+      {
+        flags: '--kind <kind>',
+        description: 'Filter by artifact kind',
+      },
+      {
+        flags: '--include-modified',
+        description:
+          'Update modified-locally items (previous version saved to trash first)',
+      },
+      {
+        flags: '--write',
+        description: 'Apply changes to disk (without this flag, only prints the plan)',
+      },
+      {
+        flags: '--allow-code-kinds',
+        description:
+          'Allow updating executable/code kinds (hook, mcp-server)',
+      },
+    ],
+    examples: [
+      'ai-swissknife update --all',
+      'ai-swissknife update --all --write',
+      'ai-swissknife update claude-code:global:skill:my-skill --write',
+      'ai-swissknife update --all --include-modified --write',
+    ],
+    outputShape: {
+      type: 'object',
+      description: 'Update results or plan',
+      properties: {
+        mode: { type: 'string', enum: ['plan', 'applied'] },
+        targets: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              key: { type: 'string' },
+              item: { type: 'string' },
+              kind: {
+                type: 'string',
+                enum: ['skill', 'agent', 'command', 'mcp-server', 'hook', 'rule'],
+              },
+              assistant: { type: 'string' },
+              scope: { type: 'string', enum: ['global', 'project'] },
+              status: { type: 'string' },
+              action: { type: 'string', optional: true },
+              oldRevision: { type: 'string', optional: true },
+              newRevision: { type: 'string', optional: true },
+              changedFiles: { type: 'object' },
+              backupPath: { type: 'string', optional: true },
+              reason: { type: 'string', optional: true },
+            },
+          },
+        },
+      },
+    },
+    run: async (opts, globalOpts) => runUpdate(opts.key, { ...globalOpts, ...opts }),
+  },
+  {
+    name: 'trash list',
+    description: 'List soft-deleted items in trash (newest first)',
+    options: [
+      {
+        flags: '--scope <scope>',
+        description: 'Filter by scope: global or project',
+      },
+    ],
+    examples: [
+      'ai-swissknife trash list',
+      'ai-swissknife trash list --scope global',
+    ],
+    outputShape: {
+      type: 'array',
+      description: 'List of soft-deleted items in trash',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', description: 'Trash entry ID' },
+          kind: {
+            type: 'string',
+            enum: ['skill', 'agent', 'command', 'mcp-server', 'hook', 'rule'],
+          },
+          name: { type: 'string' },
+          assistant: { type: 'string', optional: true },
+          scope: { type: 'string', enum: ['global', 'project'] },
+          deletedAt: { type: 'string' },
+          originalPath: { type: 'string', optional: true },
+          trashPath: { type: 'string' },
+        },
+      },
+    },
+    run: async (opts, globalOpts) => runTrashList({ ...globalOpts, ...opts }),
+  },
+  {
+    name: 'trash restore',
+    description: 'Restore a soft-deleted item from trash',
+    arguments: [
+      {
+        name: 'id',
+        required: true,
+        description: 'Trash entry ID or name',
+      },
+    ],
+    options: [
+      {
+        flags: '--to <path>',
+        description: 'Destination path (defaults to recorded original path)',
+      },
+      {
+        flags: '--write',
+        description: 'Apply changes to disk (without this flag, only prints the plan)',
+      },
+    ],
+    examples: [
+      'ai-swissknife trash restore my-skill-2026-10-09T00-00-00-000Z',
+      'ai-swissknife trash restore my-skill-2026-10-09T00-00-00-000Z --write',
+      'ai-swissknife trash restore my-skill-2026-10-09T00-00-00-000Z --to /custom/path --write',
+    ],
+    outputShape: {
+      type: 'object',
+      description: 'Trash restore result or plan',
+      properties: {
+        mode: { type: 'string', enum: ['plan', 'applied'] },
+        id: { type: 'string' },
+        name: { type: 'string' },
+        kind: {
+          type: 'string',
+          enum: ['skill', 'agent', 'command', 'mcp-server', 'hook', 'rule'],
+        },
+        scope: { type: 'string', enum: ['global', 'project'] },
+        targetPath: { type: 'string' },
+        changedFiles: { type: 'object', optional: true },
+      },
+    },
+    run: async (opts, globalOpts) =>
+      runTrashRestore(opts.id, { ...globalOpts, ...opts }),
+  },
+  {
+    name: 'trash empty',
+    description: 'Permanently remove all soft-deleted items from trash',
+    options: [
+      {
+        flags: '--scope <scope>',
+        description: 'Scope to empty: global or project (defaults to all)',
+      },
+      {
+        flags: '--write',
+        description: 'Apply changes to disk (without this flag, only prints the plan)',
+      },
+    ],
+    examples: [
+      'ai-swissknife trash empty',
+      'ai-swissknife trash empty --scope global --write',
+      'ai-swissknife trash empty --write',
+    ],
+    outputShape: {
+      type: 'object',
+      description: 'Result of emptying trash',
+      properties: {
+        mode: { type: 'string', enum: ['plan', 'applied'] },
+        count: { type: 'number' },
+        failed: { type: 'array', optional: true },
+      },
+    },
+    run: async (opts, globalOpts) => runTrashEmpty({ ...globalOpts, ...opts }),
   },
   {
     name: 'describe',
