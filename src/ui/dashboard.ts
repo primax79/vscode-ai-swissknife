@@ -751,7 +751,7 @@ export class DashboardPanel {
       const environmentPills = presentAssistants.map(a => {
         const iconUris = getAssistantIconPath(a, this._extensionUri);
         const iconSrc = this._panel.webview.asWebviewUri(iconUris.light);
-        return `<button class="filter-pill env-pill" data-env="${this.escapeHtml(a)}" onclick="setEnvFilter(${this.jsStringLiteral(a)})">
+        return `<button class="filter-pill env-pill" data-env="${this.escapeHtml(a)}" aria-pressed="false" onclick="setEnvFilter(${this.jsStringLiteral(a)})">
           <img src="${iconSrc}" class="assistant-icon" width="14" height="14" />
           ${this.escapeHtml(a)}
         </button>`;
@@ -1437,41 +1437,38 @@ export class DashboardPanel {
   </div>
 
   <div class="toolbar filters-bar">
-    <div class="filter-group">
-      <button class="filter-pill env-pill active" data-env="all" onclick="setEnvFilter('all')">All Env</button>
+    <div class="filter-group" id="filter-group-env">
+      <span class="filter-group-label">ENV</span>
+      <button class="filter-pill env-pill active" data-env="all" aria-pressed="true" onclick="setEnvFilter('all')">All Env</button>
       ${environmentPills}
     </div>
-    <div class="filter-group">
-      <select class="filter-select" id="scopeFilter" onchange="setScopeFilter(this.value)">
-        <option value="all">Scope: All</option>
-        <option value="global">Scope: Global</option>
-        <option value="project">Scope: Workspace</option>
-      </select>
+    <div class="filter-group" id="filter-group-scope">
+      <span class="filter-group-label">SCOPE</span>
+      <button class="filter-pill scope-pill active" data-scope="all" aria-pressed="true" onclick="setScopeFilter('all')">All</button>
+      <button class="filter-pill scope-pill" data-scope="global" aria-pressed="false" onclick="setScopeFilter('global')">${getScopeIconSvg('global')}${getScopeLabel('global')}</button>
+      <button class="filter-pill scope-pill" data-scope="project" aria-pressed="false" onclick="setScopeFilter('project')">${getScopeIconSvg('project')}${getScopeLabel('project')}</button>
     </div>
-    <div class="filter-group">
-      <select class="filter-select" id="membershipFilter" onchange="setMembershipFilter(this.value)">
-        <option value="all">Membership: All</option>
-        <option value="managed">Membership: Managed</option>
-        <option value="unmanaged">Membership: Unmanaged</option>
-      </select>
+    <div class="filter-group" id="filter-group-membership">
+      <span class="filter-group-label">MEMBERSHIP</span>
+      <button class="filter-pill membership-pill active" data-membership="all" aria-pressed="true" onclick="setMembershipFilter('all')">All</button>
+      <button class="filter-pill membership-pill" data-membership="managed" aria-pressed="false" onclick="setMembershipFilter('managed')">● Managed</button>
+      <button class="filter-pill membership-pill" data-membership="unmanaged" aria-pressed="false" onclick="setMembershipFilter('unmanaged')">◌ Unmanaged</button>
     </div>
-    <div class="filter-group" style="flex: 1;">
+    <div class="filter-group" id="filter-group-kind">
+      <span class="filter-group-label">KIND</span>
+      <button class="filter-pill kind-filter-pill active" data-kind="all" aria-pressed="true" onclick="setKindFilter('all', this)">All</button>
+      <button class="filter-pill kind-filter-pill" data-kind="skill" aria-pressed="false" onclick="setKindFilter('skill', this)">Skills</button>
+      <button class="filter-pill kind-filter-pill" data-kind="agent" aria-pressed="false" onclick="setKindFilter('agent', this)">Agents</button>
+      <button class="filter-pill kind-filter-pill" data-kind="command" aria-pressed="false" onclick="setKindFilter('command', this)">Commands</button>
+      <button class="filter-pill kind-filter-pill" data-kind="mcp-server" aria-pressed="false" onclick="setKindFilter('mcp-server', this)">MCPs</button>
+      <button class="filter-pill kind-filter-pill" data-kind="hook" aria-pressed="false" onclick="setKindFilter('hook', this)">Hooks</button>
+      <button class="filter-pill kind-filter-pill" data-kind="rule" aria-pressed="false" onclick="setKindFilter('rule', this)">Rules</button>
+    </div>
+    <div class="filter-search" style="flex: 1; min-width: 160px;">
       <input type="text" class="search-input" id="searchBox" placeholder="Filter by name..." oninput="filterTable()">
     </div>
-    <div class="filter-group">
+    <div class="filter-actions">
       <button class="btn btn-sm btn-primary update-all-btn" id="updateAllBtn" title="Update all (${updatesAvailable})" ${updatesAvailable === 0 ? 'disabled' : ''} onclick="triggerUpdateAll()">⟳</button>
-    </div>
-  </div>
-  
-  <div class="toolbar">
-    <div class="tabs">
-      <button class="tab-btn active" onclick="setKindFilter('all', this)">All Kinds</button>
-      <button class="tab-btn" onclick="setKindFilter('skill', this)">Skills</button>
-      <button class="tab-btn" onclick="setKindFilter('agent', this)">Agents</button>
-      <button class="tab-btn" onclick="setKindFilter('command', this)">Commands</button>
-      <button class="tab-btn" onclick="setKindFilter('mcp-server', this)">MCPs</button>
-      <button class="tab-btn" onclick="setKindFilter('hook', this)">Hooks</button>
-      <button class="tab-btn" onclick="setKindFilter('rule', this)">Rules</button>
     </div>
   </div>
 
@@ -1552,7 +1549,7 @@ export class DashboardPanel {
     const environmentPills = presentAssistants.map(a => {
       const iconUris = getAssistantIconPath(a as AssistantId, this._extensionUri);
       const iconSrc = this._panel.webview.asWebviewUri(iconUris.light);
-      return `<button class="filter-pill env-pill" data-env="${this.escapeHtml(a)}" onclick="setEnvFilter(${this.jsStringLiteral(a)})">
+      return `<button class="filter-pill env-pill" data-env="${this.escapeHtml(a)}" aria-pressed="false" onclick="setEnvFilter(${this.jsStringLiteral(a)})">
         <img src="${iconSrc}" class="assistant-icon" width="14" height="14" />
         ${this.escapeHtml(a)}
       </button>`;
@@ -1655,11 +1652,60 @@ export class DashboardPanel {
       margin-bottom: 16px;
       align-items: center;
     }
-    .filters-bar { flex-wrap: wrap; }
-    .filter-group { display: flex; align-items: center; gap: 6px; }
-    .filter-select { background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground); border: 1px solid var(--vscode-dropdown-border); padding: 4px; font-size: 11px; border-radius: 4px; outline: none; }
-    .filter-pill { background: transparent; border: 1px solid var(--border); color: var(--fg); padding: 4px 8px; border-radius: 12px; cursor: pointer; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; }
-    .filter-pill.active { background: var(--btn-bg); color: var(--btn-fg); border-color: var(--btn-bg); }
+    .filters-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .filter-group {
+      display: inline-flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 3px 6px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--card-bg);
+    }
+    .filter-group-label {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      opacity: 0.6;
+      color: var(--fg);
+      margin-right: 2px;
+      user-select: none;
+    }
+    .filter-pill {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--fg);
+      padding: 3px 8px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 11px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      line-height: 1.2;
+    }
+    .filter-pill:hover {
+      border-color: var(--fg);
+    }
+    .filter-pill.active {
+      background: var(--btn-bg);
+      color: var(--btn-fg);
+      border-color: var(--btn-bg);
+    }
+    .filter-pill .scope-icon {
+      margin-right: 0 !important;
+    }
+    .filter-pill.active .scope-icon {
+      color: var(--btn-fg);
+    }
     .assistant-icon { filter: grayscale(1) brightness(0.8); }
     .filter-pill.active .assistant-icon { filter: grayscale(0) brightness(1.2); }
     
@@ -2228,35 +2274,58 @@ export class DashboardPanel {
     function setEnvFilter(env) {
       currentEnv = env;
       document.querySelectorAll('.env-pill').forEach(b => {
-        if (b.getAttribute('data-env') === env) b.classList.add('active');
-        else b.classList.remove('active');
+        if (b.getAttribute('data-env') === env) {
+          b.classList.add('active');
+          if (b.setAttribute) b.setAttribute('aria-pressed', 'true');
+        } else {
+          b.classList.remove('active');
+          if (b.setAttribute) b.setAttribute('aria-pressed', 'false');
+        }
       });
       filterTable();
     }
 
     function setScopeFilter(scope) {
       currentScope = scope;
-      document.getElementById('scopeFilter').value = scope;
+      document.querySelectorAll('.scope-pill').forEach(b => {
+        if (b.getAttribute('data-scope') === scope) {
+          b.classList.add('active');
+          if (b.setAttribute) b.setAttribute('aria-pressed', 'true');
+        } else {
+          b.classList.remove('active');
+          if (b.setAttribute) b.setAttribute('aria-pressed', 'false');
+        }
+      });
       filterTable();
     }
 
     function setMembershipFilter(mem) {
       currentMembership = mem;
-      document.getElementById('membershipFilter').value = mem;
+      document.querySelectorAll('.membership-pill').forEach(b => {
+        if (b.getAttribute('data-membership') === mem) {
+          b.classList.add('active');
+          if (b.setAttribute) b.setAttribute('aria-pressed', 'true');
+        } else {
+          b.classList.remove('active');
+          if (b.setAttribute) b.setAttribute('aria-pressed', 'false');
+        }
+      });
       filterTable();
     }
 
     function setKindFilter(kind, btn) {
       currentKind = kind;
-      if (btn) {
-        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-      } else {
-        document.querySelectorAll('.tab-btn').forEach(b => {
-          if (b.innerText.toLowerCase().includes(kind) || (kind === 'all' && b.innerText === 'All Kinds')) b.classList.add('active');
-          else b.classList.remove('active');
-        });
-      }
+      document.querySelectorAll('.kind-filter-pill').forEach(b => {
+        const k = b.getAttribute('data-kind');
+        const matches = (k === kind) || (!k && (b.innerText && (b.innerText.toLowerCase().includes(kind) || (kind === 'all' && b.innerText.toLowerCase().includes('all')))));
+        if (matches) {
+          b.classList.add('active');
+          if (b.setAttribute) b.setAttribute('aria-pressed', 'true');
+        } else {
+          b.classList.remove('active');
+          if (b.setAttribute) b.setAttribute('aria-pressed', 'false');
+        }
+      });
       filterTable();
     }
 
@@ -2273,7 +2342,7 @@ export class DashboardPanel {
       const chips = [];
       if (currentSource) chips.push('<span class="chip">' + escapeHtmlClient(currentSource.id) + ' (' + escapeHtmlClient(currentSource.scope) + ') <span class="chip-close" onclick="removeChip(\\'source\\')">✕</span></span>');
       if (currentEnv !== 'all') chips.push('<span class="chip">' + currentEnv + ' <span class="chip-close" onclick="removeChip(\\'env\\')">✕</span></span>');
-      if (currentScope !== 'all') chips.push('<span class="chip">' + currentScope + ' <span class="chip-close" onclick="removeChip(\\'scope\\')">✕</span></span>');
+      if (currentScope !== 'all') chips.push('<span class="chip">' + getScopeLabelClient(currentScope) + ' <span class="chip-close" onclick="removeChip(\\'scope\\')">✕</span></span>');
       if (currentMembership !== 'all') chips.push('<span class="chip">' + currentMembership + ' <span class="chip-close" onclick="removeChip(\\'membership\\')">✕</span></span>');
       if (currentKind !== 'all') chips.push('<span class="chip">' + currentKind + ' <span class="chip-close" onclick="removeChip(\\'kind\\')">✕</span></span>');
       
@@ -2460,12 +2529,16 @@ export class DashboardPanel {
           overviewNeedsAttention.innerHTML = msg.overviewNeedsAttentionHtml;
         }
 
-        const filterGroup = document.querySelector('.filters-bar .filter-group');
-        if (filterGroup) {
-          filterGroup.innerHTML = '<button class="filter-pill env-pill ' + (currentEnv === 'all' ? 'active' : '') + '" data-env="all" onclick="setEnvFilter(\\'all\\')">All Env</button>\\n' + msg.environmentPills;
-          if (currentEnv !== 'all') {
-            const pill = filterGroup.querySelector('.env-pill[data-env="' + currentEnv + '"]');
-            if (pill) pill.classList.add('active');
+        const envGroup = document.getElementById('filter-group-env');
+        if (envGroup) {
+          envGroup.innerHTML = '<span class="filter-group-label">ENV</span>' +
+            '<button class="filter-pill env-pill ' + (currentEnv === 'all' ? 'active' : '') + '" data-env="all" aria-pressed="' + (currentEnv === 'all' ? 'true' : 'false') + '" onclick="setEnvFilter(\\'all\\')">All Env</button>\\n' + (msg.environmentPills || '');
+          if (currentEnv !== 'all' && typeof envGroup.querySelector === 'function') {
+            const pill = envGroup.querySelector('.env-pill[data-env="' + currentEnv + '"]');
+            if (pill) {
+              pill.classList.add('active');
+              if (pill.setAttribute) pill.setAttribute('aria-pressed', 'true');
+            }
           }
         }
 
