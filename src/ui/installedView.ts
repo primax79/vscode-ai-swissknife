@@ -998,7 +998,7 @@ export class InstalledTreeDataProvider {
         projectRoot: inst.projectPath,
       });
     } else {
-      await softDeletePath(inst.path, inst.kind, inst.name, inst.scope, inst.projectPath);
+      await softDeletePath(inst.path, inst.kind, inst.name, inst.scope, inst.projectPath, this.homeRoot, { assistant: inst.assistant });
     }
 
     await withStateLock(inst.scope, inst.projectPath, async () => {

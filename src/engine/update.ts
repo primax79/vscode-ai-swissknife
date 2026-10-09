@@ -16,6 +16,7 @@ import { planInstall } from './plan';
 import { applyInstall } from './apply';
 import { checkForUpstreamUpdate, analyzeLocalDrift, checkDriftForAll } from './drift';
 import { manifestPath } from '../domain/registry';
+import { copyToTrash } from './softDelete';
 import type { DriftReport, PreparedInstall } from './types';
 import type { SourceResolution } from '../sources/types';
 
@@ -468,61 +469,23 @@ export async function planUpdateAll(params: PlanUpdateAllParams): Promise<PlanUp
   };
 }
 
-async function copyDirectory(src: string, dest: string): Promise<void> {
-  await fs.promises.mkdir(dest, { recursive: true });
-  const entries = await fs.promises.readdir(src, { withFileTypes: true });
-
-  for (const entry of entries) {
-    const srcPath = path.join(src, entry.name);
-    const destPath = path.join(dest, entry.name);
-
-    if (entry.isDirectory()) {
-      await copyDirectory(srcPath, destPath);
-    } else {
-      await fs.promises.copyFile(srcPath, destPath);
-    }
-  }
-}
-
 /**
  * Copies the current installed files to the trash folder (_deleted/<kind>/<name>-<timestamp>/)
- * preserving the exact pre-update version for recoverability.
+ * with a .origin.json sidecar preserving the exact pre-update version for recoverability.
  */
 async function backupItemToTrash(
   installation: ManagedInstallation,
   homeRoot?: string
 ): Promise<string> {
-  const swissknifeRoot = path.dirname(
-    manifestPath(
-      installation.scope,
-      installation.projectPath ?? (installation.scope === 'project' ? process.cwd() : undefined),
-      homeRoot
-    )
+  return await copyToTrash(
+    installation.path,
+    installation.kind,
+    installation.name,
+    installation.scope,
+    installation.projectPath ?? (installation.scope === 'project' ? process.cwd() : undefined),
+    homeRoot,
+    { assistant: installation.assistant }
   );
-
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const targetName = `${installation.name}-${timestamp}`;
-  let targetDir = path.join(swissknifeRoot, '_deleted', installation.kind, targetName);
-
-  if (fs.existsSync(targetDir)) {
-    const nonce = Math.random().toString(36).slice(2, 6);
-    targetDir = `${targetDir}-${nonce}`;
-  }
-
-  await fs.promises.mkdir(path.dirname(targetDir), { recursive: true });
-
-  if (!fs.existsSync(installation.path)) {
-    return targetDir;
-  }
-
-  const stat = await fs.promises.stat(installation.path);
-  if (stat.isDirectory()) {
-    await copyDirectory(installation.path, targetDir);
-  } else {
-    await fs.promises.copyFile(installation.path, targetDir);
-  }
-
-  return targetDir;
 }
 
 /**

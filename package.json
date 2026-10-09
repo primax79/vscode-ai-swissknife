@@ -322,6 +322,18 @@
         "title": "Install Recommended",
         "icon": "$(sparkle)",
         "category": "AI Swissknife"
+      },
+      {
+        "command": "aiSwissknife.restoreFromTrash",
+        "title": "Restore from Trash...",
+        "icon": "$(history)",
+        "category": "AI Swissknife"
+      },
+      {
+        "command": "aiSwissknife.emptyTrash",
+        "title": "Empty Trash...",
+        "icon": "$(clear-all)",
+        "category": "AI Swissknife"
       }
     ],
     "menus": {
@@ -411,6 +423,16 @@
           "command": "aiSwissknife.refreshInstalled",
           "when": "view =~ /^aiSwissknife\\.installed/",
           "group": "navigation@3"
+        },
+        {
+          "command": "aiSwissknife.restoreFromTrash",
+          "when": "view =~ /^aiSwissknife\\.installed/",
+          "group": "navigation@4"
+        },
+        {
+          "command": "aiSwissknife.emptyTrash",
+          "when": "view =~ /^aiSwissknife\\.installed/",
+          "group": "navigation@5"
         }
       ],
       "view/item/context": [

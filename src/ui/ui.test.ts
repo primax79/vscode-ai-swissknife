@@ -256,6 +256,7 @@ import type { DesiredInstallation } from '../domain/registry';
 import * as extensionModule from '../extension';
 import * as driftModule from '../engine/drift';
 import * as updateModule from '../engine/update';
+import { softDeletePath, listTrash } from '../engine/softDelete';
 
 describe('UI TreeDataProviders', () => {
   let testTempDir: string;
@@ -3753,6 +3754,180 @@ describe('UI TreeDataProviders', () => {
         (updateModule as any).planUpdate = origPlanUpdate;
         (driftModule as any).analyzeLocalDrift = origAnalyze;
       }
+    });
+  });
+
+  describe('Trash commands (42.1)', () => {
+    let savedHome: string | undefined;
+
+    beforeEach(() => {
+      savedHome = process.env.HOME;
+      process.env.HOME = testHomeDir;
+    });
+
+    afterEach(() => {
+      process.env.HOME = savedHome;
+    });
+
+    it('both commands registered in extension and package.json', async () => {
+      // 1. package.json check
+      const packageJson = JSON.parse(
+        fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf-8')
+      );
+      const commands = packageJson.contributes.commands;
+      const restoreCmd = commands.find((c: any) => c.command === 'aiSwissknife.restoreFromTrash');
+      const emptyCmd = commands.find((c: any) => c.command === 'aiSwissknife.emptyTrash');
+
+      assert.ok(restoreCmd, 'aiSwissknife.restoreFromTrash must be declared in package.json');
+      assert.strictEqual(restoreCmd.title, 'Restore from Trash...');
+      assert.strictEqual(restoreCmd.icon, '$(history)');
+
+      assert.ok(emptyCmd, 'aiSwissknife.emptyTrash must be declared in package.json');
+      assert.strictEqual(emptyCmd.title, 'Empty Trash...');
+      assert.strictEqual(emptyCmd.icon, '$(clear-all)');
+
+      const viewTitleMenus = packageJson.contributes.menus['view/title'];
+      const restoreTitle = viewTitleMenus.find((m: any) => m.command === 'aiSwissknife.restoreFromTrash');
+      const emptyTitle = viewTitleMenus.find((m: any) => m.command === 'aiSwissknife.emptyTrash');
+
+      assert.ok(restoreTitle, 'view/title menu must include aiSwissknife.restoreFromTrash');
+      assert.ok(emptyTitle, 'view/title menu must include aiSwissknife.emptyTrash');
+
+      // 2. Extension registration check
+      const fakeContext = { subscriptions: [], extensionUri: { fsPath: '/test/ext' }, workspaceState: { get: () => undefined, update: async () => {} } } as any;
+      mockRegisteredCommands.clear();
+      extensionModule.activate(fakeContext);
+
+      assert.ok(mockRegisteredCommands.has('aiSwissknife.restoreFromTrash'));
+      assert.ok(mockRegisteredCommands.has('aiSwissknife.emptyTrash'));
+    });
+
+    it('QuickPick lists both scopes entries, only global when no workspace', async () => {
+      // Create entries in both global and workspace scope
+      const globalFile = path.join(testHomeDir, 'global-skill-file.md');
+      await fs.promises.writeFile(globalFile, '# Global Skill');
+      await softDeletePath(globalFile, 'skill', 'global-skill', 'global', testTempDir, testHomeDir);
+
+      const wsFile = path.join(testTempDir, 'ws-agent-file.md');
+      await fs.promises.writeFile(wsFile, '# WS Agent');
+      await softDeletePath(wsFile, 'agent', 'ws-agent', 'project', testTempDir, testHomeDir);
+
+      const fakeContext = { subscriptions: [], extensionUri: { fsPath: '/test/ext' }, workspaceState: { get: () => undefined, update: async () => {} } } as any;
+      mockRegisteredCommands.clear();
+      extensionModule.activate(fakeContext);
+
+      const restoreHandler = mockRegisteredCommands.get('aiSwissknife.restoreFromTrash');
+      assert.ok(restoreHandler);
+
+      // Case 1: Workspace is open -> both scopes listed
+      let capturedItems: any[] = [];
+      mockCustomShowQuickPick = async (items: any) => {
+        capturedItems = items;
+        return undefined; // cancel
+      };
+
+      await restoreHandler();
+      assert.strictEqual(capturedItems.length, 2);
+      const labels = capturedItems.map((i) => i.label);
+      assert.ok(labels.includes('global-skill'));
+      assert.ok(labels.includes('ws-agent'));
+
+      const globalItem = capturedItems.find((i: any) => i.label === 'global-skill');
+      const wsItem = capturedItems.find((i: any) => i.label === 'ws-agent');
+      assert.ok(globalItem.description.includes('Global'));
+      assert.ok(globalItem.description.includes('skill'));
+      assert.ok(wsItem.description.includes('Workspace'));
+      assert.ok(wsItem.description.includes('agent'));
+
+      // Case 2: No workspace open -> only global listed
+      (globalThis as any).mockWorkspaceFolders = [];
+      capturedItems = [];
+      await restoreHandler();
+
+      assert.strictEqual(capturedItems.length, 1);
+      assert.strictEqual(capturedItems[0].label, 'global-skill');
+      assert.ok(capturedItems[0].description.includes('Global'));
+    });
+
+    it('restore message displayed after successful restore', async () => {
+      (globalThis as any).mockWorkspaceFolders = [{ uri: { fsPath: testTempDir } }];
+      const fileToRestore = path.join(testTempDir, 'restore-me.md');
+      await fs.promises.writeFile(fileToRestore, '# Content to restore');
+      await softDeletePath(fileToRestore, 'agent', 'agent-to-restore', 'project', testTempDir, testHomeDir);
+
+      const fakeContext = { subscriptions: [], extensionUri: { fsPath: '/test/ext' }, workspaceState: { get: () => undefined, update: async () => {} } } as any;
+      mockRegisteredCommands.clear();
+      extensionModule.activate(fakeContext);
+
+      const restoreHandler = mockRegisteredCommands.get('aiSwissknife.restoreFromTrash');
+      assert.ok(restoreHandler);
+
+      mockCustomShowQuickPick = async (items: any) => {
+        return items.find((i: any) => i.label === 'agent-to-restore');
+      };
+      mockCustomShowInformationMessage = async (msg: string) => {
+        if (msg.includes('Restore agent-to-restore')) {
+          return 'Restore';
+        }
+        return undefined;
+      };
+
+      mockShowInformationMessageCalls = [];
+      await restoreHandler();
+
+      const successCall = mockShowInformationMessageCalls.find((c) =>
+        c.msg.includes('Restored agent-to-restore to')
+      );
+      assert.ok(successCall, 'Must show message "Restored <name> to <path>"');
+      assert.ok(successCall.msg.includes(fileToRestore));
+      assert.strictEqual(fs.existsSync(fileToRestore), true);
+    });
+
+    it('Empty Trash modal text and choices', async () => {
+      (globalThis as any).mockWorkspaceFolders = [{ uri: { fsPath: testTempDir } }];
+
+      // Create entries in both global and project scope
+      const globalFile = path.join(testHomeDir, 'empty-g.md');
+      await fs.promises.writeFile(globalFile, '# G');
+      await softDeletePath(globalFile, 'rule', 'rule-g', 'global', testTempDir, testHomeDir);
+
+      const wsFile = path.join(testTempDir, 'empty-w.md');
+      await fs.promises.writeFile(wsFile, '# W');
+      await softDeletePath(wsFile, 'agent', 'agent-w', 'project', testTempDir, testHomeDir);
+
+      const fakeContext = { subscriptions: [], extensionUri: { fsPath: '/test/ext' }, workspaceState: { get: () => undefined, update: async () => {} } } as any;
+      mockRegisteredCommands.clear();
+      extensionModule.activate(fakeContext);
+
+      const emptyHandler = mockRegisteredCommands.get('aiSwissknife.emptyTrash');
+      assert.ok(emptyHandler);
+
+      let modalPrompted = false;
+      mockCustomShowInformationMessage = async (msg: string, ...actions: any[]) => {
+        if (msg.includes('Permanently delete 2 item(s) from the trash? This cannot be undone.')) {
+          modalPrompted = true;
+          assert.strictEqual(actions[0]?.modal, true, 'Confirmation must be modal');
+          assert.deepStrictEqual(actions.slice(1), ['Global', 'Workspace', 'Both']);
+          return 'Both';
+        }
+        return undefined;
+      };
+
+      mockShowInformationMessageCalls = [];
+      await emptyHandler();
+
+      assert.strictEqual(modalPrompted, true, 'Modal confirmation must be prompted');
+
+      const summaryCall = mockShowInformationMessageCalls.find((c) =>
+        c.msg.includes('Permanently deleted 2 item(s) from the trash.')
+      );
+      assert.ok(summaryCall, 'Summary message must confirm deletion count');
+
+      // Verify trash in both scopes is empty
+      const gTrash = await listTrash('global', undefined, testHomeDir);
+      const wTrash = await listTrash('project', testTempDir, testHomeDir);
+      assert.strictEqual(gTrash.length, 0);
+      assert.strictEqual(wTrash.length, 0);
     });
   });
 });
