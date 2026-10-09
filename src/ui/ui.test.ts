@@ -3202,6 +3202,264 @@ describe('UI TreeDataProviders', () => {
 
       panel.dispose();
     });
+
+    it('filter bar renders as four labelled pill groups with no select elements (40.5)', () => {
+      const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any, {} as any, {} as any, {} as any, () => {});
+      assert.ok(panel);
+
+      const html = panel.getHtml([], [], [], []);
+
+      // 1. No select elements in Installed section
+      assert.ok(!html.includes('id="scopeFilter"'), 'Installed section must not contain id="scopeFilter" select');
+      assert.ok(!html.includes('id="membershipFilter"'), 'Installed section must not contain id="membershipFilter" select');
+      assert.ok(!html.includes('<select'), 'Installed section must not contain any <select> tags');
+
+      // 2. Four labelled blocks present with their IDs
+      assert.ok(html.includes('id="filter-group-env"'), 'Must have filter-group-env');
+      assert.ok(html.includes('id="filter-group-scope"'), 'Must have filter-group-scope');
+      assert.ok(html.includes('id="filter-group-membership"'), 'Must have filter-group-membership');
+      assert.ok(html.includes('id="filter-group-kind"'), 'Must have filter-group-kind');
+
+      assert.ok(html.includes('>ENV<'), 'ENV label must be present');
+      assert.ok(html.includes('>SCOPE<'), 'SCOPE label must be present');
+      assert.ok(html.includes('>MEMBERSHIP<'), 'MEMBERSHIP label must be present');
+      assert.ok(html.includes('>KIND<'), 'KIND label must be present');
+
+      // 3. Scope pills with icons and labels
+      assert.ok(html.includes('data-scope="all"'));
+      assert.ok(html.includes('data-scope="global"'));
+      assert.ok(html.includes('data-scope="project"'));
+      assert.ok(html.includes('scope-icon-global'), 'Global pill must include globe icon SVG');
+      assert.ok(html.includes('scope-icon-project'), 'Workspace pill must include folder icon SVG');
+      assert.ok(html.includes('Global'), 'Global label must be present');
+      assert.ok(html.includes('Workspace'), 'Workspace label must be present');
+
+      // 4. Membership pills
+      assert.ok(html.includes('data-membership="all"'));
+      assert.ok(html.includes('data-membership="managed"'));
+      assert.ok(html.includes('data-membership="unmanaged"'));
+      assert.ok(html.includes('● Managed'), '● Managed pill must be present');
+      assert.ok(html.includes('◌ Unmanaged'), '◌ Unmanaged pill must be present');
+
+      // 5. Kind pills in filter panel
+      assert.ok(html.includes('data-kind="all"'));
+      assert.ok(html.includes('data-kind="skill"'));
+      assert.ok(html.includes('data-kind="agent"'));
+      assert.ok(html.includes('data-kind="command"'));
+      assert.ok(html.includes('data-kind="mcp-server"'));
+      assert.ok(html.includes('data-kind="hook"'));
+      assert.ok(html.includes('data-kind="rule"'));
+
+      panel.dispose();
+    });
+
+    it('clicking or programmatic calls to scope and membership setters marks exactly one pill active with aria-pressed (40.5)', () => {
+      const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any, {} as any, {} as any, {} as any, () => {});
+      assert.ok(panel);
+
+      const html = panel.getHtml([], [], [], []);
+      const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
+      assert.ok(scriptMatch);
+
+      const makePill = (dim: string, val: string, initialActive = false) => {
+        const classes = new Set(initialActive ? ['filter-pill', `${dim}-pill`, 'active'] : ['filter-pill', `${dim}-pill`]);
+        const attrs: Record<string, string> = {
+          [`data-${dim}`]: val,
+          'aria-pressed': initialActive ? 'true' : 'false',
+        };
+        return {
+          classList: {
+            add: (c: string) => classes.add(c),
+            remove: (c: string) => classes.delete(c),
+            contains: (c: string) => classes.has(c),
+          },
+          getAttribute: (k: string) => attrs[k] ?? null,
+          setAttribute: (k: string, v: string) => { attrs[k] = v; },
+        };
+      };
+
+      const scopeAll = makePill('scope', 'all', true);
+      const scopeGlobal = makePill('scope', 'global', false);
+      const scopeProject = makePill('scope', 'project', false);
+      const scopePills = [scopeAll, scopeGlobal, scopeProject];
+
+      const memAll = makePill('membership', 'all', true);
+      const memManaged = makePill('membership', 'managed', false);
+      const memUnmanaged = makePill('membership', 'unmanaged', false);
+      const memPills = [memAll, memManaged, memUnmanaged];
+
+      const elements: Record<string, any> = {
+        managedDataJson: { textContent: '[]' },
+        observedDataJson: { textContent: '[]' },
+        sourceFilterJson: { textContent: 'null' },
+        unifiedTable: { innerHTML: '', querySelectorAll: () => [] },
+        searchBox: { value: '' },
+        breadcrumb: { style: { display: 'none' } },
+        'breadcrumb-chips': { innerHTML: '' },
+        'stat-managed': { textContent: '' },
+        'stat-updates-available': { textContent: '' },
+        'stat-modified-locally': { textContent: '' },
+        'stat-unmanaged': { textContent: '' },
+        'stat-unmanaged-lbl': { textContent: '' },
+        updateAllBtn: { title: '', disabled: false },
+      };
+
+      const mockDocument = {
+        getElementById: (id: string) => elements[id] || { style: {}, textContent: '', innerHTML: '' },
+        querySelectorAll: (sel: string) => {
+          if (sel === '.scope-pill') return scopePills;
+          if (sel === '.membership-pill') return memPills;
+          if (sel === '.matrix-group') return [];
+          return [];
+        },
+        querySelector: () => null,
+      };
+
+      const sandbox: any = {
+        window: { addEventListener: () => {} },
+        document: mockDocument,
+        acquireVsCodeApi: () => ({ postMessage: () => {} }),
+        console,
+        JSON,
+        Array,
+      };
+
+      vm.createContext(sandbox);
+      vm.runInContext(scriptMatch[1], sandbox);
+
+      // Programmatically set scope to global
+      sandbox.setScopeFilter('global');
+      assert.strictEqual(scopeGlobal.classList.contains('active'), true);
+      assert.strictEqual(scopeGlobal.getAttribute('aria-pressed'), 'true');
+      assert.strictEqual(scopeAll.classList.contains('active'), false);
+      assert.strictEqual(scopeAll.getAttribute('aria-pressed'), 'false');
+      assert.strictEqual(scopeProject.classList.contains('active'), false);
+      assert.strictEqual(scopeProject.getAttribute('aria-pressed'), 'false');
+      assert.strictEqual(scopePills.filter(p => p.classList.contains('active')).length, 1);
+
+      // Programmatically set scope to project (workspace)
+      sandbox.setScopeFilter('project');
+      assert.strictEqual(scopeProject.classList.contains('active'), true);
+      assert.strictEqual(scopeProject.getAttribute('aria-pressed'), 'true');
+      assert.strictEqual(scopeGlobal.classList.contains('active'), false);
+      assert.strictEqual(scopePills.filter(p => p.classList.contains('active')).length, 1);
+
+      // Set membership to managed
+      sandbox.setMembershipFilter('managed');
+      assert.strictEqual(memManaged.classList.contains('active'), true);
+      assert.strictEqual(memManaged.getAttribute('aria-pressed'), 'true');
+      assert.strictEqual(memAll.classList.contains('active'), false);
+      assert.strictEqual(memUnmanaged.classList.contains('active'), false);
+      assert.strictEqual(memPills.filter(p => p.classList.contains('active')).length, 1);
+
+      // Set membership to unmanaged
+      sandbox.setMembershipFilter('unmanaged');
+      assert.strictEqual(memUnmanaged.classList.contains('active'), true);
+      assert.strictEqual(memUnmanaged.getAttribute('aria-pressed'), 'true');
+      assert.strictEqual(memManaged.classList.contains('active'), false);
+      assert.strictEqual(memPills.filter(p => p.classList.contains('active')).length, 1);
+
+      panel.dispose();
+    });
+
+    it('inventoryData refreshes filter-group-env by id without touching other groups (40.5)', () => {
+      const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any, {} as any, {} as any, {} as any, () => {});
+      assert.ok(panel);
+
+      const html = panel.getHtml([], [], [], []);
+      const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
+      assert.ok(scriptMatch);
+
+      const envGroup = {
+        innerHTML: '<span class="filter-group-label">ENV</span><button class="filter-pill env-pill active">All Env</button>',
+        querySelector: () => null,
+      };
+      const scopeGroup = {
+        innerHTML: '<span class="filter-group-label">SCOPE</span><button class="filter-pill scope-pill active">All</button>',
+      };
+      const memGroup = {
+        innerHTML: '<span class="filter-group-label">MEMBERSHIP</span><button class="filter-pill membership-pill active">All</button>',
+      };
+      const kindGroup = {
+        innerHTML: '<span class="filter-group-label">KIND</span><button class="filter-pill kind-filter-pill active">All</button>',
+      };
+
+      const elements: Record<string, any> = {
+        'filter-group-env': envGroup,
+        'filter-group-scope': scopeGroup,
+        'filter-group-membership': memGroup,
+        'filter-group-kind': kindGroup,
+        managedDataJson: { textContent: '[]' },
+        observedDataJson: { textContent: '[]' },
+        sourceFilterJson: { textContent: 'null' },
+        unifiedTable: { innerHTML: '', querySelectorAll: () => [] },
+        searchBox: { value: '' },
+        breadcrumb: { style: { display: 'none' } },
+        'breadcrumb-chips': { innerHTML: '' },
+        'stat-managed': { textContent: '' },
+        'stat-updates-available': { textContent: '' },
+        'stat-modified-locally': { textContent: '' },
+        'stat-unmanaged': { textContent: '' },
+        'stat-unmanaged-lbl': { textContent: '' },
+        updateAllBtn: { title: '', disabled: false },
+      };
+
+      let messageListener: ((event: any) => void) | undefined;
+      const mockWindow = {
+        addEventListener: (event: string, handler: (e: any) => void) => {
+          if (event === 'message') messageListener = handler;
+        },
+      };
+
+      const mockDocument = {
+        getElementById: (id: string) => elements[id] || { style: {}, textContent: '', innerHTML: '' },
+        querySelectorAll: () => [],
+        querySelector: () => null,
+      };
+
+      const sandbox: any = {
+        window: mockWindow,
+        document: mockDocument,
+        acquireVsCodeApi: () => ({ postMessage: () => {} }),
+        console,
+        JSON,
+        Array,
+      };
+
+      vm.createContext(sandbox);
+      vm.runInContext(scriptMatch[1], sandbox);
+
+      assert.ok(messageListener);
+
+      const initialScopeHtml = scopeGroup.innerHTML;
+      const initialMemHtml = memGroup.innerHTML;
+      const initialKindHtml = kindGroup.innerHTML;
+
+      messageListener({
+        data: {
+          command: 'inventoryData',
+          managedData: [],
+          observedData: [],
+          rowsHtml: '',
+          totalInstalled: 0,
+          totalUnmanaged: 0,
+          identicalCount: 0,
+          environmentPills: '<button class="filter-pill env-pill" data-env="claude-code">claude-code</button>',
+          scanning: false,
+        },
+      });
+
+      // envGroup innerHTML refreshed and retains ENV label
+      assert.ok(envGroup.innerHTML.includes('>ENV<'));
+      assert.ok(envGroup.innerHTML.includes('claude-code'));
+
+      // other groups are completely untouched
+      assert.strictEqual(scopeGroup.innerHTML, initialScopeHtml, 'Scope group must not be modified by inventoryData');
+      assert.strictEqual(memGroup.innerHTML, initialMemHtml, 'Membership group must not be modified by inventoryData');
+      assert.strictEqual(kindGroup.innerHTML, initialKindHtml, 'Kind group must not be modified by inventoryData');
+
+      panel.dispose();
+    });
   });
 
   describe('FormEditorPanel', () => {
