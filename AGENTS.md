@@ -16,7 +16,7 @@ $SWK_CLI <command> [options]
 
 - **stdout is exactly one JSON document.** Parse stdout only; **stderr is logs**, ignore it.
 - On failure the exit code is non-zero and stdout holds `{ "error": { "code": "...", "message": "..." } }`. Codes: `INVALID_ARGUMENT`, `NOT_FOUND`, `SOURCE_RESOLUTION_FAILED`, `INTERNAL`.
-- **Read-only, except `redistribute --write`.** Every command except `redistribute` changes no manifest, state file or assistant configuration, and `redistribute` changes nothing unless you pass `--write` (without it, it prints the plan). One honest caveat: resolving a git source may create or refresh its clone under `~/.ai-swissknife/cache`, which is a cache and not user state.
+- **Plan first, write only with `--write`.** The commands in the first part of the table below only read. Every command in the *write commands* section prints a plan and **changes nothing unless you pass `--write`**. `hook` and `mcp-server` items are refused by every write command unless `--allow-code-kinds` is also given. One honest caveat: resolving a git source may create or refresh its clone under `~/.ai-swissknife/cache`, which is a cache and not user state.
 - Nothing prompts. Scopes appear as `global` / `project` in the JSON (shown to humans as Global / Workspace).
 - Global options: `--workspace <path>` (the Workspace scope root, default the current directory), `--home <path>` (the Global scope root, default your home), `--assistants a,b` (default all, e.g. `claude-code,kilo-code`).
 - **Several workspaces in one call (read commands `installed`, `updates`, `item`)**: `--roots <dir...>` scans one or more root folders for workspaces (directories that contain `.claude/`, `.kilo/`, `.kilocode/`, `.vscode/ai-swissknife/` or `.ai-swissknife/`), up to `--max-depth <n>` levels (default 4), never following symlinks and skipping `node_modules`, `.git`, `worktrees`, `.kilo/worktrees`, caches, build output, `_attic`, `_deprecated`, `old`, `very_old` and similar (`--ignore <names...>` replaces that list, `--extra-ignore <names...>` adds to it). The Global scope is scanned once. With `--roots`, each item carries `workspace`, keys get an `@<workspace folder name>` suffix when more than one workspace is found, and the JSON gains `workspaces` and `skipped` (directories that could not be read). `--workspace` is ignored when `--roots` is used. Example: `$SWK_CLI installed --roots ~/works --max-depth 3`.
@@ -33,6 +33,14 @@ $SWK_CLI <command> [options]
 | `item` | Details of one item by key: origin, other places it is installed in, whether a diff exists (`--diff` includes a size-capped unified diff) |
 | `plan-install` | What installing an artifact would do per assistant and scope (new / conflict / unsupported). **Never applies anything.** |
 | `redistribute` | After you edit a skill/agent/command in a folder that is registered as a `local-folder` source, push the change to every installed copy that came from that folder (all assistants and scopes). **Plan only unless `--write`.** |
+| `apply-install` | Install an artifact into several assistants and scopes (same arguments as `plan-install`). New targets only; conflicts need `--overwrite` (the previous version goes to the trash). |
+| `uninstall` | Remove one installed item by key. Soft by default (moved to the trash, restorable); `--hard` deletes permanently. |
+| `source add` | Register a source (`<type> <location>`, optional `--id --name --scope --replace`); the location is validated and an existing id is refused without `--replace`. |
+| `source remove` | Unregister a source (`<id> --scope`). |
+| `update` | Update one installed item by key, or `--all` (filters `--scope --assistant --source --kind`). Items modified locally are skipped unless `--include-modified` (their previous version goes to the trash). Reports `oldRevision`, `newRevision` and `changedFiles` per item. |
+| `trash list` | The trash, newest first, with where each item came from. |
+| `trash restore` | Restore one trash entry (`<id> [--to <path>]`); never overwrites an existing file. |
+| `trash empty` | Permanently delete what is in the trash (`--scope` to limit). |
 | `describe` | The machine-readable description of all commands |
 
 ## Examples
@@ -58,5 +66,20 @@ $SWK_CLI redistribute /path/to/my-skills-folder --write
 ```
 
 Rules (v1 handles **only items installed from a local folder**): each installed copy is classified `identical` (nothing to do), `stale` (the folder changed: it is updated), `modified-locally` (someone edited the installed copy: **skipped** unless `--force`, and then its previous version is saved to the trash first), `missing-on-disk`, or `orphan` (the artifact no longer exists in the folder: reported, **never deleted**). Copies from other origins, hand-made copies and links are not touched. Nothing is installed where there is no copy unless you pass `--install-missing` (with `--assistants` and `--scope`). `hook` and `mcp-server` items are refused unless `--allow-code-kinds` is also given. The output lists, per copy, `classification`, `action`, `oldHash` / `newHash`, `changedFiles` and `backupPath`.
+
+### Write commands, in short
+
+```bash
+# Register a local folder as a source, then install from it into two assistants (plan first):
+$SWK_CLI source add local-folder ~/dev/my-skills --id mine --scope global --write
+$SWK_CLI apply-install --source mine --artifact <artifact-id> --assistants claude-code,kilo-code --scopes global
+$SWK_CLI apply-install --source mine --artifact <artifact-id> --assistants claude-code,kilo-code --scopes global --write
+# Soft-remove, then bring it back:
+$SWK_CLI uninstall claude-code:global:skill:alpha --write
+$SWK_CLI trash list
+$SWK_CLI trash restore <id> --write
+```
+
+A Global-scope local folder must live under your home directory (the same rule as the extension).
 
 Item keys look like `claude-code:global:skill:conflict-resolver` and come from `installed`.

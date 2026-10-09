@@ -183,7 +183,7 @@ hands-on testing round.
 | 43       | 43  | [Disabled state for installed items](43-disabled-state/plan.md)                              | 43.1-43.3 merged (Kilo verified live; Claude unverified); 43.4 (UI) outlined, after 40.2 and 42.3 | 40, 42 | L    |
 | 44       | 44  | [Hardening and fixes from the kilocode-dev cross-check](44-hardening-from-kilocode-dev/plan.md) | in progress (44.1 merged; 44.3 P1 next) | 36.1, 38.1 | M    |
 | 45       | 45  | [Claude Code plugins, native management](45-claude-plugins/plan.md)                          | P3, after the rest: spike 45.1 paused (partial findings); CP-Q3/Q5 assumptions unconfirmed | 40, 42 | L    |
-| 46       | 46  | [CLI access to the extension](46-cli-access/plan.md)                                      | in progress (46.3 merged; 46.1, 46.2, 46.4 planned; low-priority parallel track) | 37.1, 44.1 | M    |
+| 46       | 46  | [CLI access to the extension](46-cli-access/plan.md)                                      | done except docs follow-ups: 46.1-46.5 merged (CLI: read commands, redistribute, write commands, AGENTS.md) | 37.1, 44.1 | M    |
 | 47       | 47  | [Update all](47-update-all/plan.md)                                                        | in progress (47.1 merged; 47.4, 47.2, 47.3 specified; UA-Q1, UA-Q2 decided) | 37.1 | M    |
 | 48       | 48  | [Maintainer features for the CLI](48-cli-maintainer-features/plan.md)                      | outline only (from the T012 wishlist; open decision on `replaces`) | 46, 47 | L    |
 

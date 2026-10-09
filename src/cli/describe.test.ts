@@ -25,21 +25,9 @@ describe('CLI self-description and agent docs (46.2)', () => {
 
   it('AGENTS.md documents exactly the registered commands in its command table', () => {
     const doc = fs.readFileSync(path.join(repoRoot, 'AGENTS.md'), 'utf8');
-    const tableNames = Array.from(doc.matchAll(/^\|\s*`([a-z-]+)`\s*\|/gm)).map((m) => m[1]);
+    const tableNames = Array.from(doc.matchAll(/^\|\s*`([a-z -]+)`\s*\|/gm)).map((m) => m[1]);
     const registered = runDescribe().map((c) => c.name).sort();
-    // 46.4 write commands are registered before AGENTS.md is updated by the architect
-    const pendingDocs = [
-      'apply-install',
-      'uninstall',
-      'source add',
-      'source remove',
-      'update',
-      'trash list',
-      'trash restore',
-      'trash empty',
-    ];
-    const registeredCovered = registered.filter((c) => !pendingDocs.includes(c));
-    assert.deepStrictEqual([...tableNames].sort(), registeredCovered);
+    assert.deepStrictEqual([...tableNames].sort(), registered);
   });
 
   it('README links to AGENTS.md', () => {
