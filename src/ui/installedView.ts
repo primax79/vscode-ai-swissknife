@@ -12,6 +12,7 @@ import {
   planUpdate,
   planUpdateAll,
   applyUpdateAll,
+  setHeld,
   type UpdateFilter,
   type UpdateItemOutcome,
 } from '../engine/update';
@@ -316,6 +317,13 @@ export class InstalledTreeDataProvider {
         }
       }
 
+      if (element.isRecommended) {
+        desc += ' ★';
+      }
+      if (inst.held) {
+        desc += ' held';
+      }
+
       const isDir = isBrowsableDirectory(inst.path);
 
       const item = new vscode.TreeItem(
@@ -323,9 +331,13 @@ export class InstalledTreeDataProvider {
         isDir ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
       );
       item.description = desc;
-      item.tooltip = `Name: ${inst.name}\nKind: ${inst.kind}\nAssistant: ${inst.assistant}\nScope: ${inst.scope}\nPath: ${inst.path}\nInstalled at: ${inst.installedAt}${
+      let tooltip = `Name: ${inst.name}\nKind: ${inst.kind}\nAssistant: ${inst.assistant}\nScope: ${inst.scope}\nPath: ${inst.path}\nInstalled at: ${inst.installedAt}${
         element.tooltipDescription ? `\nDescription: ${element.tooltipDescription}` : ''
       }${report?.details ? `\nStatus: ${report.details}` : ''}${inst.sourceRevision?.commit ? `\nCommit: ${inst.sourceRevision.commit}` : ''}`;
+      if (inst.held) {
+        tooltip += `\nHeld: skipped by Update all`;
+      }
+      item.tooltip = tooltip;
       item.iconPath = new vscode.ThemeIcon(iconName);
       if (!isDir) {
         item.command = {
@@ -335,7 +347,11 @@ export class InstalledTreeDataProvider {
         };
       }
       const baseContext = element.isRecommended ? 'installedInstallation:recommended' : 'installedInstallation';
-      item.contextValue = report ? `${baseContext}:${report.status}` : baseContext;
+      let ctx = report ? `${baseContext}:${report.status}` : baseContext;
+      if (inst.held) {
+        ctx += ':held';
+      }
+      item.contextValue = ctx;
       return item;
     }
 
@@ -503,6 +519,33 @@ export class InstalledTreeDataProvider {
     await this.doUpdateInstallation(item.installation);
   }
 
+  async holdItem(item?: InstalledInstallationItem | ManagedInstallation): Promise<void> {
+    const inst = item instanceof InstalledInstallationItem ? item.installation : item;
+    if (!inst) {
+      vscode.window.showWarningMessage('Please select an item to hold.');
+      return;
+    }
+    await this.setInstallationHeld(inst, true);
+  }
+
+  async releaseItem(item?: InstalledInstallationItem | ManagedInstallation): Promise<void> {
+    const inst = item instanceof InstalledInstallationItem ? item.installation : item;
+    if (!inst) {
+      vscode.window.showWarningMessage('Please select an item to release.');
+      return;
+    }
+    await this.setInstallationHeld(inst, false);
+  }
+
+  async setInstallationHeld(inst: ManagedInstallation, held: boolean): Promise<void> {
+    await setHeld(inst, held, { homeRoot: this.homeRoot });
+    this.refresh();
+  }
+
+  async toggleHeldInstallation(inst: ManagedInstallation): Promise<void> {
+    await this.setInstallationHeld(inst, !inst.held);
+  }
+
   async doUpdateInstallation(inst: ManagedInstallation): Promise<void> {
     if (!inst.sourceId) {
       vscode.window.showWarningMessage(`Cannot update "${inst.name}": no source ID recorded.`);
@@ -543,6 +586,9 @@ export class InstalledTreeDataProvider {
       report?.status === 'modified-and-update-available';
 
     let confirmMsg = `Update ${inst.kind} "${inst.name}" to latest version from source "${source.id}"?`;
+    if (inst.held) {
+      confirmMsg += ` This item is held.`;
+    }
     if (isModified) {
       confirmMsg += ` This item is modified locally (it will lose your edits).`;
     }
@@ -617,11 +663,15 @@ export class InstalledTreeDataProvider {
     const N = plan.counts.toUpdate;
     const M = plan.counts.skippedModified;
     const K = plan.counts.cannotUpdate;
+    const H = plan.counts.held;
 
     if (N === 0 && M === 0) {
-      if (K > 0) {
+      if (K > 0 || H > 0) {
+        const parts: string[] = [];
+        if (H > 0) parts.push(`${H} item(s) held`);
+        if (K > 0) parts.push(`${K} item(s) cannot be updated`);
         vscode.window.showInformationMessage(
-          `No updates can be applied (${K} item(s) cannot be updated).`
+          `No updates can be applied (${parts.join(', ')}).`
         );
       } else {
         vscode.window.showInformationMessage('All items are up to date.');
@@ -638,6 +688,10 @@ export class InstalledTreeDataProvider {
     const lines: string[] = [
       `${N} update(s) will be applied (${namesStr}).`
     ];
+
+    if (H > 0) {
+      lines.push(`${H} item(s) are held and will be skipped.`);
+    }
 
     if (M > 0) {
       lines.push(`${M} item(s) are modified locally and will be skipped (they would lose your edits).`);
@@ -716,9 +770,16 @@ export class InstalledTreeDataProvider {
     const X = outcomes.filter((o) => o.status === 'applied').length;
     const Y = finalPlan.counts.skippedModified + outcomes.filter((o) => o.status === 'refused').length;
     const Z = outcomes.filter((o) => o.status === 'failed' || o.status === 'rolled-back' || o.status === 'manual-recovery-required').length + finalPlan.counts.cannotUpdate;
+    const heldCount = finalPlan.counts.held;
+
+    const summaryParts = [`Updated ${X}`, `skipped ${Y}`];
+    if (heldCount > 0) {
+      summaryParts.push(`${heldCount} held`);
+    }
+    summaryParts.push(`failed ${Z}`);
 
     const finalChoice = await vscode.window.showInformationMessage(
-      `Updated ${X}, skipped ${Y}, failed ${Z}`,
+      summaryParts.join(', '),
       'Show details'
     );
 
@@ -726,7 +787,7 @@ export class InstalledTreeDataProvider {
       const channel = this.getOutputChannel();
       channel.clear();
       channel.appendLine(`=== AI Swissknife Update Details ===`);
-      channel.appendLine(`Updated: ${X}, Skipped: ${Y}, Failed: ${Z}\n`);
+      channel.appendLine(`Updated: ${X}, Skipped: ${Y}${heldCount > 0 ? `, Held: ${heldCount}` : ''}, Failed: ${Z}\n`);
       for (const o of outcomes) {
         const scopeLabel = getScopeLabel(o.installation.scope);
         if (o.status === 'applied') {
@@ -745,6 +806,10 @@ export class InstalledTreeDataProvider {
             channel.appendLine(`  Backup saved to: ${o.backupPath}`);
           }
         }
+      }
+      for (const item of finalPlan.held) {
+        const scopeLabel = getScopeLabel(item.installation.scope);
+        channel.appendLine(`- [HELD] ${item.installation.name} (${item.installation.assistant}, ${scopeLabel}): ${item.reason ?? 'held'}`);
       }
       for (const item of finalPlan.skippedModified) {
         const scopeLabel = getScopeLabel(item.installation.scope);

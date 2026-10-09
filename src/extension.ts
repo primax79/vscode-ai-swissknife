@@ -310,6 +310,12 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('aiSwissknife.updateItem', (item?: InstalledInstallationItem) =>
       installedProvider.updateInstallation(item)
     ),
+    vscode.commands.registerCommand('aiSwissknife.holdItem', (item?: InstalledInstallationItem) =>
+      installedProvider.holdItem(item)
+    ),
+    vscode.commands.registerCommand('aiSwissknife.releaseItem', (item?: InstalledInstallationItem) =>
+      installedProvider.releaseItem(item)
+    ),
     vscode.commands.registerCommand('aiSwissknife.promoteItem', (item?: ObservedArtifactItem) =>
       installedProvider.promoteItem(item)
     ),

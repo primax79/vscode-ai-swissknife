@@ -15,7 +15,7 @@ import { getSourceResolver } from '../sources/registry';
 import { planInstall } from './plan';
 import { applyInstall } from './apply';
 import { checkForUpstreamUpdate, analyzeLocalDrift, checkDriftForAll } from './drift';
-import { manifestPath } from '../domain/registry';
+import { manifestPath, readState, writeState, withStateLock } from '../domain/registry';
 import { copyToTrash } from './softDelete';
 import type { DriftReport, PreparedInstall } from './types';
 import type { SourceResolution } from '../sources/types';
@@ -73,22 +73,33 @@ export interface UpToDateItem {
   report?: DriftReport;
 }
 
+export interface HeldItem {
+  installation: ManagedInstallation;
+  reason?: string;
+  report?: DriftReport;
+}
+
+export type HeldUpdateItem = HeldItem;
+
 export interface PlanUpdateAllResult {
   toUpdate: UpdatePlanItem[];
   skippedModified: SkippedModifiedItem[];
   cannotUpdate: CannotUpdateItem[];
   upToDate: UpToDateItem[];
+  held: HeldItem[];
   buckets: {
     toUpdate: UpdatePlanItem[];
     skippedModified: SkippedModifiedItem[];
     cannotUpdate: CannotUpdateItem[];
     upToDate: UpToDateItem[];
+    held: HeldItem[];
   };
   counts: {
     toUpdate: number;
     skippedModified: number;
     cannotUpdate: number;
     upToDate: number;
+    held: number;
     total: number;
   };
 }
@@ -259,6 +270,7 @@ export async function planUpdateAll(params: PlanUpdateAllParams): Promise<PlanUp
   const skippedModified: SkippedModifiedItem[] = [];
   const cannotUpdate: CannotUpdateItem[] = [];
   const upToDate: UpToDateItem[] = [];
+  const held: HeldItem[] = [];
 
   const sourceResolutions = new Map<
     string,
@@ -289,6 +301,17 @@ export async function planUpdateAll(params: PlanUpdateAllParams): Promise<PlanUp
       cannotUpdate.push({
         installation: inst,
         reason: `Cannot update disabled item "${inst.name}". Enable the item before updating.`,
+      });
+      continue;
+    }
+
+    // 1.6. Check if held
+    if (inst.held) {
+      const report = findReport(effectiveReports, inst);
+      held.push({
+        installation: inst,
+        report,
+        reason: 'Item is held (skipped by Update all).',
       });
       continue;
     }
@@ -449,6 +472,7 @@ export async function planUpdateAll(params: PlanUpdateAllParams): Promise<PlanUp
     skippedModified,
     cannotUpdate,
     upToDate,
+    held,
   };
 
   const counts = {
@@ -456,7 +480,13 @@ export async function planUpdateAll(params: PlanUpdateAllParams): Promise<PlanUp
     skippedModified: skippedModified.length,
     cannotUpdate: cannotUpdate.length,
     upToDate: upToDate.length,
-    total: toUpdate.length + skippedModified.length + cannotUpdate.length + upToDate.length,
+    held: held.length,
+    total:
+      toUpdate.length +
+      skippedModified.length +
+      cannotUpdate.length +
+      upToDate.length +
+      held.length,
   };
 
   return {
@@ -464,6 +494,7 @@ export async function planUpdateAll(params: PlanUpdateAllParams): Promise<PlanUp
     skippedModified,
     cannotUpdate,
     upToDate,
+    held,
     buckets,
     counts,
   };
@@ -552,4 +583,61 @@ export async function applyUpdateAll(
   }
 
   return outcomes;
+}
+
+export interface SetHeldOptions {
+  homeRoot?: string;
+  projectRoot?: string;
+}
+
+/**
+ * Sets the held flag on a managed installation and writes state under withStateLock.
+ */
+export async function setHeld(
+  inst: ManagedInstallation,
+  held: boolean,
+  options?: SetHeldOptions
+): Promise<ManagedInstallation> {
+  const projectRoot = inst.projectPath ?? options?.projectRoot;
+  const homeRoot = options?.homeRoot;
+
+  return await withStateLock(inst.scope, projectRoot, homeRoot, async () => {
+    const state = await readState(inst.scope, projectRoot, homeRoot);
+    let matched = false;
+    state.installations = state.installations.map((item) => {
+      if (isSameInstallation(item, inst)) {
+        matched = true;
+        return {
+          ...item,
+          held,
+        };
+      }
+      return item;
+    });
+
+    if (!matched) {
+      const idx = state.installations.findIndex(
+        (i) =>
+          i.assistant === inst.assistant &&
+          i.kind === inst.kind &&
+          i.name === inst.name &&
+          i.scope === inst.scope
+      );
+      if (idx !== -1) {
+        state.installations[idx] = {
+          ...state.installations[idx],
+          held,
+        };
+      } else {
+        state.installations.push({
+          ...inst,
+          held,
+        });
+      }
+    }
+
+    await writeState(inst.scope, state, projectRoot, homeRoot);
+    inst.held = held;
+    return inst;
+  });
 }
