@@ -19,4 +19,4 @@ Single-item `update <item>`, the "old commit -> new commit, files changed" repor
 
 ## Follow-ups found while verifying (2026-10-09)
 
-- **48.1b** — the ignore rules of `findWorkspaces` (notably the `.kilo/worktrees` segment pair) are applied to the **absolute** path, so a root that itself lives under such a path finds nothing (reproduced when the fixture sat inside a Kilo worktree). They should be evaluated on the path **relative to each root**. Small fix + test.
+- **48.1b (done 2026-10-09, merged)** — the ignore rules of `findWorkspaces` (notably the `.kilo/worktrees` segment pair) are applied to the **absolute** path, so a root that itself lives under such a path finds nothing (reproduced when the fixture sat inside a Kilo worktree). They should be evaluated on the path **relative to each root**. Small fix + test.
