@@ -9,13 +9,14 @@ import { getAssistantIconPath } from './assistantIcons';
 import { InstalledTreeDataProvider, getIdentityKey } from './installedView';
 import { SourcesTreeDataProvider, SourceItem } from './sourcesView';
 import { AvailableTreeDataProvider, AvailableTreeItem, AvailableFolderItem, AvailableArtifactItem, DiagnosticTreeItem } from './availableView';
-import { findRelatedInstallations, groupByIdentityAndScope } from '../engine/crossFrameworkLookup';
+import { findRelatedInstallations } from '../engine/crossFrameworkLookup';
 import { ALL_ADAPTERS } from '../adapters/registry';
 import { resolveArtifactPreviewPath } from './artifactFileTree';
 import { handleInstallRecommended, installResolvedArtifacts, unrecommendArtifactForWorkspace } from './recommendations';
 import { getScopeLabel, getScopeIconSvg } from './scopeIcons';
+import { buildInstalledTree, type InstalledObject, type Place, type PlaceState, STATE_SEVERITY } from '../engine/installedTree';
 
-export { getScopeLabel, getScopeIconSvg };
+export { getScopeLabel, getScopeIconSvg, buildInstalledTree };
 
 export function computeItemOrigin(
   membership: 'managed' | 'unmanaged',
@@ -756,105 +757,8 @@ export class DashboardPanel {
         </button>`;
       }).join('\n');
 
-      let managedRowsHtml = '';
-      const groups = groupByIdentityAndScope(allManaged);
-      groups.forEach((group, groupIdx) => {
-        const sortedInstallations = [...group.installations].sort((a, b) => {
-           const ia = ALL_ADAPTERS.findIndex(adapter => adapter.assistant === a.assistant);
-           const ib = ALL_ADAPTERS.findIndex(adapter => adapter.assistant === b.assistant);
-           return ia - ib;
-        });
-
-        managedRowsHtml += `
-          <tbody class="matrix-group item-row-group" data-kind="${this.escapeHtml(group.kind)}" data-name="${this.escapeHtml(group.name.toLowerCase())}" data-scope="${this.escapeHtml(group.scope)}" data-membership="managed" data-worst-status="checking…">
-            <tr class="item-row parent-row" onclick="toggleFolder('subrows-${groupIdx}', this)">
-               <td><span class="folder-icon" style="transition: transform 0.2s; font-size: 10px; opacity: 0.8; display: inline-block;">▶</span> <span class="kind-pill kind-${this.escapeHtml(group.kind)}">${this.escapeHtml(group.kind)}</span></td>
-               <td><strong>${this.escapeHtml(group.name)}</strong></td>
-               <td><span class="scope-pill scope-${this.escapeHtml(group.scope)}">${this.escapeHtml(getScopeLabel(group.scope))}</span></td>
-               <td class="parent-status-cell">
-                 ${sortedInstallations.map(inst => `
-                   <span class="badge badge-pending parent-badge" data-parent-key="${this.escapeHtml(getIdentityKey(inst))}" title="${this.escapeHtml(inst.assistant)}: checking…">
-                     <img src="${this._panel.webview.asWebviewUri(getAssistantIconPath(inst.assistant, this._extensionUri).light)}" class="assistant-icon" width="12" height="12" style="vertical-align: middle;" />
-                   </span>
-                 `).join('')}
-               </td>
-            </tr>
-            <tr id="subrows-${groupIdx}" style="display: none;">
-              <td colspan="4" style="padding: 0; border: none;">
-                <table style="margin: 0; background: rgba(0,0,0,0.1); width: 100%;">
-                  <tbody>
-                    ${sortedInstallations.map(inst => {
-                      const key = getIdentityKey(inst);
-                      return `
-                        <tr class="item-row sub-row" data-key="${this.escapeHtml(key)}" data-assistant="${this.escapeHtml(inst.assistant)}" onclick="selectRow(this, ${this.jsStringLiteral(key)})">
-                          <td style="padding-left: 30px; width: 30%;">
-                             <img src="${this._panel.webview.asWebviewUri(getAssistantIconPath(inst.assistant, this._extensionUri).light)}" class="assistant-icon" width="14" height="14" style="vertical-align: middle; margin-right: 6px;" />
-                             ${this.escapeHtml(inst.assistant)}
-                          </td>
-                          <td data-drift-key="${this.escapeHtml(key)}" data-status="checking…" style="width: 40%;">
-                             <span class="badge badge-pending">● Managed · checking…</span>
-                          </td>
-                          <td style="text-align: right; width: 30%;">
-                            <button class="btn btn-sm btn-secondary" title="Preview" onclick="event.stopPropagation(); vscode.postMessage({ command: 'previewInstalledArtifact', key: ${this.jsStringLiteral(key)} })">👁</button>
-                            <button class="btn btn-sm btn-secondary diff-btn" title="Diff" style="display: none;" onclick="event.stopPropagation(); vscode.postMessage({ command: 'diffInstalledArtifact', key: ${this.jsStringLiteral(key)} })">⇄</button>
-                            <button class="btn btn-sm btn-primary update-btn" title="Update to latest" style="display: none;" onclick="event.stopPropagation(); vscode.postMessage({ command: 'updateItem', key: ${this.jsStringLiteral(key)} })">⟳</button>
-                          </td>
-                        </tr>
-                      `;
-                    }).join('')}
-                  </tbody>
-                </table>
-              </td>
-            </tr>
-          </tbody>
-        `;
-      });
-
-      let observedRowsHtml = '';
-
-      allObserved.forEach((obs, idx) => {
-        const sourceId = obs.match?.sourceId || '';
-        const matchingSource = allSources.find((s) => s.id === sourceId);
-        const sourceScope = matchingSource?.scope || '';
-        let badgeClass = 'badge-unmanaged';
-        let badgeText = '◌ Unmanaged · local only';
-        let tooltip = '';
-        if (obs.match?.status === 'identical') {
-          badgeClass = 'badge-success';
-          badgeText = `◌ Unmanaged · identical to ${obs.match.sourceId}`;
-          tooltip = ` title="${this.escapeHtml(obs.match.details || '')}"`;
-        } else if (obs.match?.status === 'different') {
-          badgeClass = 'badge-warning';
-          badgeText = `◌ Unmanaged · differs from ${obs.match.sourceId}`;
-          tooltip = ` title="${this.escapeHtml(obs.match.details || '')}"`;
-        }
-        let actionBtn = '';
-        if ((obs.candidates?.length ?? 0) > 0) {
-          actionBtn = `<button class="btn btn-sm btn-primary" title="Promote" onclick="promoteItem(${idx})">⇧</button>`;
-        }
-        const key = getIdentityKey(obs);
-        observedRowsHtml += `
-          <tr class="item-row item-row-group" data-kind="${this.escapeHtml(obs.kind)}" data-name="${this.escapeHtml(obs.name.toLowerCase())}" data-assistant="${this.escapeHtml(obs.assistant)}" data-scope="${this.escapeHtml(obs.scope)}" data-membership="unmanaged" data-status="unmanaged" data-source-id="${this.escapeHtml(sourceId)}" data-source-scope="${this.escapeHtml(sourceScope)}" data-key="${this.escapeHtml(key)}" onclick="selectRow(this, ${this.jsStringLiteral(key)})">
-            <td><span class="kind-pill kind-${this.escapeHtml(obs.kind)}">${this.escapeHtml(obs.kind)}</span></td>
-            <td><strong>${this.escapeHtml(obs.name)}</strong></td>
-            <td>${this.escapeHtml(obs.assistant)}</td>
-            <td><span class="scope-pill scope-${this.escapeHtml(obs.scope)}">${this.escapeHtml(getScopeLabel(obs.scope))}</span></td>
-            <td><span class="badge ${badgeClass}"${tooltip}>${this.escapeHtml(badgeText)}</span></td>
-            <td>
-              ${actionBtn}
-            </td>
-          </tr>
-        `;
-      });
-      if (!managedRowsHtml) {
-        managedRowsHtml = '<tr><td colspan="4" style="text-align:center; opacity:0.6;">No items found.</td></tr>';
-      }
-      if (!observedRowsHtml) {
-        observedRowsHtml = '<tr><td colspan="6" style="text-align:center; opacity:0.6;">No items found.</td></tr>';
-      }
-      
-      const rowsHtml = { managedRowsHtml, observedRowsHtml };
-
+      const tree = buildInstalledTree(allManaged, allObserved);
+      const rowsHtml = this.renderInstalledTree(tree);
 
       this._panel.webview.postMessage({
         command: 'inventoryData',
@@ -1247,6 +1151,252 @@ export class DashboardPanel {
     return html;
   }
 
+  private getAssistantIconSrc(assistant: AssistantId): string {
+    try {
+      const iconUris = getAssistantIconPath(assistant, this._extensionUri);
+      return this._panel.webview.asWebviewUri(iconUris.light).toString();
+    } catch {
+      return '';
+    }
+  }
+
+  private getBadgeClass(state: PlaceState | string): string {
+    switch (state) {
+      case 'up-to-date':
+      case 'identical':
+        return 'badge-success';
+      case 'update-available':
+        return 'badge-info';
+      case 'modified-locally':
+      case 'modified-and-update-available':
+      case 'different':
+        return 'badge-warning';
+      case 'missing-on-disk':
+        return 'badge-error';
+      case 'local-only':
+        return 'badge-unmanaged';
+      case 'checking':
+      case 'checking…':
+      default:
+        return 'badge-pending';
+    }
+  }
+
+  private getWorstStatusLabel(state: PlaceState | string): string {
+    switch (state) {
+      case 'up-to-date':
+        return 'Up to date';
+      case 'update-available':
+        return 'Update available';
+      case 'modified-locally':
+        return 'Modified locally';
+      case 'modified-and-update-available':
+        return 'Modified & update available';
+      case 'missing-on-disk':
+        return 'Missing on disk';
+      case 'different':
+        return 'Differs from source';
+      case 'identical':
+        return 'Identical to source';
+      case 'local-only':
+        return 'Local only';
+      case 'checking':
+      case 'checking…':
+        return 'checking…';
+      default:
+        return String(state);
+    }
+  }
+
+  private getManagedPlaceBadgeText(state: PlaceState | string): string {
+    switch (state) {
+      case 'up-to-date':
+        return '● Managed · up to date';
+      case 'update-available':
+        return '● Managed · update available';
+      case 'modified-locally':
+        return '● Managed · modified locally';
+      case 'modified-and-update-available':
+        return '● Managed · modified locally';
+      case 'missing-on-disk':
+        return '● Managed · missing on disk';
+      case 'checking':
+      case 'checking…':
+        return '● Managed · checking…';
+      default:
+        return `● Managed · ${state}`;
+    }
+  }
+
+  private getUnmanagedPlaceBadgeText(place: Place): string {
+    if (place.state === 'identical') {
+      return place.match?.sourceId
+        ? `◌ Unmanaged · identical to ${place.match.sourceId}`
+        : '◌ Unmanaged · identical';
+    } else if (place.state === 'different') {
+      return place.match?.sourceId
+        ? `◌ Unmanaged · differs from ${place.match.sourceId}`
+        : '◌ Unmanaged · differs';
+    } else {
+      return '◌ Unmanaged · local only';
+    }
+  }
+
+  public renderInstalledTree(
+    tree: InstalledObject[],
+    driftByKey?: Map<string, PlaceState | string> | Record<string, PlaceState | string>
+  ): string {
+    if (!tree || tree.length === 0) {
+      return '<tr><td colspan="4" style="text-align:center; opacity:0.6;">No items found.</td></tr>';
+    }
+
+    const lookupState = (key: string): PlaceState | undefined => {
+      if (!driftByKey) return undefined;
+      let raw: PlaceState | string | undefined;
+      if (driftByKey instanceof Map) raw = driftByKey.get(key);
+      else if (typeof driftByKey === 'object') raw = (driftByKey as Record<string, PlaceState | string>)[key];
+      if (!raw) return undefined;
+      if (raw === 'checking…') return 'checking';
+      return raw as PlaceState;
+    };
+
+    let html = '';
+
+    tree.forEach((obj, groupIdx) => {
+      const placesWithState = obj.places.map((place) => {
+        const injected = lookupState(place.key);
+        return {
+          ...place,
+          state: injected ?? place.state,
+        };
+      });
+
+      const worstState = placesWithState.reduce<PlaceState>((worst, p) => {
+        const currSev = STATE_SEVERITY[p.state] ?? -1;
+        const worstSev = STATE_SEVERITY[worst] ?? -1;
+        return currSev > worstSev ? p.state : worst;
+      }, placesWithState[0]?.state ?? 'up-to-date');
+
+      const assistantsList = Array.from(new Set(placesWithState.map((p) => p.assistant))).join(',');
+      const scopesList = Array.from(new Set(placesWithState.map((p) => p.scope))).join(',');
+      const membershipsList = Array.from(new Set(placesWithState.map((p) => p.membership))).join(',');
+
+      const chipsHtml = placesWithState.map((place) => {
+        const chipClass = this.getBadgeClass(place.state);
+        const iconSrc = this.getAssistantIconSrc(place.assistant);
+        const scopeSvg = getScopeIconSvg(place.scope);
+        const scopeLabel = getScopeLabel(place.scope);
+        const title = `${place.assistant} · ${scopeLabel} · ${place.state}`;
+        return `<span class="badge ${chipClass} parent-chip parent-badge" data-parent-key="${this.escapeHtml(place.key)}" title="${this.escapeHtml(title)}"><img src="${iconSrc}" class="assistant-icon" width="12" height="12" style="vertical-align: middle;" />${scopeSvg}</span>`;
+      }).join('\n');
+
+      const worstBadgeClass = this.getBadgeClass(worstState);
+      const worstBadgeText = this.getWorstStatusLabel(worstState);
+
+      const childRowsHtml = placesWithState.map((place) => {
+        const asstIconSrc = this.getAssistantIconSrc(place.assistant);
+        const scopeSvg = getScopeIconSvg(place.scope);
+        const scopeLabel = getScopeLabel(place.scope);
+        const childBadgeClass = this.getBadgeClass(place.state);
+        const childBadgeText = place.membership === 'managed'
+          ? this.getManagedPlaceBadgeText(place.state)
+          : this.getUnmanagedPlaceBadgeText(place);
+
+        let actionsHtml = '';
+        if (place.membership === 'managed') {
+          const hasDiff = place.state === 'modified-locally' || place.state === 'modified-and-update-available';
+          const hasUpdate = place.state === 'update-available' || place.state === 'modified-and-update-available';
+          actionsHtml = `
+            <button class="btn btn-sm btn-secondary" title="Preview" onclick="event.stopPropagation(); vscode.postMessage({ command: 'previewInstalledArtifact', key: ${this.jsStringLiteral(place.key)} })">👁</button>
+            <button class="btn btn-sm btn-secondary diff-btn" title="Diff" style="${hasDiff ? 'display: inline-block;' : 'display: none;'}" onclick="event.stopPropagation(); vscode.postMessage({ command: 'diffInstalledArtifact', key: ${this.jsStringLiteral(place.key)} })">⇄</button>
+            <button class="btn btn-sm btn-primary update-btn" title="Update to latest" style="${hasUpdate ? 'display: inline-block;' : 'display: none;'}" onclick="event.stopPropagation(); vscode.postMessage({ command: 'updateItem', key: ${this.jsStringLiteral(place.key)} })">⟳</button>
+          `;
+        } else {
+          const canPromote = place.state === 'identical' || place.state === 'different' || (place.match && place.match.status !== 'none');
+          if (canPromote) {
+            actionsHtml = `<button class="btn btn-sm btn-primary" title="Promote" onclick="event.stopPropagation(); promoteItem(${this.jsStringLiteral(place.key)})">⇧</button>`;
+          }
+        }
+
+        const sourceIdAttr = place.membership === 'unmanaged' && place.match?.sourceId
+          ? ` data-source-id="${this.escapeHtml(place.match.sourceId)}"`
+          : '';
+
+        return `
+          <tr class="item-row sub-row"
+            data-key="${this.escapeHtml(place.key)}"
+            data-name="${this.escapeHtml(obj.name)}"
+            data-kind="${this.escapeHtml(obj.kind)}"
+            data-assistant="${this.escapeHtml(place.assistant)}"
+            data-scope="${this.escapeHtml(place.scope)}"
+            data-membership="${this.escapeHtml(place.membership)}"
+            data-status="${this.escapeHtml(place.state)}"${sourceIdAttr}
+            onclick="selectRow(this, ${this.jsStringLiteral(place.key)})">
+            <td style="padding-left: 30px; width: 30%;">
+              <img src="${asstIconSrc}" class="assistant-icon" width="14" height="14" style="vertical-align: middle; margin-right: 6px;" />
+              ${this.escapeHtml(place.assistant)}
+            </td>
+            <td style="width: 15%;">
+              <span title="${this.escapeHtml(scopeLabel)}">${scopeSvg}</span>
+            </td>
+            <td data-drift-key="${this.escapeHtml(place.key)}" data-status="${this.escapeHtml(place.state)}" style="width: 35%;">
+              <span class="badge ${childBadgeClass}">${this.escapeHtml(childBadgeText)}</span>
+            </td>
+            <td style="text-align: right; width: 20%;">
+              ${actionsHtml}
+            </td>
+          </tr>
+        `;
+      }).join('\n');
+
+      const subrowsId = `subrows-${groupIdx}`;
+
+      html += `
+        <tbody class="matrix-group item-row-group"
+          data-kind="${this.escapeHtml(obj.kind)}"
+          data-name="${this.escapeHtml(obj.name.toLowerCase())}"
+          data-worst-status="${this.escapeHtml(worstState)}"
+          data-assistants="${this.escapeHtml(assistantsList)}"
+          data-scopes="${this.escapeHtml(scopesList)}"
+          data-memberships="${this.escapeHtml(membershipsList)}">
+          <tr class="item-row parent-row"
+            onclick="toggleFolder('${subrowsId}', this)"
+            data-kind="${this.escapeHtml(obj.kind)}"
+            data-name="${this.escapeHtml(obj.name.toLowerCase())}"
+            data-worst-status="${this.escapeHtml(worstState)}"
+            data-assistants="${this.escapeHtml(assistantsList)}"
+            data-scopes="${this.escapeHtml(scopesList)}"
+            data-memberships="${this.escapeHtml(membershipsList)}">
+            <td>
+              <span class="folder-icon" style="transition: transform 0.2s; font-size: 10px; opacity: 0.8; display: inline-block;">▶</span>
+              <span class="kind-pill kind-${this.escapeHtml(obj.kind)}">${this.escapeHtml(obj.kind)}</span>
+            </td>
+            <td><strong>${this.escapeHtml(obj.name)}</strong></td>
+            <td class="parent-chips-cell">
+              <div class="chip-strip" style="display: inline-flex; gap: 4px; flex-wrap: wrap; align-items: center;">
+                ${chipsHtml}
+              </div>
+            </td>
+            <td class="parent-status-cell">
+              <span class="badge ${worstBadgeClass} worst-badge" title="${placesWithState.length} place${placesWithState.length === 1 ? '' : 's'}">${this.escapeHtml(worstBadgeText)}</span>
+            </td>
+          </tr>
+          <tr id="${subrowsId}" style="display: none;">
+            <td colspan="4" style="padding: 0; border: none;">
+              <table style="margin: 0; background: rgba(0,0,0,0.1); width: 100%;">
+                <tbody>
+                  ${childRowsHtml}
+                </tbody>
+              </table>
+            </td>
+          </tr>
+        </tbody>
+      `;
+    });
+
+    return html;
+  }
+
   private getInstalledSectionHtml(
     sources: Source[],
     managed: ManagedInstallation[],
@@ -1259,7 +1409,7 @@ export class DashboardPanel {
     modifiedLocally: number,
     identicalCount: number,
     environmentPills: string,
-    rowsHtml: { managedRowsHtml: string; observedRowsHtml: string }
+    rowsHtml: string
   ): string {
     return `
   <div class="stats-ribbon">
@@ -1330,29 +1480,12 @@ export class DashboardPanel {
       <tr>
         <th style="cursor: pointer;" onclick="sortMatrix('kind')">Kind ↕</th>
         <th style="cursor: pointer;" onclick="sortMatrix('name')">Name ↕</th>
-        <th style="cursor: pointer;" onclick="sortMatrix('scope')">Scope ↕</th>
+        <th>Places</th>
         <th style="cursor: pointer;" onclick="sortMatrix('worst-status')">Status ↕</th>
       </tr>
     </thead>
     <tbody id="unifiedTable">
-      ${rowsHtml.managedRowsHtml}
-    </tbody>
-  </table>
-
-  <h3 style="margin-top: 32px; font-size: 14px; opacity: 0.8; margin-bottom: 8px;">Unmanaged (Discovered)</h3>
-  <table id="observedTable">
-    <thead>
-      <tr>
-        <th>Kind</th>
-        <th>Name</th>
-        <th>Assistant</th>
-        <th>Scope</th>
-        <th>Status</th>
-        <th>Action</th>
-      </tr>
-    </thead>
-    <tbody id="observedTableBody">
-      ${rowsHtml.observedRowsHtml}
+      ${rowsHtml}
     </tbody>
   </table>
 
@@ -1425,122 +1558,21 @@ export class DashboardPanel {
       </button>`;
     }).join('\n');
 
-    let managedRowsHtml = '';
-    
-    const groups = groupByIdentityAndScope(managed);
-    groups.forEach((group: any, groupIdx: number) => {
-      const sortedInstallations = [...group.installations].sort((a, b) => {
-         const ia = ALL_ADAPTERS.findIndex((adapter: any) => adapter.assistant === a.assistant);
-         const ib = ALL_ADAPTERS.findIndex((adapter: any) => adapter.assistant === b.assistant);
-         return ia - ib;
-      });
-
-      managedRowsHtml += `
-        <tbody class="matrix-group item-row-group" data-kind="${this.escapeHtml(group.kind)}" data-name="${this.escapeHtml(group.name.toLowerCase())}" data-scope="${this.escapeHtml(group.scope)}" data-membership="managed" data-worst-status="checking…">
-          <tr class="item-row parent-row" onclick="toggleFolder('subrows-init-${groupIdx}', this)">
-             <td><span class="folder-icon" style="transition: transform 0.2s; font-size: 10px; opacity: 0.8; display: inline-block;">▶</span> <span class="kind-pill kind-${this.escapeHtml(group.kind)}">${this.escapeHtml(group.kind)}</span></td>
-              <td><strong>${this.escapeHtml(group.name)}</strong></td>
-              <td><span class="scope-pill scope-${this.escapeHtml(group.scope)}">${this.escapeHtml(getScopeLabel(group.scope))}</span></td>
-             <td class="parent-status-cell">
-               ${sortedInstallations.map(inst => `
-                 <span class="badge badge-pending parent-badge" data-parent-key="${this.escapeHtml(getIdentityKey(inst))}" title="${this.escapeHtml(inst.assistant)}: checking…">
-                   <img src="${this._panel.webview.asWebviewUri(getAssistantIconPath(inst.assistant, this._extensionUri).light)}" class="assistant-icon" width="12" height="12" style="vertical-align: middle;" />
-                 </span>
-               `).join('')}
-             </td>
-          </tr>
-          <tr id="subrows-init-${groupIdx}" style="display: none;">
-            <td colspan="4" style="padding: 0; border: none;">
-              <table style="margin: 0; background: rgba(0,0,0,0.1); width: 100%;">
-                <tbody>
-                  ${sortedInstallations.map(inst => {
-                    const key = getIdentityKey(inst);
-                    const report = reportMap.get(key);
-                    const isPending = scanning && !report;
-                    const status = report?.status ?? (scanning ? 'checking…' : 'up-to-date');
-                    let badgeClass = 'badge-pending';
-                    let badgeText = '● Managed · checking…';
-                    
-                    if (!isPending) {
-                      if (status === 'up-to-date') { badgeClass = 'badge-success'; badgeText = '● Managed · up to date'; }
-                      else if (status === 'update-available') { badgeClass = 'badge-info'; badgeText = '● Managed · update available'; }
-                      else if (status === 'modified-locally' || status === 'modified-and-update-available') { badgeClass = 'badge-warning'; badgeText = '● Managed · modified locally'; }
-                      else { badgeClass = 'badge-error'; badgeText = `● Managed · ${status}`; }
-                    }
-
-                    return `
-                      <tr class="item-row sub-row" data-key="${this.escapeHtml(key)}" data-assistant="${this.escapeHtml(inst.assistant)}" onclick="selectRow(this, ${this.jsStringLiteral(key)})">
-                        <td style="padding-left: 30px; width: 30%;">
-                           <img src="${this._panel.webview.asWebviewUri(getAssistantIconPath(inst.assistant, this._extensionUri).light)}" class="assistant-icon" width="14" height="14" style="vertical-align: middle; margin-right: 6px;" />
-                           ${this.escapeHtml(inst.assistant)}
-                        </td>
-                        <td data-drift-key="${this.escapeHtml(key)}" data-status="${this.escapeHtml(status)}" style="width: 40%;">
-                           <span class="badge ${badgeClass}">${this.escapeHtml(badgeText)}</span>
-                        </td>
-                        <td style="text-align: right; width: 30%;">
-                          <button class="btn btn-sm btn-secondary" title="Preview" onclick="event.stopPropagation(); vscode.postMessage({ command: 'previewInstalledArtifact', key: ${this.jsStringLiteral(key)} })">👁</button>
-                          <button class="btn btn-sm btn-secondary diff-btn" title="Diff" style="${status === 'modified-locally' || status === 'modified-and-update-available' ? 'display: inline-block;' : 'display: none;'}" onclick="event.stopPropagation(); vscode.postMessage({ command: 'diffInstalledArtifact', key: ${this.jsStringLiteral(key)} })">⇄</button>
-                          <button class="btn btn-sm btn-primary update-btn" title="Update to latest" style="${status === 'update-available' || status === 'modified-and-update-available' ? 'display: inline-block;' : 'display: none;'}" onclick="event.stopPropagation(); vscode.postMessage({ command: 'updateItem', key: ${this.jsStringLiteral(key)} })">⟳</button>
-                        </td>
-                      </tr>
-                    `;
-                  }).join('')}
-                </tbody>
-              </table>
-            </td>
-          </tr>
-        </tbody>
-      `;
-    });
-
-    let observedRowsHtml = '';
-
-    observed.forEach((obs, idx) => {
-      const sourceId = obs.match?.sourceId || '';
-      const matchingSource = sources.find((s) => s.id === sourceId);
-      const sourceScope = matchingSource?.scope || '';
-      let badgeClass = 'badge-unmanaged';
-      let badgeText = '◌ Unmanaged · local only';
-      let tooltip = '';
-      
-      if (obs.match?.status === 'identical') {
-        badgeClass = 'badge-success';
-        badgeText = `◌ Unmanaged · identical to ${obs.match.sourceId}`;
-        tooltip = ` title="${this.escapeHtml(obs.match.details || '')}"`;
-      } else if (obs.match?.status === 'different') {
-        badgeClass = 'badge-warning';
-        badgeText = `◌ Unmanaged · differs from ${obs.match.sourceId}`;
-        tooltip = ` title="${this.escapeHtml(obs.match.details || '')}"`;
-      }
-
-      let actionBtn = '';
-      if ((obs.candidates?.length ?? 0) > 0) {
-        actionBtn = `<button class="btn btn-sm btn-primary" onclick="promoteItem(${idx})">Promote</button>`;
-      }
-
-      const key = getIdentityKey(obs);
-      observedRowsHtml += `
-        <tr class="item-row item-row-group" data-kind="${this.escapeHtml(obs.kind)}" data-name="${this.escapeHtml(obs.name.toLowerCase())}" data-assistant="${this.escapeHtml(obs.assistant)}" data-scope="${this.escapeHtml(obs.scope)}" data-membership="unmanaged" data-status="unmanaged" data-source-id="${this.escapeHtml(sourceId)}" data-source-scope="${this.escapeHtml(sourceScope)}" data-key="${this.escapeHtml(key)}" onclick="selectRow(this, ${this.jsStringLiteral(key)})">
-          <td><span class="kind-pill kind-${this.escapeHtml(obs.kind)}">${this.escapeHtml(obs.kind)}</span></td>
-          <td><strong>${this.escapeHtml(obs.name)}</strong></td>
-          <td>${this.escapeHtml(obs.assistant)}</td>
-          <td><span class="scope-pill scope-${this.escapeHtml(obs.scope)}">${this.escapeHtml(getScopeLabel(obs.scope))}</span></td>
-          <td><span class="badge ${badgeClass}"${tooltip}>${this.escapeHtml(badgeText)}</span></td>
-          <td>
-            ${actionBtn}
-          </td>
-        </tr>
-      `;
-    });
-
-    if (!managedRowsHtml) {
-      managedRowsHtml = '<tr><td colspan="4" style="text-align:center; opacity:0.6;">No items found.</td></tr>';
+    const driftByKey = new Map<string, PlaceState | string>();
+    for (const r of reports) {
+      driftByKey.set(getIdentityKey(r.installation), r.status);
     }
-    if (!observedRowsHtml) {
-      observedRowsHtml = '<tr><td colspan="6" style="text-align:center; opacity:0.6;">No items found.</td></tr>';
+    if (!scanning) {
+      for (const m of managed) {
+        const k = getIdentityKey(m);
+        if (!driftByKey.has(k)) {
+          driftByKey.set(k, 'up-to-date');
+        }
+      }
     }
 
-    const rowsHtml = { managedRowsHtml, observedRowsHtml };
+    const tree = buildInstalledTree(managed, observed, { statusByKey: driftByKey });
+    const rowsHtml = this.renderInstalledTree(tree, driftByKey);
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -1753,6 +1785,9 @@ export class DashboardPanel {
     .badge-error { background: rgba(207, 34, 46, 0.2); color: #f85149; }
     .badge-unmanaged { background: rgba(255, 255, 255, 0.1); color: var(--fg); }
     .badge-pending { background: rgba(136, 136, 136, 0.2); color: #888888; }
+    .parent-chips-cell { padding: 6px 10px; }
+    .parent-chip { display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px; }
+    .parent-chip .scope-icon { margin-right: 0 !important; }
     .scan-indicator { font-size: 11px; opacity: 0.8; display: flex; align-items: center; gap: 6px; }
     .spinner { border: 2px solid rgba(136, 136, 136, 0.2); border-top-color: #888; border-radius: 50%; width: 10px; height: 10px; animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -1967,10 +2002,10 @@ export class DashboardPanel {
 
     function toggleFolder(folderId, rowEl) {
       const folderDiv = document.getElementById(folderId);
-      const caret = rowEl.querySelector('.folder-icon');
+      const caret = rowEl ? rowEl.querySelector('.folder-icon') : null;
       if (!folderDiv) return;
       if (folderDiv.style.display === 'none') {
-        folderDiv.style.display = 'block';
+        folderDiv.style.display = '';
         if (caret) caret.style.transform = 'rotate(90deg)';
       } else {
         folderDiv.style.display = 'none';
@@ -2088,7 +2123,16 @@ export class DashboardPanel {
       switchSection('installed');
       const row = Array.from(document.querySelectorAll('#section-installed .item-row[data-key]'))
         .find(r => r.getAttribute('data-key') === key);
-      if (row) selectRow(row, key);
+      if (row) {
+        const subrowsTr = row.closest('tr[id^="subrows-"]');
+        if (subrowsTr && subrowsTr.style.display === 'none') {
+          subrowsTr.style.display = '';
+          const parentRow = subrowsTr.previousElementSibling;
+          const caret = parentRow ? parentRow.querySelector('.folder-icon') : null;
+          if (caret) caret.style.transform = 'rotate(90deg)';
+        }
+        selectRow(row, key);
+      }
     }
 
     function detailPreviewItem() {
@@ -2162,9 +2206,19 @@ export class DashboardPanel {
       vscode.postMessage({ command: 'edit', installation: item });
     }
 
-    function promoteItem(index) {
-      const item = observedData[index];
-      vscode.postMessage({ command: 'promote', observed: item });
+    function promoteItem(keyOrIndex) {
+      let item;
+      if (typeof keyOrIndex === 'number') {
+        item = observedData[keyOrIndex];
+      } else if (typeof keyOrIndex === 'string') {
+        item = observedData.find(o => {
+          const k = o.assistant + ':' + o.scope + ':' + o.kind + ':' + (o.projectPath || '') + ':' + o.name;
+          return k === keyOrIndex;
+        });
+      }
+      if (item) {
+        vscode.postMessage({ command: 'promote', observed: item });
+      }
     }
 
     function promoteAllIdentical() {
@@ -2250,18 +2304,27 @@ export class DashboardPanel {
         let valA, valB;
         if (col === 'worst-status') {
           const severities = {
-            'missing-on-disk': 5,
-            'modified-and-update-available': 4,
-            'update-available': 3,
-            'modified-locally': 2,
-            'up-to-date': 1,
-            'checking…': 0
+            'missing-on-disk': 8,
+            'modified-and-update-available': 7,
+            'update-available': 6,
+            'modified-locally': 5,
+            'different': 4,
+            'local-only': 3,
+            'checking': 2,
+            'checking…': 2,
+            'identical': 1,
+            'up-to-date': 0
           };
           valA = severities[a.getAttribute('data-worst-status') || 'checking…'] || 0;
           valB = severities[b.getAttribute('data-worst-status') || 'checking…'] || 0;
           // Sort descending for worst status by default
           if (valA < valB) return currentSortAsc ? 1 : -1;
           if (valA > valB) return currentSortAsc ? -1 : 1;
+        } else if (col === 'scope' || col === 'scopes') {
+          valA = a.getAttribute('data-scopes') || a.getAttribute('data-scope') || '';
+          valB = b.getAttribute('data-scopes') || b.getAttribute('data-scope') || '';
+          if (valA < valB) return currentSortAsc ? -1 : 1;
+          if (valA > valB) return currentSortAsc ? 1 : -1;
         } else {
           valA = a.getAttribute('data-' + col) || '';
           valB = b.getAttribute('data-' + col) || '';
@@ -2276,7 +2339,7 @@ export class DashboardPanel {
 
     function filterTable() {
       updateBreadcrumb();
-      const q = document.getElementById('searchBox').value.toLowerCase();
+      const q = (document.getElementById('searchBox') ? document.getElementById('searchBox').value : '').toLowerCase();
       
       let visManaged = 0;
       let visUpdates = 0;
@@ -2284,42 +2347,52 @@ export class DashboardPanel {
       let visUnmanaged = 0;
       let visUnmanagedIdentical = 0;
 
-      document.querySelectorAll('.item-row-group').forEach(row => {
-        const kind = row.getAttribute('data-kind');
-        const name = row.getAttribute('data-name');
-        const env = row.getAttribute('data-assistant');
-        const scope = row.getAttribute('data-scope');
-        const mem = row.getAttribute('data-membership');
-        const text = row.innerText.toLowerCase();
-        const rowSourceId = row.getAttribute('data-source-id');
-        const rowSourceScope = row.getAttribute('data-source-scope');
+      const groups = document.querySelectorAll('.matrix-group');
+      groups.forEach(group => {
+        const kind = group.getAttribute('data-kind') || '';
+        const name = (group.getAttribute('data-name') || '').toLowerCase();
+        const text = group.innerText.toLowerCase();
 
         const matchesKind = currentKind === 'all' || kind === currentKind;
-        // For managed matrix groups, we must check if any sub-row matches the env
-        let matchesEnv = currentEnv === 'all' || env === currentEnv;
-        if (mem === 'managed' && currentEnv !== 'all') {
-           const hasEnv = row.querySelector('.sub-row[data-assistant="' + escapeHtmlClient(currentEnv) + '"]');
-           matchesEnv = !!hasEnv;
-        }
-
-        const matchesScope = currentScope === 'all' || scope === currentScope;
-        const matchesMem = currentMembership === 'all' || mem === currentMembership;
         const matchesQuery = !q || text.includes(q) || name.includes(q);
-        const matchesSource = !currentSource || (rowSourceId === currentSource.id && rowSourceScope === currentSource.scope);
 
-        if (matchesKind && matchesEnv && matchesScope && matchesMem && matchesQuery && matchesSource) {
-          row.style.display = '';
-          if (mem === 'managed') {
-            visManaged += row.querySelectorAll('.sub-row').length;
-            const worstStatus = row.getAttribute('data-worst-status');
-            if (worstStatus === 'update-available' || worstStatus === 'modified-and-update-available') visUpdates++;
-            if (worstStatus === 'modified-locally' || worstStatus === 'modified-and-update-available') visModified++;
+        let matchingChildrenCount = 0;
+
+        group.querySelectorAll('.sub-row').forEach(child => {
+          const childEnv = child.getAttribute('data-assistant') || '';
+          const childScope = child.getAttribute('data-scope') || '';
+          const childMem = child.getAttribute('data-membership') || '';
+          const childStatus = child.getAttribute('data-status') || '';
+          const childSourceId = child.getAttribute('data-source-id') || '';
+          const childSourceScope = child.getAttribute('data-source-scope') || '';
+
+          const matchesEnv = currentEnv === 'all' || childEnv === currentEnv;
+          const matchesScope = currentScope === 'all' || childScope === currentScope;
+          const matchesMem = currentMembership === 'all' || childMem === currentMembership;
+          const matchesSource = !currentSource || (childSourceId === currentSource.id && (!currentSource.scope || childSourceScope === currentSource.scope));
+
+          if (matchesEnv && matchesScope && matchesMem && matchesSource) {
+            child.style.display = '';
+            if (matchesKind && matchesQuery) {
+              matchingChildrenCount++;
+              if (childMem === 'managed') {
+                visManaged++;
+                if (childStatus === 'update-available' || childStatus === 'modified-and-update-available') visUpdates++;
+                if (childStatus === 'modified-locally' || childStatus === 'modified-and-update-available') visModified++;
+              } else {
+                visUnmanaged++;
+                if (childStatus === 'identical') visUnmanagedIdentical++;
+              }
+            }
           } else {
-            visUnmanaged++;
-            if (text.includes('identical to')) visUnmanagedIdentical++;
+            child.style.display = 'none';
           }
+        });
+
+        if (matchesKind && matchesQuery && matchingChildrenCount > 0) {
+          group.style.display = '';
         } else {
-          row.style.display = 'none';
+          group.style.display = 'none';
         }
       });
       
@@ -2343,7 +2416,7 @@ export class DashboardPanel {
       const overviewUnmanStat = document.getElementById('overview-stat-unmanaged');
       if (overviewUnmanStat) overviewUnmanStat.textContent = visUnmanaged;
       const unmanLbl = document.getElementById('stat-unmanaged-lbl');
-      if (unmanLbl) unmanLbl.textContent = \`Unmanaged Discovered (\${visUnmanagedIdentical} identical, \${visUnmanaged - visUnmanagedIdentical} custom)\`;
+      if (unmanLbl) unmanLbl.textContent = 'Unmanaged Discovered (' + visUnmanagedIdentical + ' identical, ' + (visUnmanaged - visUnmanagedIdentical) + ' custom)';
 
       const updateAllBtn = document.getElementById('updateAllBtn');
       if (updateAllBtn) {
@@ -2366,13 +2439,7 @@ export class DashboardPanel {
         if (rows) {
           const tbody = document.getElementById('unifiedTable');
           if (tbody) {
-            tbody.innerHTML = typeof rows === 'string'
-              ? rows
-              : (rows.managedRowsHtml ?? '');
-          }
-          const observedTbody = document.getElementById('observedTableBody');
-          if (observedTbody && typeof rows === 'object') {
-            observedTbody.innerHTML = rows.observedRowsHtml ?? '';
+            tbody.innerHTML = typeof rows === 'string' ? rows : '';
           }
         }
         const manStat = document.getElementById('stat-managed');
@@ -2380,7 +2447,7 @@ export class DashboardPanel {
         const unmanStat = document.getElementById('stat-unmanaged');
         if (unmanStat) unmanStat.textContent = msg.totalUnmanaged;
         const unmanLbl = document.getElementById('stat-unmanaged-lbl');
-        if (unmanLbl) unmanLbl.textContent = \`Unmanaged Discovered (\${msg.identicalCount} identical, \${msg.totalUnmanaged - msg.identicalCount} custom)\`;
+        if (unmanLbl) unmanLbl.textContent = 'Unmanaged Discovered (' + msg.identicalCount + ' identical, ' + (msg.totalUnmanaged - msg.identicalCount) + ' custom)';
         
         // When phase A finishes, these are not computed yet so they might reset to 0 or previous values.
         // It's safer to not touch updatesAvailable/modifiedLocally in Phase A.
@@ -2395,7 +2462,7 @@ export class DashboardPanel {
 
         const filterGroup = document.querySelector('.filters-bar .filter-group');
         if (filterGroup) {
-          filterGroup.innerHTML = \`<button class="filter-pill env-pill \${currentEnv === 'all' ? 'active' : ''}" data-env="all" onclick="setEnvFilter('all')">All Env</button>\\n\` + msg.environmentPills;
+          filterGroup.innerHTML = '<button class="filter-pill env-pill ' + (currentEnv === 'all' ? 'active' : '') + '" data-env="all" onclick="setEnvFilter(\\'all\\')">All Env</button>\\n' + msg.environmentPills;
           if (currentEnv !== 'all') {
             const pill = filterGroup.querySelector('.env-pill[data-env="' + currentEnv + '"]');
             if (pill) pill.classList.add('active');
@@ -2436,35 +2503,74 @@ export class DashboardPanel {
           else if (msg.status === 'update-available') { badgeClass = 'badge-info'; badgeText = '● Managed · update available'; }
           else if (msg.status === 'modified-locally' || msg.status === 'modified-and-update-available') { badgeClass = 'badge-warning'; badgeText = '● Managed · modified locally'; }
           else if (msg.status === 'missing-on-disk') { badgeClass = 'badge-error'; badgeText = '● Managed · missing on disk'; }
+          else if (msg.status === 'checking' || msg.status === 'checking…') { badgeClass = 'badge-pending'; badgeText = '● Managed · checking…'; }
           
           cell.innerHTML = '<span class="badge ' + badgeClass + '">' + badgeText + '</span>';
 
-          const diffBtn = row.querySelector('.diff-btn');
+          const diffBtn = row ? row.querySelector('.diff-btn') : null;
           if (diffBtn && (msg.status === 'modified-locally' || msg.status === 'modified-and-update-available')) {
             diffBtn.style.display = 'inline-block';
           }
-          const updateBtn = row.querySelector('.update-btn');
+          const updateBtn = row ? row.querySelector('.update-btn') : null;
           if (updateBtn && (msg.status === 'update-available' || msg.status === 'modified-and-update-available')) {
             updateBtn.style.display = 'inline-block';
           }
 
-          const parentBadge = document.querySelector('.parent-badge[data-parent-key="' + msg.key + '"]');
-          if (parentBadge) {
-            parentBadge.className = 'badge ' + badgeClass + ' parent-badge';
-            parentBadge.setAttribute('title', msg.status);
-            const groupBody = parentBadge.closest('.matrix-group');
+          const parentChip = document.querySelector('.parent-chip[data-parent-key="' + msg.key + '"]') || document.querySelector('.parent-badge[data-parent-key="' + msg.key + '"]');
+          if (parentChip) {
+            parentChip.className = 'badge ' + badgeClass + ' parent-chip parent-badge';
+            const oldTitle = parentChip.getAttribute('title') || '';
+            const parts = oldTitle.split(' · ');
+            if (parts.length >= 2) {
+              parentChip.setAttribute('title', parts[0] + ' · ' + parts[1] + ' · ' + msg.status);
+            } else {
+              parentChip.setAttribute('title', msg.status);
+            }
+
+            const groupBody = parentChip.closest('.matrix-group');
             if (groupBody) {
-              const currentWorst = groupBody.getAttribute('data-worst-status');
               const severities = {
-                'missing-on-disk': 5,
-                'modified-and-update-available': 4,
-                'update-available': 3,
-                'modified-locally': 2,
-                'up-to-date': 1,
-                'checking…': 0
+                'missing-on-disk': 8,
+                'modified-and-update-available': 7,
+                'update-available': 6,
+                'modified-locally': 5,
+                'different': 4,
+                'local-only': 3,
+                'checking': 2,
+                'checking…': 2,
+                'identical': 1,
+                'up-to-date': 0
               };
-              if (severities[msg.status] > (severities[currentWorst] || 0)) {
-                groupBody.setAttribute('data-worst-status', msg.status);
+
+              let worstStatus = 'up-to-date';
+              let maxSev = -1;
+              groupBody.querySelectorAll('.sub-row').forEach(subRow => {
+                const s = subRow.getAttribute('data-status') || 'checking…';
+                const sev = severities[s] !== undefined ? severities[s] : -1;
+                if (sev > maxSev) {
+                  maxSev = sev;
+                  worstStatus = s;
+                }
+              });
+
+              groupBody.setAttribute('data-worst-status', worstStatus);
+
+              const worstBadge = groupBody.querySelector('.worst-badge');
+              if (worstBadge) {
+                let wbClass = 'badge-pending';
+                let wbText = worstStatus;
+                if (worstStatus === 'up-to-date') { wbClass = 'badge-success'; wbText = 'Up to date'; }
+                else if (worstStatus === 'update-available') { wbClass = 'badge-info'; wbText = 'Update available'; }
+                else if (worstStatus === 'modified-locally') { wbClass = 'badge-warning'; wbText = 'Modified locally'; }
+                else if (worstStatus === 'modified-and-update-available') { wbClass = 'badge-warning'; wbText = 'Modified & update available'; }
+                else if (worstStatus === 'missing-on-disk') { wbClass = 'badge-error'; wbText = 'Missing on disk'; }
+                else if (worstStatus === 'different') { wbClass = 'badge-warning'; wbText = 'Differs from source'; }
+                else if (worstStatus === 'identical') { wbClass = 'badge-success'; wbText = 'Identical to source'; }
+                else if (worstStatus === 'local-only') { wbClass = 'badge-unmanaged'; wbText = 'Local only'; }
+                else if (worstStatus === 'checking' || worstStatus === 'checking…') { wbClass = 'badge-pending'; wbText = 'checking…'; }
+
+                worstBadge.className = 'badge ' + wbClass + ' worst-badge';
+                worstBadge.textContent = wbText;
               }
             }
           }
