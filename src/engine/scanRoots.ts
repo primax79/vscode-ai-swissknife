@@ -172,7 +172,7 @@ export async function findWorkspaces(
   };
 
   const visited = new Set<string>();
-  const queue: Array<{ dir: string; depth: number }> = [];
+  const queue: Array<{ dir: string; root: string; depth: number }> = [];
 
   for (const rawRoot of roots) {
     const root = path.resolve(rawRoot);
@@ -192,10 +192,6 @@ export async function findWorkspaces(
       continue;
     }
 
-    if (isIgnored(root, effectiveIgnore)) {
-      continue;
-    }
-
     try {
       if (await isWorkspace(root)) {
         workspaces.push(root);
@@ -208,11 +204,11 @@ export async function findWorkspaces(
       }
     }
 
-    queue.push({ dir: root, depth: 0 });
+    queue.push({ dir: root, root, depth: 0 });
   }
 
   while (queue.length > 0) {
-    const { dir, depth } = queue.shift()!;
+    const { dir, root, depth } = queue.shift()!;
 
     let entries: fs.Dirent[];
     try {
@@ -234,7 +230,8 @@ export async function findWorkspaces(
       if (visited.has(childPath)) continue;
       visited.add(childPath);
 
-      if (isIgnored(childPath, effectiveIgnore)) {
+      const relPath = path.relative(root, childPath);
+      if (isIgnored(relPath, effectiveIgnore)) {
         continue;
       }
 
@@ -253,7 +250,7 @@ export async function findWorkspaces(
       }
 
       if (childDepth < maxDepth) {
-        queue.push({ dir: childPath, depth: childDepth });
+        queue.push({ dir: childPath, root, depth: childDepth });
       }
     }
   }
