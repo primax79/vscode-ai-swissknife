@@ -10,7 +10,7 @@
 | 48.4 Doctor checks (Kilo-skip rules, name = folder, malformed metadata, duplicates across scopes) | 7 | M | builds on study B4 and 44.4 |
 | 48.5 `replaces: [...]` on plugins, applied by update | 6 | M | **open decision**: where the field lives and who else must understand it |
 | 48.6 Contribute back a local copy into a source checkout / mark intentionally local | 8 | S/M | natural for `local-folder` sources; never edit our git clone cache |
-| 48.7 CLI sources: fetch all, N commits behind, pin | 10 | S | after 46.4 |
+| [48.7](48.7-revision-gap.md) CLI sources: fetch all, N commits behind, pin | 10 | S | after 46.4 |
 | 48.8 `redistribute <path|item>` **v1: only items installed from a local folder** (owner clarification 2026-10-08); the broader matching (`--roots`, identity-matched copies, `ahead`) is the later extension | owner request, see `specs/dev-deploy-study.md` | S for v1 (engine = 47.1 with the local-folder source), M for the extension (48.1 roots + 48.3 classification) | v1 does not wait for 48.1/48.3: it can ship right after 47.1 and 46.4 |
 | (not scheduled) recorded per-assistant transforms | 9 | L | needs a design |
 | (out of scope) skills-repo bump/release helper | 11 | - | belongs to the toolkit scripts / T007 |
