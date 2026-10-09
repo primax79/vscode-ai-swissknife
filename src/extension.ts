@@ -18,6 +18,7 @@ import { getWorkspaceRoot } from './ui/workspacePicker';
 import { previewProvider, PreviewProvider } from './ui/previewProvider';
 import { readonlyFileContentProvider, ReadonlyFileContentProvider } from './ui/artifactFileTree';
 import { handleCreateArtifact } from './ui/createArtifact';
+import { handleRestoreFromTrash, handleEmptyTrash } from './ui/trash';
 
 import { ALL_ADAPTERS, getEnabledAdapters } from './adapters/registry';
 import { handleInstallRecommended } from './ui/recommendations';
@@ -407,6 +408,12 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('aiSwissknife.refreshInstalled', () => {
       installedProvider.refresh();
       updateStatusBar().catch(() => {});
+    }),
+    vscode.commands.registerCommand('aiSwissknife.restoreFromTrash', async () => {
+      await handleRestoreFromTrash(installedProvider);
+    }),
+    vscode.commands.registerCommand('aiSwissknife.emptyTrash', async () => {
+      await handleEmptyTrash(installedProvider);
     })
   );
 
