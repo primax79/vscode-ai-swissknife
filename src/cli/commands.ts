@@ -24,6 +24,15 @@ import { readSkill } from '../adapters/codec';
 import type { CanonicalSkill } from '../adapters/types';
 import { CliError } from './output';
 import { createUnifiedDiff } from './diff';
+import { refuseCodeKinds } from './gates';
+export { requireWrite, refuseCodeKinds } from './gates';
+import {
+  planRedistribute,
+  applyRedistribute,
+  sanitizeTarget,
+  type RedistributePlan,
+  type RedistributeResult,
+} from '../engine/redistribute';
 import type {
   GlobalCliOptions,
   CliSource,
@@ -655,3 +664,106 @@ export async function runPlanInstall(
 
   return planResult.summary;
 }
+
+export async function runRedistribute(
+  opts: GlobalCliOptions & {
+    target: string;
+    item?: string | string[];
+    scope?: string;
+    assistant?: string;
+    force?: boolean;
+    installMissing?: boolean;
+    write?: boolean;
+    allowCodeKinds?: boolean;
+  }
+): Promise<RedistributePlan | RedistributeResult> {
+  const { homeRoot, workspaceRoot } = resolveRoots(opts);
+
+  if (!opts.target) {
+    throw new CliError('INVALID_ARGUMENT', 'Target argument is required');
+  }
+
+  const filterScope = validateScope(opts.scope);
+  const scopes: Scope[] | undefined = filterScope ? [filterScope] : undefined;
+
+  let assistantFilter: AssistantId[] | undefined;
+  if (opts.assistant) {
+    assistantFilter = parseAssistantFilter(opts.assistant);
+  } else if (opts.assistants) {
+    assistantFilter = parseAssistantFilter(opts.assistants);
+  }
+
+  let items: string[] | undefined;
+  if (Array.isArray(opts.item)) {
+    items = opts.item
+      .flatMap((s: string) => s.split(','))
+      .map((s: string) => s.trim())
+      .filter(Boolean);
+  } else if (typeof opts.item === 'string') {
+    items = opts.item
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+
+  const allInstallations: ManagedInstallation[] = [];
+  const allSources: Source[] = [];
+
+  // Global state & manifest
+  try {
+    const gState = await readState('global', undefined, homeRoot);
+    allInstallations.push(...gState.installations);
+    const gManifest = await readManifest('global', undefined, homeRoot);
+    allSources.push(
+      ...gManifest.sources.map((d) => fromDesiredSource(d, undefined, homeRoot))
+    );
+  } catch {
+    // ignore
+  }
+
+  // Workspace state & manifest
+  if (workspaceRoot) {
+    try {
+      const pState = await readState('project', workspaceRoot, homeRoot);
+      allInstallations.push(...pState.installations);
+      const pManifest = await readManifest('project', workspaceRoot, homeRoot);
+      allSources.push(
+        ...pManifest.sources.map((d) =>
+          fromDesiredSource(d, workspaceRoot, homeRoot)
+        )
+      );
+    } catch {
+      // ignore
+    }
+  }
+
+  const plan = await planRedistribute({
+    target: opts.target,
+    installations: allInstallations,
+    sources: allSources,
+    assistants: assistantFilter,
+    scopes,
+    items,
+    force: Boolean(opts.force),
+    installMissing: Boolean(opts.installMissing),
+    homeRoot,
+    projectRoot: workspaceRoot,
+  });
+
+  // Gate: refuse executable/code kinds unless --allow-code-kinds is given
+  refuseCodeKinds(plan.targets.map((t) => t.kind), opts.allowCodeKinds);
+
+  if (!opts.write) {
+    return {
+      mode: 'plan',
+      source: plan.source,
+      targets: plan.targets.map(sanitizeTarget),
+    };
+  }
+
+  return await applyRedistribute(plan, {
+    homeRoot,
+    projectRoot: workspaceRoot,
+  });
+}
+

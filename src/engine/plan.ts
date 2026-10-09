@@ -115,7 +115,8 @@ export async function resolveAndTranslate(
 }
 
 export async function planInstall(params: PlanInstallParams): Promise<PreparedInstall> {
-  const { source, pkg, artifact, targetAdapter, targetScope, projectRoot, resolverOpts } = params;
+  const { source, pkg, artifact, targetAdapter, targetScope, resolverOpts } = params;
+  const projectRoot = targetScope === 'project' ? params.projectRoot : undefined;
 
   if (
     artifact.kind !== 'skill' &&

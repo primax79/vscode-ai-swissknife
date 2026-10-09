@@ -181,7 +181,7 @@ export async function planUpdate(
     artifact: fakeArtifact,
     targetAdapter,
     targetScope: inst.scope,
-    projectRoot: inst.projectPath ?? options?.projectRoot,
+    projectRoot: inst.scope === 'project' ? (inst.projectPath ?? options?.projectRoot) : undefined,
     resolverOpts: options?.resolverOpts,
   });
 }
@@ -488,7 +488,7 @@ async function copyDirectory(src: string, dest: string): Promise<void> {
  * Copies the current installed files to the trash folder (_deleted/<kind>/<name>-<timestamp>/)
  * preserving the exact pre-update version for recoverability.
  */
-async function backupItemToTrash(
+export async function backupItemToTrash(
   installation: ManagedInstallation,
   homeRoot?: string
 ): Promise<string> {

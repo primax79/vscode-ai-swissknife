@@ -5,6 +5,7 @@ import {
   runUpdates,
   runItem,
   runPlanInstall,
+  runRedistribute,
 } from './commands';
 import type {
   CliCommandDefinition,
@@ -361,6 +362,130 @@ export const COMMAND_DEFINITIONS: CliCommandDefinition[] = [
     run: async (opts, globalOpts) => {
       const assistants = opts.assistants || globalOpts.assistants;
       return runPlanInstall({ ...opts, assistants } as any);
+    },
+  },
+  {
+    name: 'redistribute',
+    description:
+      'Push an edited skill or artifact from a local folder to its installed copies',
+    arguments: [
+      {
+        name: 'target',
+        required: true,
+        description: 'Folder path or installed item name/key',
+      },
+    ],
+    options: [
+      {
+        flags: '--item <name...>',
+        description: 'Specific artifact name(s) to redistribute',
+      },
+      {
+        flags: '--assistants <ids>',
+        description:
+          'Comma-separated assistant IDs to target (e.g. claude-code,kilo-code)',
+      },
+      {
+        flags: '--scope <scope>',
+        description: 'Target scope: global or project (Workspace)',
+      },
+      {
+        flags: '--force',
+        description:
+          'Overwrite modified-locally copies (previous version saved to trash first)',
+      },
+      {
+        flags: '--install-missing',
+        description:
+          'Install into assistant x scope combinations that do not have a copy',
+      },
+      {
+        flags: '--write',
+        description:
+          'Apply changes to disk (without this flag, only prints the plan)',
+      },
+      {
+        flags: '--allow-code-kinds',
+        description:
+          'Allow redistributing executable/code kinds (hook, mcp-server)',
+      },
+    ],
+    examples: [
+      'ai-swissknife redistribute ./my-skill',
+      'ai-swissknife redistribute ./my-skill --write',
+      'ai-swissknife redistribute claude-code:global:skill:my-skill --force --write',
+      'ai-swissknife redistribute ./skills --item my-skill --assistants claude-code,kilo-code --install-missing --write',
+    ],
+    outputShape: {
+      type: 'object',
+      description: 'Redistribution plan or execution result',
+      properties: {
+        mode: { type: 'string', enum: ['plan', 'applied'] },
+        targets: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              item: { type: 'string', description: 'Item name' },
+              kind: {
+                type: 'string',
+                enum: ['skill', 'agent', 'command', 'mcp-server', 'hook', 'rule'],
+              },
+              assistant: {
+                type: 'string',
+                enum: [
+                  'claude-code',
+                  'kilo-code',
+                  'github-copilot',
+                  'codex-cli',
+                  'gemini-cli',
+                ],
+              },
+              scope: { type: 'string', enum: ['global', 'project'] },
+              path: { type: 'string', description: 'Filesystem path' },
+              classification: {
+                type: 'string',
+                enum: [
+                  'identical',
+                  'stale',
+                  'modified-locally',
+                  'missing-on-disk',
+                  'orphan',
+                  'missing',
+                ],
+              },
+              action: {
+                type: 'string',
+                enum: [
+                  'update',
+                  'install',
+                  'skip',
+                  'updated',
+                  'installed',
+                  'skipped',
+                  'failed',
+                ],
+              },
+              oldHash: { type: 'string', optional: true },
+              newHash: { type: 'string', optional: true },
+              changedFiles: {
+                type: 'object',
+                properties: {
+                  added: { type: 'array', items: { type: 'string' } },
+                  changed: { type: 'array', items: { type: 'string' } },
+                  removed: { type: 'array', items: { type: 'string' } },
+                },
+              },
+              backupPath: { type: 'string', optional: true },
+              reason: { type: 'string', optional: true },
+            },
+          },
+        },
+      },
+    },
+    run: async (opts, globalOpts) => {
+      const assistants = opts.assistants || globalOpts.assistants;
+      return runRedistribute({ ...globalOpts, ...opts, assistants } as any);
     },
   },
   {

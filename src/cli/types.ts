@@ -6,7 +6,10 @@ export type ErrorCode =
   | 'INVALID_ARGUMENT'
   | 'NOT_FOUND'
   | 'SOURCE_RESOLUTION_FAILED'
-  | 'INTERNAL';
+  | 'INTERNAL'
+  | 'WRITE_NOT_ENABLED'
+  | 'KIND_NOT_ALLOWED'
+  | 'NOT_A_LOCAL_FOLDER_SOURCE';
 
 export interface CliErrorResponse {
   error: {
