@@ -115,6 +115,7 @@ export type DriftStatus =
 export interface DriftReport {
   installation: ManagedInstallation;
   status: DriftStatus;
+  hasLocalPatch?: boolean;
   diskHash?: string;
   sourceHash?: string;
   details?: string;

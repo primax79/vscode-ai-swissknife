@@ -646,6 +646,8 @@ export class DashboardPanel {
         item: inst,
         membership: 'managed',
         status: report ? report.status : 'up-to-date',
+        hasLocalPatch: report?.hasLocalPatch,
+        details: report?.details,
         assistantIconUri
       });
       return;
@@ -809,7 +811,8 @@ export class DashboardPanel {
       this._panel.webview.postMessage({
         command: 'driftResult',
         key: getIdentityKey(inst),
-        status: report.status
+        status: report.status,
+        hasLocalPatch: report.hasLocalPatch
       });
     }
 
@@ -2836,7 +2839,10 @@ export class DashboardPanel {
           let badgeText = '● Managed · error';
           if (msg.status === 'up-to-date') { badgeClass = 'badge-success'; badgeText = '● Managed · up to date'; }
           else if (msg.status === 'update-available') { badgeClass = 'badge-info'; badgeText = '● Managed · update available'; }
-          else if (msg.status === 'modified-locally' || msg.status === 'modified-and-update-available') { badgeClass = 'badge-warning'; badgeText = '● Managed · modified locally'; }
+          else if (msg.status === 'modified-locally' || msg.status === 'modified-and-update-available') {
+            badgeClass = msg.hasLocalPatch ? 'badge-info' : 'badge-warning';
+            badgeText = msg.hasLocalPatch ? '● Managed · adapted (local.patch)' : '● Managed · modified locally';
+          }
           else if (msg.status === 'missing-on-disk') { badgeClass = 'badge-error'; badgeText = '● Managed · missing on disk'; }
           else if (msg.status === 'checking' || msg.status === 'checking…') { badgeClass = 'badge-pending'; badgeText = '● Managed · checking…'; }
           

@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as path from 'path';
 import type { ManagedInstallation, Source } from '../domain/types';
 import type {
   CanonicalSkill,
@@ -183,12 +184,20 @@ export async function analyzeLocalDrift(
     diskHash = canonicalRuleHash(rule);
   }
 
+  const hasLocalPatch =
+    installation.kind === 'skill' &&
+    Boolean(installation.path) &&
+    fs.existsSync(path.join(installation.path, 'local.patch'));
+
   if (installation.contentHash && diskHash !== installation.contentHash) {
     return {
       installation,
       status: 'modified-locally',
+      hasLocalPatch,
       diskHash,
-      details: 'Local content differs from installed version',
+      details: hasLocalPatch
+        ? 'Local adaptations applied (local.patch)'
+        : 'Local content differs from installed version',
     };
   }
 
@@ -358,9 +367,12 @@ export async function checkForUpstreamUpdate(
       return {
         installation,
         status: 'modified-and-update-available',
+        hasLocalPatch: localReport.hasLocalPatch,
         diskHash: localReport.diskHash,
         sourceHash,
-        details: 'Local files were modified and upstream source has a newer version',
+        details: localReport.hasLocalPatch
+          ? 'Upstream source has a newer version and local adaptation patch is applied'
+          : 'Local files were modified and upstream source has a newer version',
       };
     }
     return {
