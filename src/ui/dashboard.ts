@@ -900,7 +900,7 @@ export class DashboardPanel {
           <span class="stat-num" id="overview-stat-managed">${totalInstalled}</span>
           <span class="stat-label">Managed Installations</span>
         </div>
-        <div class="stat-chip stat-info" style="cursor: pointer;" onclick="triggerUpdateAll()">
+        <div class="stat-chip stat-info" style="cursor: pointer;" onclick="switchSection('installed'); filterByMetric('updates');">
           <span class="stat-num" id="overview-stat-updates">${updatesAvailable}</span>
           <span class="stat-label">Updates Available</span>
         </div>
@@ -1463,21 +1463,43 @@ export class DashboardPanel {
   ): string {
     return `
   <div class="stats-ribbon">
-    <div class="stat-chip">
-      <span class="stat-num" id="stat-managed">${totalInstalled}</span>
-      <span class="stat-label">Managed Installations</span>
+    <div class="stat-card" id="card-metric-managed">
+      <div class="stat-header">
+        <span class="stat-num" id="stat-managed">${totalInstalled}</span>
+        <span class="stat-label">Managed Installations</span>
+      </div>
+      <div class="stat-actions">
+        <button class="btn btn-sm btn-secondary" title="Filter: Managed only" onclick="filterByMetric('managed')">🔍 Filter</button>
+      </div>
     </div>
-    <div class="stat-chip stat-info" style="cursor: pointer;" onclick="triggerUpdateAll()">
-      <span class="stat-num" id="stat-updates-available">${updatesAvailable}</span>
-      <span class="stat-label">Updates Available</span>
+    <div class="stat-card stat-info" id="card-metric-updates">
+      <div class="stat-header">
+        <span class="stat-num" id="stat-updates-available">${updatesAvailable}</span>
+        <span class="stat-label">Updates Available</span>
+      </div>
+      <div class="stat-actions">
+        <button class="btn btn-sm btn-secondary" title="Filter: Updates Available" onclick="filterByMetric('updates')">🔍 Filter</button>
+        <button class="btn btn-sm btn-primary" id="metricUpdateBtn" title="Update all available items" ${updatesAvailable === 0 ? 'disabled' : ''} onclick="triggerUpdateAll()">⟳ Update All</button>
+      </div>
     </div>
-    <div class="stat-chip stat-warning">
-      <span class="stat-num" id="stat-modified-locally">${modifiedLocally}</span>
-      <span class="stat-label">Modified Locally</span>
+    <div class="stat-card stat-warning" id="card-metric-modified">
+      <div class="stat-header">
+        <span class="stat-num" id="stat-modified-locally">${modifiedLocally}</span>
+        <span class="stat-label">Modified Locally</span>
+      </div>
+      <div class="stat-actions">
+        <button class="btn btn-sm btn-secondary" title="Filter: Modified Locally" onclick="filterByMetric('modified')">🔍 Filter</button>
+      </div>
     </div>
-    <div class="stat-chip stat-unmanaged">
-      <span class="stat-num" id="stat-unmanaged">${totalUnmanaged}</span>
-      <span class="stat-label" id="stat-unmanaged-lbl">Unmanaged Discovered (${identicalCount} identical, ${totalUnmanaged - identicalCount} custom)</span>
+    <div class="stat-card stat-unmanaged" id="card-metric-unmanaged">
+      <div class="stat-header">
+        <span class="stat-num" id="stat-unmanaged">${totalUnmanaged}</span>
+        <span class="stat-label" id="stat-unmanaged-lbl">Unmanaged (${identicalCount} identical, ${totalUnmanaged - identicalCount} custom)</span>
+      </div>
+      <div class="stat-actions">
+        <button class="btn btn-sm btn-secondary" title="Filter: Unmanaged only" onclick="filterByMetric('unmanaged')">🔍 Filter</button>
+        <span id="metric-promote-container">${identicalCount > 0 ? `<button class="btn btn-sm btn-primary" title="Promote ${identicalCount} identical item(s)" onclick="promoteAllIdentical()">⇧ Promote</button>` : ''}</span>
+      </div>
     </div>
   </div>
   
@@ -1684,8 +1706,33 @@ export class DashboardPanel {
     .stats-ribbon {
       display: flex;
       flex-wrap: wrap;
-      gap: 10px;
+      gap: 12px;
       margin-bottom: 16px;
+    }
+    .stat-card {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 12px;
+      min-height: 38px;
+    }
+    .stat-card.active-filter {
+      border-color: #58a6ff;
+      background: rgba(88, 166, 255, 0.08);
+    }
+    .stat-header {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .stat-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
     }
     .stat-chip {
       display: inline-flex;
@@ -2436,11 +2483,45 @@ export class DashboardPanel {
       filterTable();
     }
 
+    let currentStatusFilter = 'all';
+
+    function filterByMetric(metric) {
+      if (metric === 'managed') {
+        const next = currentMembership === 'managed' ? 'all' : 'managed';
+        setMembershipFilter(next);
+      } else if (metric === 'unmanaged') {
+        const next = currentMembership === 'unmanaged' ? 'all' : 'unmanaged';
+        setMembershipFilter(next);
+      } else if (metric === 'updates') {
+        currentStatusFilter = currentStatusFilter === 'updates' ? 'all' : 'updates';
+        const card = document.getElementById('card-metric-updates');
+        if (card) card.classList.toggle('active-filter', currentStatusFilter === 'updates');
+        const modCard = document.getElementById('card-metric-modified');
+        if (modCard) modCard.classList.remove('active-filter');
+        filterTable();
+      } else if (metric === 'modified') {
+        currentStatusFilter = currentStatusFilter === 'modified' ? 'all' : 'modified';
+        const card = document.getElementById('card-metric-modified');
+        if (card) card.classList.toggle('active-filter', currentStatusFilter === 'modified');
+        const upCard = document.getElementById('card-metric-updates');
+        if (upCard) upCard.classList.remove('active-filter');
+        filterTable();
+      }
+    }
+
     function removeChip(type) {
       if (type === 'env') { setEnvFilter('all'); }
       if (type === 'scope') { setScopeFilter('all'); }
       if (type === 'membership') { setMembershipFilter('all'); }
       if (type === 'kind') { setKindFilter('all', null); }
+      if (type === 'status') {
+        currentStatusFilter = 'all';
+        const card = document.getElementById('card-metric-updates');
+        if (card) card.classList.remove('active-filter');
+        const modCard = document.getElementById('card-metric-modified');
+        if (modCard) modCard.classList.remove('active-filter');
+        filterTable();
+      }
       if (type === 'source') {
         currentSource = null;
         document.querySelectorAll('.source-pill').forEach(b => {
@@ -2477,6 +2558,10 @@ export class DashboardPanel {
     function updateBreadcrumb() {
       const chipsContainer = document.getElementById('breadcrumb-chips');
       const chips = [];
+      if (currentStatusFilter && currentStatusFilter !== 'all') {
+        const lbl = currentStatusFilter === 'updates' ? 'Updates Available' : 'Modified Locally';
+        chips.push('<span class="chip">Status: ' + escapeHtmlClient(lbl) + ' <span class="chip-close" onclick="removeChip(\\'status\\')">✕</span></span>');
+      }
       if (currentSource) {
         const label = currentSource.id === '__local__' ? 'Local only' : currentSource.id;
         chips.push('<span class="chip">Source: ' + escapeHtmlClient(label) + ' <span class="chip-close" onclick="removeChip(\\'source\\')">✕</span></span>');
@@ -2593,7 +2678,14 @@ export class DashboardPanel {
             }
           }
 
-          if (matchesEnv && matchesScope && matchesMem && matchesSource) {
+          let matchesStatus = true;
+          if (currentStatusFilter === 'updates') {
+            matchesStatus = childStatus === 'update-available' || childStatus === 'modified-and-update-available';
+          } else if (currentStatusFilter === 'modified') {
+            matchesStatus = childStatus === 'modified-locally' || childStatus === 'modified-and-update-available';
+          }
+
+          if (matchesEnv && matchesScope && matchesMem && matchesSource && matchesStatus) {
             child.style.display = '';
             if (matchesKind && matchesQuery) {
               matchingChildrenCount++;
