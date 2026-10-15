@@ -414,6 +414,28 @@ export function activate(context: vscode.ExtensionContext) {
     }),
     vscode.commands.registerCommand('aiSwissknife.emptyTrash', async () => {
       await handleEmptyTrash(installedProvider);
+    }),
+    vscode.commands.registerCommand('aiSwissknife.pruneMissing', async () => {
+      const { pruneMissingInstallations } = await import('./engine/prune');
+      const { getWorkspaceRoot } = await import('./ui/workspacePicker');
+      const projectRoot = await getWorkspaceRoot();
+
+      const gRes = await pruneMissingInstallations('global');
+      let pCount = gRes.pruned.length;
+      if (projectRoot) {
+        const pRes = await pruneMissingInstallations('project', projectRoot);
+        pCount += pRes.pruned.length;
+      }
+
+      if (pCount > 0) {
+        vscode.window.showInformationMessage(
+          `Pruned ${pCount} missing installation record(s) from registry.`
+        );
+        installedProvider.refresh();
+        refreshDashboardState();
+      } else {
+        vscode.window.showInformationMessage('No missing installation records found in registry.');
+      }
     })
   );
 

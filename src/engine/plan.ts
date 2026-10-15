@@ -767,6 +767,17 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
     const walk = async (currentDir: string, relativeRoot: string): Promise<boolean> => {
       const entries = await fs.promises.readdir(currentDir, { withFileTypes: true });
       for (const entry of entries) {
+        if (
+          entry.name === '.git' ||
+          entry.name === 'node_modules' ||
+          entry.name === 'index.json' ||
+          entry.name === 'local.patch' ||
+          entry.name.endsWith('.patch') ||
+          entry.name === '.DS_Store' ||
+          entry.name === 'Thumbs.db'
+        ) {
+          continue;
+        }
         const fullPath = path.join(currentDir, entry.name);
         const relPath = relativeRoot === '' ? entry.name : path.posix.join(relativeRoot, entry.name);
 

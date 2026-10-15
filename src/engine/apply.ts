@@ -32,10 +32,18 @@ function sha256(data: Uint8Array | string): string {
   return crypto.createHash('sha256').update(data).digest('hex');
 }
 
+export interface ApplyInstallOptions {
+  homeRoot?: string;
+  overwrite?: boolean;
+}
+
 export async function applyInstall(
   prepared: PreparedInstall,
-  homeRoot?: string
+  homeRootOrOptions?: string | ApplyInstallOptions
 ): Promise<ApplyOutcome> {
+  const homeRoot = typeof homeRootOrOptions === 'string' ? homeRootOrOptions : homeRootOrOptions?.homeRoot;
+  const isOverwrite = typeof homeRootOrOptions === 'object' && Boolean(homeRootOrOptions?.overwrite);
+
   // 1. Pre-flight checks before any mutation
   if (!prepared.supported) {
     return {
@@ -966,9 +974,24 @@ export async function applyInstall(
     };
   }
 
+  const isMetadata = (filePath: string) => {
+    const base = path.basename(filePath);
+    return (
+      base === 'index.json' ||
+      base === 'local.patch' ||
+      base.endsWith('.patch') ||
+      base === '.DS_Store' ||
+      base === 'Thumbs.db' ||
+      base === '.git' ||
+      base === 'node_modules' ||
+      base.startsWith('LICENSE') ||
+      base.startsWith('README')
+    );
+  };
+
   const proposedPaths = new Set(plan.proposedFiles.map((p) => p.path));
-  const uncovered = plan.existingFiles.filter((e) => !proposedPaths.has(e.path));
-  if (uncovered.length > 0) {
+  const uncovered = plan.existingFiles.filter((e) => !proposedPaths.has(e.path) && !isMetadata(e.path));
+  if (uncovered.length > 0 && !isOverwrite) {
     return {
       status: 'refused',
       reason: 'Target contains existing files not covered by the installation payload',
@@ -993,6 +1016,17 @@ export async function applyInstall(
     const walk = async (currentDir: string, relativeRoot: string): Promise<boolean> => {
       const entries = await fs.promises.readdir(currentDir, { withFileTypes: true });
       for (const entry of entries) {
+        if (
+          entry.name === '.git' ||
+          entry.name === 'node_modules' ||
+          entry.name === 'index.json' ||
+          entry.name === 'local.patch' ||
+          entry.name.endsWith('.patch') ||
+          entry.name === '.DS_Store' ||
+          entry.name === 'Thumbs.db'
+        ) {
+          continue;
+        }
         const fullPath = path.join(currentDir, entry.name);
         const relPath = relativeRoot === '' ? entry.name : path.posix.join(relativeRoot, entry.name);
 

@@ -282,6 +282,9 @@ export class DashboardPanel {
           case 'checkDrift':
             await this.update();
             break;
+          case 'pruneMissing':
+            await vscode.commands.executeCommand('aiSwissknife.pruneMissing');
+            break;
           case 'promote':
             if (message.observed) {
               await this._provider.doPromoteItem(message.observed as ObservedArtifact);
@@ -2049,6 +2052,7 @@ export class DashboardPanel {
     <div class="header-actions">
       ${scanning ? '<div class="scan-indicator" id="scan-indicator"><div class="spinner"></div>Scanning for updates…</div>' : ''}
       <button class="btn btn-primary" title="New Artifact" onclick="vscode.postMessage({ command: 'createArtifact' })">＋</button>
+      <button class="btn btn-secondary" title="Prune Missing Records from Registry" onclick="vscode.postMessage({ command: 'pruneMissing' })">🧹</button>
       <button class="btn btn-secondary" title="Refresh" onclick="refreshState()">↻</button>
       <span id="promote-all-container">${identicalCount > 0 ? '<button class="btn btn-primary" onclick="promoteAllIdentical()">Promote ' + identicalCount + ' Identical Source Items</button>' : ''}</span>
     </div>

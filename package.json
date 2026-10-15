@@ -334,6 +334,12 @@
         "title": "Empty Trash...",
         "icon": "$(clear-all)",
         "category": "AI Swissknife"
+      },
+      {
+        "command": "aiSwissknife.pruneMissing",
+        "title": "Prune Missing Installations from Registry",
+        "icon": "$(trash)",
+        "category": "AI Swissknife"
       }
     ],
     "menus": {

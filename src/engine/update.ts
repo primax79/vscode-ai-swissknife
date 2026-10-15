@@ -524,7 +524,10 @@ export async function applyUpdateAll(
         backupPath = await backupItemToTrash(item.installation, options?.homeRoot);
       }
 
-      const outcome = await applyInstall(item.prepared, options?.homeRoot);
+      const outcome = await applyInstall(item.prepared, {
+        homeRoot: options?.homeRoot,
+        overwrite: true,
+      });
       if (outcome.status === 'applied') {
         outcomes.push({
           installation: outcome.installation,
