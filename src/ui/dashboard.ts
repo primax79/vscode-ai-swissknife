@@ -366,9 +366,13 @@ export class DashboardPanel {
             break;
           case 'uninstallItem': {
             if (message.key) {
-              const inst = await this.resolveManagedInstallationByKey(message.key);
-              if (inst) {
-                await this._provider.doUninstallItem(inst);
+              const item = await this.resolveInstallationOrObservedByKey(message.key);
+              if (item) {
+                if ('sourceId' in item) {
+                  await this._provider.doUninstallItem(item as ManagedInstallation);
+                } else {
+                  await this._provider.doRemoveObservedItem(item as ObservedArtifact);
+                }
                 this._refreshCallback();
                 await this.update();
                 this._panel.webview.postMessage({ command: 'clearDetail' });
@@ -1365,9 +1369,11 @@ export class DashboardPanel {
           `;
         } else {
           const canPromote = place.state === 'identical' || place.state === 'different' || (place.match && place.match.status !== 'none');
-          if (canPromote) {
-            actionsHtml = `<button class="btn btn-sm btn-primary" title="Promote" onclick="event.stopPropagation(); promoteItem(${this.jsStringLiteral(place.key)})">⇧</button>`;
-          }
+          actionsHtml = `
+            ${canPromote ? `<button class="btn btn-sm btn-primary" title="Promote" onclick="event.stopPropagation(); promoteItem(${this.jsStringLiteral(place.key)})">⇧</button>` : ''}
+            <button class="btn btn-sm btn-secondary preview-btn" title="Preview" onclick="event.stopPropagation(); vscode.postMessage({ command: 'previewInstalledArtifact', key: ${this.jsStringLiteral(place.key)} })">👁</button>
+            <button class="btn btn-sm btn-secondary btn-destructive remove-btn" title="Remove unmanaged item" onclick="event.stopPropagation(); vscode.postMessage({ command: 'uninstallItem', key: ${this.jsStringLiteral(place.key)} })">🗑</button>
+          `;
         }
 
         const effectiveSourceId = place.sourceId || (place.membership === 'unmanaged' ? place.match?.sourceId : undefined) || '';
@@ -3064,6 +3070,7 @@ export class DashboardPanel {
           if (msg.diffAvailable) {
             secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Diff vs. original" onclick="detailDiffItem()"><span class="btn-icon">⇄</span> Diff</button>');
           }
+          destructiveActions.push('<button class="btn btn-sm btn-secondary btn-destructive" title="Remove unmanaged item" onclick="detailUninstallItem()"><span class="btn-icon">🗑</span> Delete</button>');
         } else {
           // managed
           if (msg.status === 'missing-on-disk') {

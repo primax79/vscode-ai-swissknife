@@ -1034,6 +1034,44 @@ export class InstalledTreeDataProvider {
     }
   }
 
+  async doRemoveObservedItem(obs: ObservedArtifact): Promise<void> {
+    const confirmPrompt = `Remove unmanaged ${obs.kind} "${obs.name}" from ${obs.assistant} (${obs.scope})?`;
+    const choice = await vscode.window.showWarningMessage(
+      confirmPrompt,
+      { modal: true },
+      'Move to Trash',
+      'Delete Permanently'
+    );
+    if (!choice) return;
+
+    try {
+      if (choice === 'Move to Trash') {
+        const { softDeletePath } = await import('../engine/softDelete');
+        await softDeletePath(
+          obs.path,
+          obs.kind,
+          obs.name,
+          obs.scope,
+          obs.projectPath,
+          this.homeRoot,
+          { assistant: obs.assistant }
+        );
+        vscode.window.showInformationMessage(
+          `Moved "${obs.name}" to trash. It can be restored anytime.`
+        );
+      } else {
+        await fs.promises.rm(obs.path, { recursive: true, force: true });
+        vscode.window.showInformationMessage(
+          `Permanently deleted "${obs.name}" from ${obs.assistant}.`
+        );
+      }
+      this.refresh();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      vscode.window.showErrorMessage(`Failed to remove "${obs.name}": ${msg}`);
+    }
+  }
+
   async diffAgainstOriginal(item?: InstalledInstallationItem | ObservedArtifactItem): Promise<void> {
     if (!item) {
       vscode.window.showWarningMessage('Please select an item to diff.');
