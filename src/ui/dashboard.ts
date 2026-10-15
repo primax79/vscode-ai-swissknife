@@ -770,7 +770,7 @@ export class DashboardPanel {
         identicalCount,
         environmentPills,
         scanning: true,
-        sourcesHtml: this.getSourcesCatalogHtml(allSources),
+        sourcesHtml: this.getSourcesCatalogHtml(allSources, allManaged),
         totalSources: allSources.length,
         overviewNeedsAttentionHtml: this.getNeedsAttentionHtml(allManaged, [], true)
       });
@@ -973,34 +973,69 @@ export class DashboardPanel {
           </div>
         `;
       } else if (item instanceof AvailableArtifactItem) {
-        const installedIn = this._availableProvider.getInstalledAssistants(item.source.id, item.artifact.id);
-        const badgesHtml = installedIn.map(a => {
-          const iconUris = getAssistantIconPath(a as AssistantId, this._extensionUri);
-          const iconSrc = this._panel.webview.asWebviewUri(iconUris.light);
-          return `<span class="filter-pill env-pill active" style="padding: 2px 6px; font-size: 10px; cursor: default; height: auto;" title="Installed in ${this.escapeHtml(a)}">
-            <img src="${iconSrc}" class="assistant-icon" width="12" height="12" style="vertical-align: middle; margin-right: 4px;" />${this.escapeHtml(a)}
+        const installedItems = this._availableProvider.getInstalledItems(item.source.id, item.artifact.id);
+        const hasInstalled = installedItems.length > 0;
+        const subrowsId = `art-inst-${Math.random().toString(36).substr(2, 9)}`;
+
+        const iconsHtml = installedItems.map(inst => {
+          const asstIconSrc = this.getAssistantIconSrc(inst.assistant);
+          const scopeSvg = getScopeIconSvg(inst.scope);
+          const scopeLabel = getScopeLabel(inst.scope);
+          return `<span class="badge" style="padding: 2px 4px; display: inline-flex; align-items: center; gap: 2px;" title="Installed in ${this.escapeHtml(inst.assistant)} (${this.escapeHtml(scopeLabel)})">
+            <img src="${asstIconSrc}" class="assistant-icon" width="12" height="12" style="vertical-align: middle;" />${scopeSvg}
           </span>`;
-        }).join('');
+        }).join(' ');
+
+        const installedSubRowsHtml = hasInstalled ? `
+          <div id="${subrowsId}" style="display: none; padding: 4px 10px 6px 36px; background: rgba(0,0,0,0.12); border-bottom: 1px solid var(--border);">
+            ${installedItems.map(inst => {
+              const asstIconSrc = this.getAssistantIconSrc(inst.assistant);
+              const scopeSvg = getScopeIconSvg(inst.scope);
+              const scopeLabel = getScopeLabel(inst.scope);
+              const key = getIdentityKey(inst);
+              return `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; border-bottom: 1px solid rgba(128,128,128,0.15);">
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <img src="${asstIconSrc}" width="14" height="14" style="vertical-align: middle;" />
+                    <strong style="font-size: 12px;">${this.escapeHtml(inst.assistant)}</strong>
+                    <span style="opacity: 0.7; font-size: 11px; display: inline-flex; align-items: center; gap: 3px;">${scopeSvg} ${this.escapeHtml(scopeLabel)}</span>
+                    <span style="opacity: 0.55; font-size: 11px; font-family: monospace;" title="${this.escapeHtml(inst.path || '')}">${this.escapeHtml(inst.path || '')}</span>
+                  </div>
+                  <div style="display: flex; gap: 4px;" onclick="event.stopPropagation()">
+                    <button class="btn btn-sm btn-secondary" title="Preview installed file" onclick="vscode.postMessage({ command: 'previewInstalledArtifact', key: ${this.jsStringLiteral(key)} })">👁</button>
+                    <button class="btn btn-sm btn-secondary" title="Diff vs original" onclick="vscode.postMessage({ command: 'diffInstalledArtifact', key: ${this.jsStringLiteral(key)} })">⇄</button>
+                    <button class="btn btn-sm btn-primary" title="Update" onclick="vscode.postMessage({ command: 'updateItem', key: ${this.jsStringLiteral(key)} })">⟳</button>
+                    <button class="btn btn-sm btn-secondary btn-destructive" title="Uninstall from this environment" onclick="vscode.postMessage({ command: 'uninstallItem', key: ${this.jsStringLiteral(key)} })">🗑</button>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        ` : '';
 
         html += `
-          <div class="catalog-item artifact-row" style="padding: 4px 8px; display: grid; grid-template-columns: 100px 180px 1fr auto 180px; align-items: center; gap: 10px;">
-            <div>
-              <span class="kind-pill kind-${this.escapeHtml(item.artifact.kind)}">${this.escapeHtml(item.artifact.kind)}</span>
+          <div class="catalog-item-container">
+            <div class="catalog-item artifact-row" style="padding: 4px 8px; display: grid; grid-template-columns: 110px 180px 1fr 90px 90px; align-items: center; gap: 10px; ${hasInstalled ? 'cursor: pointer;' : ''}" ${hasInstalled ? `onclick="toggleFolder('${subrowsId}', this)"` : ''}>
+              <div style="display: flex; align-items: center; gap: 6px;">
+                ${hasInstalled ? `<span class="folder-icon" style="transition: transform 0.2s; font-size: 10px; opacity: 0.8; display: inline-block;">▶</span>` : `<span style="width: 10px; display: inline-block;"></span>`}
+                <span class="kind-pill kind-${this.escapeHtml(item.artifact.kind)}">${this.escapeHtml(item.artifact.kind)}</span>
+              </div>
+              <div style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; display: flex; align-items: center; gap: 4px;">
+                <strong style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${this.escapeHtml(item.artifact.name)}</strong>
+                ${item.isRecommended ? '<span style="color: var(--badge-warning); flex-shrink: 0;" title="Recommended">★</span>' : ''}
+              </div>
+              <div style="opacity:0.7; font-size:11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${this.escapeHtml(item.artifact.description || '')}">
+                ${item.artifact.description ? this.escapeHtml(item.artifact.description) : ''}
+              </div>
+              <div style="display: flex; gap: 4px; flex-wrap: nowrap; justify-content: flex-end;">
+                ${iconsHtml}
+              </div>
+              <div style="display: flex; gap: 4px; justify-content: flex-end;" onclick="event.stopPropagation()">
+                <button class="btn btn-sm btn-secondary" title="Preview from catalog" onclick="vscode.postMessage({ command: 'previewArtifact', sourceId: ${this.jsStringLiteral(item.source.id)}, scope: ${this.jsStringLiteral(item.source.scope)}, artifactId: ${this.jsStringLiteral(item.artifact.id)} })">👁</button>
+                <button class="btn btn-sm btn-primary" title="Install into environment..." onclick="vscode.postMessage({ command: 'installArtifact', sourceId: ${this.jsStringLiteral(item.source.id)}, scope: ${this.jsStringLiteral(item.source.scope)}, artifactId: ${this.jsStringLiteral(item.artifact.id)} })">⬇</button>
+              </div>
             </div>
-            <div style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; display: flex; align-items: center; gap: 4px;">
-              <strong style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${this.escapeHtml(item.artifact.name)}</strong>
-              ${item.isRecommended ? '<span style="color: var(--badge-warning); flex-shrink: 0;" title="Recommended">★</span>' : ''}
-            </div>
-            <div style="opacity:0.7; font-size:11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${this.escapeHtml(item.artifact.description || '')}">
-              ${item.artifact.description ? this.escapeHtml(item.artifact.description) : ''}
-            </div>
-            <div style="display: flex; gap: 4px; flex-wrap: nowrap;">
-              ${badgesHtml}
-            </div>
-            <div style="display: flex; gap: 4px; justify-content: flex-end;">
-              <button class="btn btn-sm btn-secondary" title="Preview" onclick="vscode.postMessage({ command: 'previewArtifact', sourceId: ${this.jsStringLiteral(item.source.id)}, scope: ${this.jsStringLiteral(item.source.scope)}, artifactId: ${this.jsStringLiteral(item.artifact.id)} })">👁</button>
-              <button class="btn btn-sm btn-primary" title="Install" onclick="vscode.postMessage({ command: 'installArtifact', sourceId: ${this.jsStringLiteral(item.source.id)}, scope: ${this.jsStringLiteral(item.source.scope)}, artifactId: ${this.jsStringLiteral(item.artifact.id)} })">⬇</button>
-            </div>
+            ${installedSubRowsHtml}
           </div>
         `;
       }
@@ -1008,7 +1043,7 @@ export class DashboardPanel {
     return html || '<div style="padding: 8px; opacity: 0.6; font-size: 11px;">No items</div>';
   }
 
-  private getSourcesCatalogHtml(sources: Source[]): string {
+  private getSourcesCatalogHtml(sources: Source[], managed: ManagedInstallation[] = []): string {
     const globalSources = sources.filter(s => s.scope === 'global');
     const projectSources = sources.filter(s => s.scope === 'project');
 
@@ -1021,9 +1056,11 @@ export class DashboardPanel {
       </div>
     `;
 
-    const renderSourceRow = (s: Source) => `
+    const renderSourceRow = (s: Source) => {
+      const installedCount = managed.filter(m => m.sourceId === s.id && m.scope === s.scope).length;
+      return `
       <div class="source-container">
-        <div class="item-row source-row" style="display: grid; grid-template-columns: 100px 180px 1fr auto 180px; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--border); cursor: pointer;" onclick="toggleSource(this, ${this.jsStringLiteral(s.id)}, ${this.jsStringLiteral(s.scope)})">
+        <div class="item-row source-row" style="display: grid; grid-template-columns: 100px 180px 1fr 115px 200px; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--border); cursor: pointer;" onclick="toggleSource(this, ${this.jsStringLiteral(s.id)}, ${this.jsStringLiteral(s.scope)})">
           <div style="display: flex; align-items: center; gap: 6px;">
             <span class="source-caret" style="transition: transform 0.2s; font-size: 10px; opacity: 0.8; display: inline-block;">▶</span>
             <span class="kind-pill" style="background: rgba(255, 255, 255, 0.1); color: var(--fg);">${this.escapeHtml(s.type)}</span>
@@ -1034,8 +1071,13 @@ export class DashboardPanel {
           <div style="opacity: 0.7; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${this.escapeHtml(s.url || s.localPath || '')}">
             ${s.url ? this.escapeHtml(s.url) : (s.localPath ? this.escapeHtml(s.localPath) : '')}
           </div>
-          <div></div>
+          <div style="text-align: right;" onclick="event.stopPropagation()">
+            ${installedCount > 0
+              ? `<button class="btn btn-sm btn-secondary" style="font-size: 11px; padding: 2px 7px;" title="View ${installedCount} installed items from this source" onclick="viewInstalledForSource(${this.jsStringLiteral(s.id)}, ${this.jsStringLiteral(s.scope)})"><span class="btn-icon">📦</span> ${installedCount} installed</button>`
+              : `<span style="opacity: 0.45; font-size: 11px;">0 installed</span>`}
+          </div>
           <div class="source-actions" style="display: flex; gap: 4px; justify-content: flex-end;" onclick="event.stopPropagation()">
+            <button class="btn btn-sm btn-secondary" title="View Installed items from this source" onclick="viewInstalledForSource(${this.jsStringLiteral(s.id)}, ${this.jsStringLiteral(s.scope)})">📦</button>
             <button class="btn btn-sm btn-secondary" title="Refresh source" onclick="vscode.postMessage({ command: 'refreshSource', sourceId: ${this.jsStringLiteral(s.id)}, scope: ${this.jsStringLiteral(s.scope)} })">↻</button>
             <button class="btn btn-sm btn-primary" title="Install Source Group" onclick="vscode.postMessage({ command: 'installSourceGroup', sourceId: ${this.jsStringLiteral(s.id)}, scope: ${this.jsStringLiteral(s.scope)} })">⬇</button>
             <button class="btn btn-sm btn-secondary" title="Export Source" onclick="vscode.postMessage({ command: 'exportSource', sourceId: ${this.jsStringLiteral(s.id)}, scope: ${this.jsStringLiteral(s.scope)} })">⇧</button>
@@ -1046,6 +1088,7 @@ export class DashboardPanel {
         </div>
       </div>
     `;
+    };
 
     html += `<div class="scope-group">
       <div class="scope-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 8px; margin-bottom: 8px;">
@@ -1280,6 +1323,7 @@ export class DashboardPanel {
       const assistantsList = Array.from(new Set(placesWithState.map((p) => p.assistant))).join(',');
       const scopesList = Array.from(new Set(placesWithState.map((p) => p.scope))).join(',');
       const membershipsList = Array.from(new Set(placesWithState.map((p) => p.membership))).join(',');
+      const sourcesList = Array.from(new Set(placesWithState.map((p) => p.sourceId || p.match?.sourceId).filter(Boolean))).join(' ');
 
       const chipsHtml = placesWithState.map((place) => {
         const chipClass = this.getBadgeClass(place.state);
@@ -1304,12 +1348,14 @@ export class DashboardPanel {
 
         let actionsHtml = '';
         if (place.membership === 'managed') {
+          const isMissing = place.state === 'missing-on-disk';
           const hasDiff = place.state === 'modified-locally' || place.state === 'modified-and-update-available';
           const hasUpdate = place.state === 'update-available' || place.state === 'modified-and-update-available';
           actionsHtml = `
-            <button class="btn btn-sm btn-secondary" title="Preview" onclick="event.stopPropagation(); vscode.postMessage({ command: 'previewInstalledArtifact', key: ${this.jsStringLiteral(place.key)} })">👁</button>
+            <button class="btn btn-sm btn-secondary preview-btn" title="Preview" style="${isMissing ? 'display: none;' : 'display: inline-block;'}" onclick="event.stopPropagation(); vscode.postMessage({ command: 'previewInstalledArtifact', key: ${this.jsStringLiteral(place.key)} })">👁</button>
             <button class="btn btn-sm btn-secondary diff-btn" title="Diff" style="${hasDiff ? 'display: inline-block;' : 'display: none;'}" onclick="event.stopPropagation(); vscode.postMessage({ command: 'diffInstalledArtifact', key: ${this.jsStringLiteral(place.key)} })">⇄</button>
             <button class="btn btn-sm btn-primary update-btn" title="Update to latest" style="${hasUpdate ? 'display: inline-block;' : 'display: none;'}" onclick="event.stopPropagation(); vscode.postMessage({ command: 'updateItem', key: ${this.jsStringLiteral(place.key)} })">⟳</button>
+            <button class="btn btn-sm btn-secondary btn-destructive remove-btn" title="Remove from registry" style="${isMissing ? 'display: inline-block;' : 'display: none;'}" onclick="event.stopPropagation(); vscode.postMessage({ command: 'uninstallItem', key: ${this.jsStringLiteral(place.key)} })">🗑</button>
           `;
         } else {
           const canPromote = place.state === 'identical' || place.state === 'different' || (place.match && place.match.status !== 'none');
@@ -1318,9 +1364,8 @@ export class DashboardPanel {
           }
         }
 
-        const sourceIdAttr = place.membership === 'unmanaged' && place.match?.sourceId
-          ? ` data-source-id="${this.escapeHtml(place.match.sourceId)}"`
-          : '';
+        const effectiveSourceId = place.sourceId || (place.membership === 'unmanaged' ? place.match?.sourceId : undefined) || '';
+        const sourceIdAttr = effectiveSourceId ? ` data-source-id="${this.escapeHtml(effectiveSourceId)}"` : '';
 
         return `
           <tr class="item-row sub-row"
@@ -1358,7 +1403,8 @@ export class DashboardPanel {
           data-worst-status="${this.escapeHtml(worstState)}"
           data-assistants="${this.escapeHtml(assistantsList)}"
           data-scopes="${this.escapeHtml(scopesList)}"
-          data-memberships="${this.escapeHtml(membershipsList)}">
+          data-memberships="${this.escapeHtml(membershipsList)}"
+          data-source-ids="${this.escapeHtml(sourcesList)}">
           <tr class="item-row parent-row"
             onclick="toggleFolder('${subrowsId}', this)"
             data-kind="${this.escapeHtml(obj.kind)}"
@@ -1366,7 +1412,8 @@ export class DashboardPanel {
             data-worst-status="${this.escapeHtml(worstState)}"
             data-assistants="${this.escapeHtml(assistantsList)}"
             data-scopes="${this.escapeHtml(scopesList)}"
-            data-memberships="${this.escapeHtml(membershipsList)}">
+            data-memberships="${this.escapeHtml(membershipsList)}"
+            data-source-ids="${this.escapeHtml(sourcesList)}">
             <td>
               <span class="folder-icon" style="transition: transform 0.2s; font-size: 10px; opacity: 0.8; display: inline-block;">▶</span>
               <span class="kind-pill kind-${this.escapeHtml(obj.kind)}">${this.escapeHtml(obj.kind)}</span>
@@ -1436,49 +1483,60 @@ export class DashboardPanel {
     <span id="breadcrumb-chips"></span>
   </div>
 
-  <div class="toolbar filters-bar">
-    <div class="filter-group" id="filter-group-env">
-      <span class="filter-group-label">ENV</span>
-      <button class="filter-pill env-pill active" data-env="all" aria-pressed="true" onclick="setEnvFilter('all')">All Env</button>
-      ${environmentPills}
+  <div class="toolbar filters-bar" id="filtersBar">
+    <div class="filter-controls-collapsible" id="filterGroupsContainer" style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center;">
+      <div class="filter-group" id="filter-group-source">
+        <span class="filter-group-label">SOURCE</span>
+        <button class="filter-pill source-pill active" data-source="all" aria-pressed="true" onclick="setSourcePillFilter('all', this)">All</button>
+        <button class="filter-pill source-pill" data-source="__local__" aria-pressed="false" onclick="setSourcePillFilter('__local__', this)">Local</button>
+        ${sources.map(s => `<button class="filter-pill source-pill" data-source="${this.escapeHtml(s.id)}" aria-pressed="false" onclick="setSourcePillFilter(${this.jsStringLiteral(s.id)}, this)">${this.escapeHtml(s.name ?? s.id)}</button>`).join('')}
+      </div>
+      <div class="filter-group" id="filter-group-env">
+        <span class="filter-group-label">ENV</span>
+        <button class="filter-pill env-pill active" data-env="all" aria-pressed="true" onclick="setEnvFilter('all')">All Env</button>
+        ${environmentPills}
+      </div>
+      <div class="filter-group" id="filter-group-scope">
+        <span class="filter-group-label">SCOPE</span>
+        <button class="filter-pill scope-pill active" data-scope="all" aria-pressed="true" onclick="setScopeFilter('all')">All</button>
+        <button class="filter-pill scope-pill" data-scope="global" aria-pressed="false" onclick="setScopeFilter('global')">${getScopeIconSvg('global')}${getScopeLabel('global')}</button>
+        <button class="filter-pill scope-pill" data-scope="project" aria-pressed="false" onclick="setScopeFilter('project')">${getScopeIconSvg('project')}${getScopeLabel('project')}</button>
+      </div>
+      <div class="filter-group" id="filter-group-membership">
+        <span class="filter-group-label">MEMBERSHIP</span>
+        <button class="filter-pill membership-pill active" data-membership="all" aria-pressed="true" onclick="setMembershipFilter('all')">All</button>
+        <button class="filter-pill membership-pill" data-membership="managed" aria-pressed="false" onclick="setMembershipFilter('managed')">● Managed</button>
+        <button class="filter-pill membership-pill" data-membership="unmanaged" aria-pressed="false" onclick="setMembershipFilter('unmanaged')">◌ Unmanaged</button>
+      </div>
+      <div class="filter-group" id="filter-group-kind">
+        <span class="filter-group-label">KIND</span>
+        <button class="filter-pill kind-filter-pill active" data-kind="all" aria-pressed="true" onclick="setKindFilter('all', this)">All</button>
+        <button class="filter-pill kind-filter-pill" data-kind="skill" aria-pressed="false" onclick="setKindFilter('skill', this)">Skills</button>
+        <button class="filter-pill kind-filter-pill" data-kind="agent" aria-pressed="false" onclick="setKindFilter('agent', this)">Agents</button>
+        <button class="filter-pill kind-filter-pill" data-kind="command" aria-pressed="false" onclick="setKindFilter('command', this)">Commands</button>
+        <button class="filter-pill kind-filter-pill" data-kind="mcp-server" aria-pressed="false" onclick="setKindFilter('mcp-server', this)">MCPs</button>
+        <button class="filter-pill kind-filter-pill" data-kind="hook" aria-pressed="false" onclick="setKindFilter('hook', this)">Hooks</button>
+        <button class="filter-pill kind-filter-pill" data-kind="rule" aria-pressed="false" onclick="setKindFilter('rule', this)">Rules</button>
+      </div>
     </div>
-    <div class="filter-group" id="filter-group-scope">
-      <span class="filter-group-label">SCOPE</span>
-      <button class="filter-pill scope-pill active" data-scope="all" aria-pressed="true" onclick="setScopeFilter('all')">All</button>
-      <button class="filter-pill scope-pill" data-scope="global" aria-pressed="false" onclick="setScopeFilter('global')">${getScopeIconSvg('global')}${getScopeLabel('global')}</button>
-      <button class="filter-pill scope-pill" data-scope="project" aria-pressed="false" onclick="setScopeFilter('project')">${getScopeIconSvg('project')}${getScopeLabel('project')}</button>
-    </div>
-    <div class="filter-group" id="filter-group-membership">
-      <span class="filter-group-label">MEMBERSHIP</span>
-      <button class="filter-pill membership-pill active" data-membership="all" aria-pressed="true" onclick="setMembershipFilter('all')">All</button>
-      <button class="filter-pill membership-pill" data-membership="managed" aria-pressed="false" onclick="setMembershipFilter('managed')">● Managed</button>
-      <button class="filter-pill membership-pill" data-membership="unmanaged" aria-pressed="false" onclick="setMembershipFilter('unmanaged')">◌ Unmanaged</button>
-    </div>
-    <div class="filter-group" id="filter-group-kind">
-      <span class="filter-group-label">KIND</span>
-      <button class="filter-pill kind-filter-pill active" data-kind="all" aria-pressed="true" onclick="setKindFilter('all', this)">All</button>
-      <button class="filter-pill kind-filter-pill" data-kind="skill" aria-pressed="false" onclick="setKindFilter('skill', this)">Skills</button>
-      <button class="filter-pill kind-filter-pill" data-kind="agent" aria-pressed="false" onclick="setKindFilter('agent', this)">Agents</button>
-      <button class="filter-pill kind-filter-pill" data-kind="command" aria-pressed="false" onclick="setKindFilter('command', this)">Commands</button>
-      <button class="filter-pill kind-filter-pill" data-kind="mcp-server" aria-pressed="false" onclick="setKindFilter('mcp-server', this)">MCPs</button>
-      <button class="filter-pill kind-filter-pill" data-kind="hook" aria-pressed="false" onclick="setKindFilter('hook', this)">Hooks</button>
-      <button class="filter-pill kind-filter-pill" data-kind="rule" aria-pressed="false" onclick="setKindFilter('rule', this)">Rules</button>
-    </div>
-    <div class="filter-search" style="flex: 1; min-width: 160px;">
-      <input type="text" class="search-input" id="searchBox" placeholder="Filter by name..." oninput="filterTable()">
-    </div>
-    <div class="filter-actions">
-      <button class="btn btn-sm btn-primary update-all-btn" id="updateAllBtn" title="Update all (${updatesAvailable})" ${updatesAvailable === 0 ? 'disabled' : ''} onclick="triggerUpdateAll()">⟳</button>
+    <div style="display: flex; gap: 6px; align-items: center; flex: 1; min-width: 220px;">
+      <div class="filter-search" style="flex: 1;">
+        <input type="text" class="search-input" id="searchBox" placeholder="Filter by name..." oninput="filterTable()">
+      </div>
+      <button class="btn btn-sm btn-secondary" id="toggleFiltersBtn" title="Collapse / Expand Filters" onclick="toggleFiltersBar()">⚙ Filters ▾</button>
+      <div class="filter-actions">
+        <button class="btn btn-sm btn-primary update-all-btn" id="updateAllBtn" title="Update all (${updatesAvailable})" ${updatesAvailable === 0 ? 'disabled' : ''} onclick="triggerUpdateAll()">⟳</button>
+      </div>
     </div>
   </div>
 
   <table id="managedTable">
     <thead>
       <tr>
-        <th style="cursor: pointer;" onclick="sortMatrix('kind')">Kind ↕</th>
-        <th style="cursor: pointer;" onclick="sortMatrix('name')">Name ↕</th>
-        <th>Places</th>
-        <th style="cursor: pointer;" onclick="sortMatrix('worst-status')">Status ↕</th>
+        <th onclick="sortMatrix('kind')" style="cursor: pointer; width: 15%; user-select: none;">KIND <span id="sort-ind-kind" style="opacity: 0.7; font-size: 10px;">↕</span></th>
+        <th onclick="sortMatrix('name')" style="cursor: pointer; width: 35%; user-select: none;">NAME <span id="sort-ind-name" style="opacity: 0.7; font-size: 10px;">↕</span></th>
+        <th style="width: 25%;">PLACES</th>
+        <th onclick="sortMatrix('worst-status')" style="cursor: pointer; width: 25%; user-select: none;">STATUS <span id="sort-ind-worst-status" style="opacity: 0.7; font-size: 10px;">↕</span></th>
       </tr>
     </thead>
     <tbody id="unifiedTable">
@@ -1491,6 +1549,7 @@ export class DashboardPanel {
       <div class="detail-header-title-row">
         <span id="detailKind" class="kind-pill"></span>
         <h3 id="detailTitle">Item Details</h3>
+        <button class="btn btn-sm btn-secondary" style="margin-left: auto; padding: 2px 8px;" title="Close Details" onclick="closeDetailPanel()">✕</button>
       </div>
       <div class="detail-header-meta">
         <span id="detailAssistant" class="detail-meta-item"></span>
@@ -1723,6 +1782,16 @@ export class DashboardPanel {
       padding: 6px 10px;
       font-size: 12px;
     }
+    .filter-select {
+      background: var(--vscode-input-background, #3c3c3c);
+      color: var(--vscode-input-foreground, #fff);
+      border: 1px solid var(--vscode-input-border, #555);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-size: 11px;
+      height: 24px;
+      outline: none;
+    }
     .tabs {
       display: flex;
       gap: 6px;
@@ -1843,11 +1912,17 @@ export class DashboardPanel {
     .item-row.selected { background-color: rgba(255, 255, 255, 0.1); }
     
     #detailPanel {
+      position: sticky;
+      bottom: 12px;
       margin-top: 16px;
       padding: 16px;
       background: var(--card-bg);
       border: 1px solid var(--border);
       border-radius: 6px;
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+      z-index: 50;
+      max-height: 48vh;
+      overflow-y: auto;
       display: none;
     }
     .detail-header {
@@ -1975,7 +2050,7 @@ export class DashboardPanel {
       ${scanning ? '<div class="scan-indicator" id="scan-indicator"><div class="spinner"></div>Scanning for updates…</div>' : ''}
       <button class="btn btn-primary" title="New Artifact" onclick="vscode.postMessage({ command: 'createArtifact' })">＋</button>
       <button class="btn btn-secondary" title="Refresh" onclick="refreshState()">↻</button>
-      ${identicalCount > 0 ? '<button class="btn btn-primary" onclick="promoteAllIdentical()">Promote ' + identicalCount + ' Identical Source Items</button>' : ''}
+      <span id="promote-all-container">${identicalCount > 0 ? '<button class="btn btn-primary" onclick="promoteAllIdentical()">Promote ' + identicalCount + ' Identical Source Items</button>' : ''}</span>
     </div>
   </div>
   <div class="toolbar section-tabs" style="border-bottom: 1px solid var(--border); margin-bottom: 16px; padding-bottom: 0;">
@@ -1994,7 +2069,7 @@ export class DashboardPanel {
     ${this.getInstalledSectionHtml(sources, managed, observed, reports, scanning, totalInstalled, totalUnmanaged, updatesAvailable, modifiedLocally, identicalCount, environmentPills, rowsHtml)}
   </div>
   <div id="section-catalog" class="dashboard-section" style="display: none;">
-    ${this.getSourcesCatalogHtml(sources)}
+    ${this.getSourcesCatalogHtml(sources, managed)}
   </div>
   <div id="section-recommendations" class="dashboard-section" style="display: none;">
     ${this.getRecommendationsHtml()}
@@ -2109,11 +2184,23 @@ export class DashboardPanel {
       }).join('\\n');
     }
 
+    function closeDetailPanel() {
+      const dp = document.getElementById('detailPanel');
+      if (dp) dp.style.display = 'none';
+      document.querySelectorAll('.item-row.selected').forEach(r => r.classList.remove('selected'));
+      selectedItemKey = null;
+      detailItemData = null;
+    }
+
     function selectRow(rowEl, key) {
       document.querySelectorAll('.item-row').forEach(r => r.classList.remove('selected'));
       rowEl.classList.add('selected');
       selectedItemKey = key;
-      document.getElementById('detailPanel').style.display = 'block';
+      const dp = document.getElementById('detailPanel');
+      if (dp) {
+        dp.style.display = 'block';
+        dp.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
 
       const name = rowEl.getAttribute('data-name') || '';
       const kind = rowEl.getAttribute('data-kind') || '';
@@ -2329,18 +2416,67 @@ export class DashboardPanel {
       filterTable();
     }
 
+    function setSourcePillFilter(val, btn) {
+      if (!val || val === 'all') {
+        currentSource = null;
+      } else if (val === '__local__') {
+        currentSource = { id: '__local__', scope: 'all' };
+      } else {
+        currentSource = { id: val, scope: 'all' };
+      }
+      document.querySelectorAll('.source-pill').forEach(b => {
+        const matches = b.getAttribute('data-source') === val;
+        b.classList.toggle('active', matches);
+        if (b.setAttribute) b.setAttribute('aria-pressed', matches ? 'true' : 'false');
+      });
+      filterTable();
+    }
+
     function removeChip(type) {
       if (type === 'env') { setEnvFilter('all'); }
       if (type === 'scope') { setScopeFilter('all'); }
       if (type === 'membership') { setMembershipFilter('all'); }
       if (type === 'kind') { setKindFilter('all', null); }
-      if (type === 'source') { currentSource = null; filterTable(); }
+      if (type === 'source') {
+        currentSource = null;
+        document.querySelectorAll('.source-pill').forEach(b => {
+          const matches = b.getAttribute('data-source') === 'all';
+          b.classList.toggle('active', matches);
+          if (b.setAttribute) b.setAttribute('aria-pressed', matches ? 'true' : 'false');
+        });
+        filterTable();
+      }
+    }
+
+    function toggleFiltersBar() {
+      const container = document.getElementById('filterGroupsContainer');
+      const btn = document.getElementById('toggleFiltersBtn');
+      if (!container) return;
+      const isHidden = container.style.display === 'none';
+      container.style.display = isHidden ? 'flex' : 'none';
+      if (btn) btn.innerHTML = isHidden ? '⚙ Filters ▾' : '⚙ Filters ▸';
+    }
+
+    function viewInstalledForSource(sourceId, scope) {
+      currentSource = { id: sourceId, scope: scope };
+      document.querySelectorAll('.source-pill').forEach(b => {
+        const matches = b.getAttribute('data-source') === sourceId;
+        b.classList.toggle('active', matches);
+        if (b.setAttribute) b.setAttribute('aria-pressed', matches ? 'true' : 'false');
+      });
+      switchSection('installed');
+      filterTable();
+      const searchBox = document.getElementById('searchBox');
+      if (searchBox) searchBox.value = '';
     }
 
     function updateBreadcrumb() {
       const chipsContainer = document.getElementById('breadcrumb-chips');
       const chips = [];
-      if (currentSource) chips.push('<span class="chip">' + escapeHtmlClient(currentSource.id) + ' (' + escapeHtmlClient(currentSource.scope) + ') <span class="chip-close" onclick="removeChip(\\'source\\')">✕</span></span>');
+      if (currentSource) {
+        const label = currentSource.id === '__local__' ? 'Local only' : currentSource.id;
+        chips.push('<span class="chip">Source: ' + escapeHtmlClient(label) + ' <span class="chip-close" onclick="removeChip(\\'source\\')">✕</span></span>');
+      }
       if (currentEnv !== 'all') chips.push('<span class="chip">' + currentEnv + ' <span class="chip-close" onclick="removeChip(\\'env\\')">✕</span></span>');
       if (currentScope !== 'all') chips.push('<span class="chip">' + getScopeLabelClient(currentScope) + ' <span class="chip-close" onclick="removeChip(\\'scope\\')">✕</span></span>');
       if (currentMembership !== 'all') chips.push('<span class="chip">' + currentMembership + ' <span class="chip-close" onclick="removeChip(\\'membership\\')">✕</span></span>');
@@ -2364,11 +2500,16 @@ export class DashboardPanel {
         currentSortCol = col;
         currentSortAsc = true;
       }
+
+      ['kind', 'name', 'worst-status'].forEach(c => {
+        const el = document.getElementById('sort-ind-' + c);
+        if (el) el.textContent = c === col ? (currentSortAsc ? '▲' : '▼') : '↕';
+      });
       
-      const tbody = document.getElementById('unifiedTable');
-      if (!tbody) return;
+      const table = document.getElementById('managedTable');
+      if (!table) return;
       
-      const groups = Array.from(tbody.querySelectorAll('.matrix-group'));
+      const groups = Array.from(table.querySelectorAll('tbody.matrix-group'));
       groups.sort((a, b) => {
         let valA, valB;
         if (col === 'worst-status') {
@@ -2403,7 +2544,7 @@ export class DashboardPanel {
         return 0;
       });
       
-      groups.forEach(g => tbody.appendChild(g));
+      groups.forEach(g => table.appendChild(g));
     }
 
     function filterTable() {
@@ -2438,7 +2579,15 @@ export class DashboardPanel {
           const matchesEnv = currentEnv === 'all' || childEnv === currentEnv;
           const matchesScope = currentScope === 'all' || childScope === currentScope;
           const matchesMem = currentMembership === 'all' || childMem === currentMembership;
-          const matchesSource = !currentSource || (childSourceId === currentSource.id && (!currentSource.scope || childSourceScope === currentSource.scope));
+
+          let matchesSource = true;
+          if (currentSource) {
+            if (currentSource.id === '__local__') {
+              matchesSource = childMem === 'unmanaged' && !childSourceId;
+            } else {
+              matchesSource = childSourceId === currentSource.id && (!currentSource.scope || currentSource.scope === 'all' || childScope === currentSource.scope);
+            }
+          }
 
           if (matchesEnv && matchesScope && matchesMem && matchesSource) {
             child.style.display = '';
@@ -2506,9 +2655,19 @@ export class DashboardPanel {
         observedData = msg.observedData;
         const rows = msg.rowsHtml;
         if (rows) {
-          const tbody = document.getElementById('unifiedTable');
-          if (tbody) {
-            tbody.innerHTML = typeof rows === 'string' ? rows : '';
+          const unifiedTable = document.getElementById('unifiedTable');
+          if (unifiedTable) {
+            unifiedTable.innerHTML = typeof rows === 'string' ? rows : '';
+          }
+          const table = document.getElementById('managedTable');
+          if (table && typeof table.querySelectorAll === 'function') {
+            table.querySelectorAll('tbody.matrix-group').forEach(b => b.remove());
+            const thead = table.querySelector ? table.querySelector('thead') : null;
+            if (thead && thead.insertAdjacentHTML) {
+              thead.insertAdjacentHTML('afterend', typeof rows === 'string' ? rows : '');
+            } else {
+              table.innerHTML = typeof rows === 'string' ? rows : '';
+            }
           }
         }
         const manStat = document.getElementById('stat-managed');
@@ -2517,6 +2676,13 @@ export class DashboardPanel {
         if (unmanStat) unmanStat.textContent = msg.totalUnmanaged;
         const unmanLbl = document.getElementById('stat-unmanaged-lbl');
         if (unmanLbl) unmanLbl.textContent = 'Unmanaged Discovered (' + msg.identicalCount + ' identical, ' + (msg.totalUnmanaged - msg.identicalCount) + ' custom)';
+        
+        const promoteAllContainer = document.getElementById('promote-all-container');
+        if (promoteAllContainer) {
+          promoteAllContainer.innerHTML = (msg.identicalCount > 0)
+            ? '<button class="btn btn-primary" onclick="promoteAllIdentical()">Promote ' + msg.identicalCount + ' Identical Source Items</button>'
+            : '';
+        }
         
         // When phase A finishes, these are not computed yet so they might reset to 0 or previous values.
         // It's safer to not touch updatesAvailable/modifiedLocally in Phase A.
@@ -2580,13 +2746,21 @@ export class DashboardPanel {
           
           cell.innerHTML = '<span class="badge ' + badgeClass + '">' + badgeText + '</span>';
 
+          const previewBtn = row ? row.querySelector('.preview-btn') : null;
           const diffBtn = row ? row.querySelector('.diff-btn') : null;
-          if (diffBtn && (msg.status === 'modified-locally' || msg.status === 'modified-and-update-available')) {
-            diffBtn.style.display = 'inline-block';
-          }
           const updateBtn = row ? row.querySelector('.update-btn') : null;
-          if (updateBtn && (msg.status === 'update-available' || msg.status === 'modified-and-update-available')) {
-            updateBtn.style.display = 'inline-block';
+          const removeBtn = row ? row.querySelector('.remove-btn') : null;
+
+          if (msg.status === 'missing-on-disk') {
+            if (removeBtn) removeBtn.style.display = 'inline-block';
+            if (previewBtn) previewBtn.style.display = 'none';
+            if (diffBtn) diffBtn.style.display = 'none';
+            if (updateBtn) updateBtn.style.display = 'none';
+          } else {
+            if (removeBtn) removeBtn.style.display = 'none';
+            if (previewBtn) previewBtn.style.display = 'inline-block';
+            if (diffBtn) diffBtn.style.display = (msg.status === 'modified-locally' || msg.status === 'modified-and-update-available') ? 'inline-block' : 'none';
+            if (updateBtn) updateBtn.style.display = (msg.status === 'update-available' || msg.status === 'modified-and-update-available') ? 'inline-block' : 'none';
           }
 
           const parentChip = document.querySelector('.parent-chip[data-parent-key="' + msg.key + '"]') || document.querySelector('.parent-badge[data-parent-key="' + msg.key + '"]');
@@ -2790,19 +2964,23 @@ export class DashboardPanel {
           }
         } else {
           // managed
-          if (msg.status === 'update-available' || msg.status === 'modified-and-update-available') {
-            primaryActions.push('<button class="btn btn-sm btn-primary" title="Update to latest" onclick="detailUpdateItem()"><span class="btn-icon">⟳</span> Update</button>');
+          if (msg.status === 'missing-on-disk') {
+            destructiveActions.push('<button class="btn btn-sm btn-secondary btn-destructive" title="Remove from registry" onclick="detailUninstallItem()"><span class="btn-icon">🗑</span> Remove from Registry</button>');
+          } else {
+            if (msg.status === 'update-available' || msg.status === 'modified-and-update-available') {
+              primaryActions.push('<button class="btn btn-sm btn-primary" title="Update to latest" onclick="detailUpdateItem()"><span class="btn-icon">⟳</span> Update</button>');
+            }
+            secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Preview" onclick="detailPreviewItem()"><span class="btn-icon">👁</span> Preview</button>');
+            if (msg.diffAvailable) {
+              secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Diff vs. original" onclick="detailDiffItem()"><span class="btn-icon">⇄</span> Diff</button>');
+            }
+            secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Copy to..." onclick="detailCopyItem()"><span class="btn-icon">⧉</span> Copy</button>');
+            if (msg.item && ['skill', 'agent', 'command', 'mcp-server'].includes(msg.item.kind)) {
+              secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Move to..." onclick="detailMoveItem()"><span class="btn-icon">⇥</span> Move</button>');
+            }
+            secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Edit" onclick="detailEditItem()"><span class="btn-icon">✎</span> Edit</button>');
+            destructiveActions.push('<button class="btn btn-sm btn-secondary btn-destructive" title="Uninstall" onclick="detailUninstallItem()"><span class="btn-icon">🗑</span> Uninstall</button>');
           }
-          secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Preview" onclick="detailPreviewItem()"><span class="btn-icon">👁</span> Preview</button>');
-          if (msg.diffAvailable) {
-            secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Diff vs. original" onclick="detailDiffItem()"><span class="btn-icon">⇄</span> Diff</button>');
-          }
-          secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Copy to..." onclick="detailCopyItem()"><span class="btn-icon">⧉</span> Copy</button>');
-          if (msg.item && ['skill', 'agent', 'command', 'mcp-server'].includes(msg.item.kind)) {
-            secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Move to..." onclick="detailMoveItem()"><span class="btn-icon">⇥</span> Move</button>');
-          }
-          secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Edit" onclick="detailEditItem()"><span class="btn-icon">✎</span> Edit</button>');
-          destructiveActions.push('<button class="btn btn-sm btn-secondary btn-destructive" title="Uninstall" onclick="detailUninstallItem()"><span class="btn-icon">🗑</span> Uninstall</button>');
         }
 
         const groups = [];

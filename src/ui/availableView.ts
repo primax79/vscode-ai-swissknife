@@ -192,6 +192,7 @@ export class AvailableTreeDataProvider
   private cachedSourceGroups: AvailableSourceGroupItem[] = [];
   private cachedRecommendedGroup?: RecommendedGroupItem;
   private installedByArtifactKey = new Map<string, AssistantId[]>();
+  private installedItemsByArtifactKey = new Map<string, ManagedInstallation[]>();
   private onInstalledRefreshCallback?: () => void;
   private refreshInFlight?: Promise<void>;
   private sources: Source[] = [];
@@ -238,11 +239,19 @@ export class AvailableTreeDataProvider
         list.push(inst.assistant);
       }
       this.installedByArtifactKey.set(key, list);
+
+      const items = this.installedItemsByArtifactKey.get(key) ?? [];
+      items.push(inst);
+      this.installedItemsByArtifactKey.set(key, items);
     }
   }
 
   getInstalledAssistants(sourceId: string, artifactId: string): AssistantId[] {
     return this.installedByArtifactKey.get(`${sourceId}:${artifactId}`) ?? [];
+  }
+
+  getInstalledItems(sourceId: string, artifactId: string): ManagedInstallation[] {
+    return this.installedItemsByArtifactKey.get(`${sourceId}:${artifactId}`) ?? [];
   }
 
   /**
@@ -268,6 +277,7 @@ export class AvailableTreeDataProvider
     this.cachedSourceGroups = [];
     this.cachedRecommendedGroup = undefined;
     this.installedByArtifactKey = new Map();
+    this.installedItemsByArtifactKey = new Map();
 
     try {
       const globalState = await readState('global', undefined, this.homeRoot);

@@ -16,7 +16,7 @@ import type {
  * Helper to parse a scalar value that may be a block scalar (folded `>` or literal `|`)
  * or a plain/quoted scalar continued across indented lines.
  */
-function parseFrontmatterValue(
+export function parseFrontmatterValue(
   lines: string[],
   startIndex: number,
   initialRawValue: string

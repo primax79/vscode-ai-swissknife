@@ -77,6 +77,7 @@ export interface Place {
   state: PlaceState;
   match?: PlaceMatch;
   disabled: boolean;
+  sourceId?: string;
 }
 
 export interface InstalledObject {
@@ -270,6 +271,7 @@ export function buildInstalledTree(
       membership: 'managed',
       state,
       disabled,
+      sourceId: inst.sourceId,
     };
 
     if (!acc.placeMap.has(key)) {
@@ -343,6 +345,7 @@ export function buildInstalledTree(
       state,
       match,
       disabled,
+      sourceId: obs.candidates?.[0]?.sourceId || obs.match?.sourceId,
     };
 
     if (!acc.placeMap.has(key)) {

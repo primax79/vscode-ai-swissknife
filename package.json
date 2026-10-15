@@ -558,6 +558,7 @@
     "vscode:prepublish": "npm run build",
     "build": "node esbuild.config.js",
     "watch": "node esbuild.config.js --watch",
+    "dev:ui": "node esbuild.config.js && node --watch dist/standalone.js",
     "generate-icon-font": "fantasticon resources/icon-font/svg -o resources/icon-font -n ai-swissknife-icons -t woff -g json --normalize true",
     "lint": "eslint src --ext ts",
     "typecheck": "tsc --noEmit",

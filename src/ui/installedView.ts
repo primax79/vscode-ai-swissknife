@@ -1009,22 +1009,28 @@ export class InstalledTreeDataProvider {
   }
 
   async doUninstallItem(inst: ManagedInstallation): Promise<void> {
+    const isMissing = !fs.existsSync(inst.path);
+    const confirmPrompt = isMissing
+      ? `Remove missing ${inst.kind} "${inst.name}" from ${inst.assistant} (${inst.scope})? This drops its record from the registry.`
+      : `Uninstall ${inst.kind} "${inst.name}" from ${inst.assistant} (${inst.scope})? This deletes it from disk.`;
+    const actionLabel = isMissing ? 'Remove' : 'Uninstall';
+
     const confirm = await vscode.window.showInformationMessage(
-      `Uninstall ${inst.kind} "${inst.name}" from ${inst.assistant} (${inst.scope})? This deletes it from disk.`,
+      confirmPrompt,
       { modal: true },
-      'Uninstall'
+      actionLabel
     );
-    if (confirm !== 'Uninstall') return;
+    if (confirm !== actionLabel) return;
 
     try {
       await this.removeManagedInstallation(inst);
       vscode.window.showInformationMessage(
-        `Uninstalled "${inst.name}" from ${inst.assistant} (${inst.scope}).`
+        `${isMissing ? 'Removed' : 'Uninstalled'} "${inst.name}" from ${inst.assistant} (${inst.scope}).`
       );
       this.refresh();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      vscode.window.showErrorMessage(`Failed to uninstall "${inst.name}": ${msg}`);
+      vscode.window.showErrorMessage(`Failed to ${isMissing ? 'remove' : 'uninstall'} "${inst.name}": ${msg}`);
     }
   }
 

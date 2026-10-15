@@ -47,7 +47,15 @@ export async function readSkill(skillDir: string): Promise<CanonicalSkill> {
     const entries = await fs.promises.readdir(currentDir, { withFileTypes: true });
 
     for (const entry of entries) {
-      if (entry.name === '.git' || entry.name === 'node_modules') {
+      if (
+        entry.name === '.git' ||
+        entry.name === 'node_modules' ||
+        entry.name === 'index.json' ||
+        entry.name === 'local.patch' ||
+        entry.name.endsWith('.patch') ||
+        entry.name === '.DS_Store' ||
+        entry.name === 'Thumbs.db'
+      ) {
         continue;
       }
 

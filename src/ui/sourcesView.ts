@@ -29,6 +29,7 @@ import {
 } from '../engine/configTransfer';
 import { ALL_SOURCE_RESOLVERS, getSourceResolver } from '../sources/registry';
 import { addSourceToManifest, removeSourceFromManifest } from '../engine/sourceManifest';
+import { uninstallInstallation } from '../engine/uninstall';
 import { deriveSourceDefaults, validateLocation, validateLocalFolder } from '../sources/sourceDefaults';
 import { getScopeLabel, getScopeIconName, getScopeQuickPickItems } from './scopeIcons';
 
@@ -492,13 +493,25 @@ export class SourcesTreeDataProvider implements vscode.TreeDataProvider<SourceTr
 
       if (installCount > 0 || desiredCount > 0) {
         const choice = await vscode.window.showWarningMessage(
-          `Source "${source.id}" is referenced by ${installCount} installed item(s) and ${desiredCount} desired installation(s). Remove anyway?`,
+          `Source "${source.name ?? source.id}" is referenced by ${installCount} installed item(s) and ${desiredCount} desired installation(s). What would you like to do?`,
           { modal: true },
-          'Remove Anyway'
+          'Uninstall All Items & Remove Source',
+          'Remove Source Only'
         );
 
-        if (choice !== 'Remove Anyway') {
+        if (!choice) {
           return;
+        }
+
+        if (choice === 'Uninstall All Items & Remove Source') {
+          const toUninstall = state.installations.filter((i) => i.sourceId === source.id);
+          for (const item of toUninstall) {
+            try {
+              await uninstallInstallation(item, { projectRoot });
+            } catch (err) {
+              console.warn(`[sourcesView] Failed to uninstall ${item.name}:`, err);
+            }
+          }
         }
       }
 

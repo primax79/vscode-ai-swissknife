@@ -15,6 +15,7 @@ import type {
   DisableSupport,
 } from './types';
 import { readSkill as codecReadSkill, writeSkill as codecWriteSkill } from './codec';
+import { parseFrontmatterValue } from '../sources/detect';
 
 /**
  * Parses a single YAML value from a string.
@@ -119,7 +120,8 @@ export function parseSkillMarkdown(content: string): CanonicalSkillDocument {
   let description = '';
   const extraFields: Record<string, unknown> = {};
 
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) {
       continue;
@@ -129,8 +131,10 @@ export function parseSkillMarkdown(content: string): CanonicalSkillDocument {
       continue;
     }
     const key = trimmed.slice(0, colonIdx).trim();
-    const rawVal = trimmed.slice(colonIdx + 1).trim();
-    const parsedVal = parseYamlValue(rawVal);
+    const rawVal = trimmed.slice(colonIdx + 1);
+    const { value: parsedStr, nextIndex } = parseFrontmatterValue(lines, i, rawVal);
+    i = nextIndex;
+    const parsedVal = parseYamlValue(parsedStr);
 
     if (key === 'name') {
       name = typeof parsedVal === 'string' ? parsedVal : String(parsedVal ?? '');
@@ -192,7 +196,8 @@ export function parseClaudeAgentMarkdown(content: string): CanonicalAgent {
   let tools: string[] = [];
   const extraFields: Record<string, unknown> = {};
 
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) {
       continue;
@@ -202,8 +207,10 @@ export function parseClaudeAgentMarkdown(content: string): CanonicalAgent {
       continue;
     }
     const key = trimmed.slice(0, colonIdx).trim();
-    const rawVal = trimmed.slice(colonIdx + 1).trim();
-    const parsedVal = parseYamlValue(rawVal);
+    const rawVal = trimmed.slice(colonIdx + 1);
+    const { value: parsedStr, nextIndex } = parseFrontmatterValue(lines, i, rawVal);
+    i = nextIndex;
+    const parsedVal = parseYamlValue(parsedStr);
 
     if (key === 'name') {
       name = typeof parsedVal === 'string' ? parsedVal : String(parsedVal ?? '');
@@ -281,7 +288,8 @@ export function parseClaudeCommandMarkdown(content: string, defaultName = ''): C
   let subtask: boolean | undefined;
   const extraFields: Record<string, unknown> = {};
 
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) {
       continue;
@@ -291,8 +299,10 @@ export function parseClaudeCommandMarkdown(content: string, defaultName = ''): C
       continue;
     }
     const key = trimmed.slice(0, colonIdx).trim();
-    const rawVal = trimmed.slice(colonIdx + 1).trim();
-    const parsedVal = parseYamlValue(rawVal);
+    const rawVal = trimmed.slice(colonIdx + 1);
+    const { value: parsedStr, nextIndex } = parseFrontmatterValue(lines, i, rawVal);
+    i = nextIndex;
+    const parsedVal = parseYamlValue(parsedStr);
 
     if (key === 'name') {
       name = typeof parsedVal === 'string' ? parsedVal : String(parsedVal ?? '');

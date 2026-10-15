@@ -50,6 +50,20 @@ const cliConfig = {
   logLevel: 'info',
 };
 
+const standaloneConfig = {
+  entryPoints: ['./src/dev/standalone.ts'],
+  bundle: true,
+  outfile: './dist/standalone.js',
+  external: ['vscode'],
+  format: 'cjs',
+  platform: 'node',
+  mainFields: ['module', 'main'],
+  target: 'node18',
+  sourcemap: true,
+  minify: false,
+  logLevel: 'info',
+};
+
 function verifyVscodeFree(filePath) {
   if (!fs.existsSync(filePath)) {
     throw new Error(`Build verification failed: ${filePath} does not exist`);
@@ -86,16 +100,19 @@ async function build() {
     if (watch) {
       const extCtx = await esbuild.context(extensionConfig);
       const cliCtx = await esbuild.context(cliConfig);
-      await Promise.all([extCtx.watch(), cliCtx.watch()]);
+      const standaloneCtx = await esbuild.context(standaloneConfig);
+      await Promise.all([extCtx.watch(), cliCtx.watch(), standaloneCtx.watch()]);
       console.log('Watching for changes...');
     } else {
       await Promise.all([
         esbuild.build(extensionConfig),
         esbuild.build(cliConfig),
+        esbuild.build(standaloneConfig),
       ]);
       verifyVscodeFree('./dist/cli.js');
       verifyNoRelativeRequires('./dist/extension.js');
       verifyNoRelativeRequires('./dist/cli.js');
+      verifyNoRelativeRequires('./dist/standalone.js');
       try {
         fs.chmodSync('./dist/cli.js', 0o755);
       } catch {

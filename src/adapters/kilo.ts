@@ -16,6 +16,7 @@ import type {
 } from './types';
 import { readSkill as codecReadSkill, writeSkill as codecWriteSkill } from './codec';
 import { parseYamlValue, serializeYamlValue } from './claude';
+import { parseFrontmatterValue } from '../sources/detect';
 
 /**
  * Parses Kilo agent markdown into CanonicalAgent.
@@ -177,7 +178,8 @@ export function parseKiloCommandMarkdown(content: string, defaultName = ''): Can
   let subtask: boolean | undefined;
   const extraFields: Record<string, unknown> = {};
 
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) {
       continue;
@@ -187,8 +189,10 @@ export function parseKiloCommandMarkdown(content: string, defaultName = ''): Can
       continue;
     }
     const key = trimmed.slice(0, colonIdx).trim();
-    const rawVal = trimmed.slice(colonIdx + 1).trim();
-    const parsedVal = parseYamlValue(rawVal);
+    const rawVal = trimmed.slice(colonIdx + 1);
+    const { value: parsedStr, nextIndex } = parseFrontmatterValue(lines, i, rawVal);
+    i = nextIndex;
+    const parsedVal = parseYamlValue(parsedStr);
 
     if (key === 'name') {
       name = typeof parsedVal === 'string' ? parsedVal : String(parsedVal ?? '');
