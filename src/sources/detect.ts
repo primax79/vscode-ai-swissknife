@@ -175,6 +175,41 @@ export function extractSkillFrontmatter(content: string): { name?: string; descr
   return { name, description };
 }
 
+export const SOURCE_IGNORE_DIRS: readonly string[] = [
+  'node_modules',
+  '.git',
+  '.kilo',
+  '.claude',
+  '.codex',
+  '.gemini',
+  'worktrees',
+  'cache',
+  '.cache',
+  'dist',
+  'out',
+  'build',
+  'target',
+  '_attic',
+  'attic',
+  '_deprecated',
+  'deprecated',
+  '_disabled',
+  'old',
+  'very_old',
+  '.tmp',
+  'tmp',
+  '__pycache__',
+  'venv',
+  '.venv',
+  'env',
+  '.env',
+];
+
+export function shouldIgnoreDirectory(dirName: string): boolean {
+  const lower = dirName.toLowerCase();
+  return SOURCE_IGNORE_DIRS.includes(dirName) || SOURCE_IGNORE_DIRS.includes(lower);
+}
+
 /**
  * Recursively walks `rootDir` looking for directories that directly contain a SKILL.md file.
  */
@@ -233,7 +268,7 @@ export async function findSkillDirs(rootDir: string): Promise<SkillDetectionResu
 
     for (const entry of entries) {
       if (entry.isDirectory()) {
-        if (entry.name === '.git' || entry.name === 'node_modules') {
+        if (shouldIgnoreDirectory(entry.name)) {
           continue;
         }
         await walk(path.join(dir, entry.name));
@@ -265,7 +300,7 @@ export async function findAgentFiles(
 
     for (const entry of entries) {
       if (entry.isDirectory()) {
-        if (entry.name === '.git' || entry.name === 'node_modules') {
+        if (shouldIgnoreDirectory(entry.name)) {
           continue;
         }
         await walk(path.join(dir, entry.name));
@@ -341,7 +376,7 @@ export async function findCommandFiles(
 
     for (const entry of entries) {
       if (entry.isDirectory()) {
-        if (entry.name === '.git' || entry.name === 'node_modules') {
+        if (shouldIgnoreDirectory(entry.name)) {
           continue;
         }
         await walk(path.join(dir, entry.name));
@@ -480,7 +515,7 @@ export async function findHookFiles(
 
     for (const entry of entries) {
       if (entry.isDirectory()) {
-        if (entry.name === '.git' || entry.name === 'node_modules') continue;
+        if (shouldIgnoreDirectory(entry.name)) continue;
         await walk(path.join(dir, entry.name));
       } else if (entry.isFile() && entry.name.endsWith('.json')) {
         const fullPath = path.join(dir, entry.name);

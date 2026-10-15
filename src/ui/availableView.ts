@@ -26,6 +26,7 @@ import {
 import { resolveRecommendations, SourceResolutionAttempt, BrokenReason } from '../engine/recommendations';
 import type { DesiredInstallation } from '../domain/registry';
 import { readState } from '../domain/registry';
+import { uninstallInstallation } from '../engine/uninstall';
 
 export type AvailableTreeItem =
   | AvailableSourceGroupItem
@@ -913,6 +914,39 @@ export class AvailableTreeDataProvider
         artifacts.push(new AvailableArtifactItem(group.source, pkg, art));
       }
     }
+
+    try {
+      let projectRoot: string | undefined;
+      if (group.source.scope === 'project') {
+        projectRoot = await getWorkspaceRoot();
+      }
+      const state = await readState(group.source.scope, projectRoot);
+      const activeArtifactNames = new Set(artifacts.map((a) => a.artifact.name));
+      const obsoleteInstalled = state.installations.filter(
+        (i) => i.sourceId === group.source.id && !activeArtifactNames.has(i.name)
+      );
+      if (obsoleteInstalled.length > 0) {
+        const names = obsoleteInstalled.map((i) => i.name).join(', ');
+        const choice = await vscode.window.showWarningMessage(
+          `Found ${obsoleteInstalled.length} previously installed item(s) from "${group.source.name ?? group.source.id}" that are no longer in the active package (e.g. moved to _attic or removed): ${names}. Would you like to uninstall them?`,
+          { modal: true },
+          'Uninstall Obsolete Items',
+          'Keep Them'
+        );
+        if (choice === 'Uninstall Obsolete Items') {
+          for (const item of obsoleteInstalled) {
+            try {
+              await uninstallInstallation(item, { projectRoot });
+            } catch (err) {
+              console.warn(`[availableView] Failed to uninstall obsolete item ${item.name}:`, err);
+            }
+          }
+        }
+      }
+    } catch {
+      // non-fatal check
+    }
+
     await this.installBatch(artifacts, `source "${group.source.name ?? group.source.id}"`);
   }
 
@@ -957,6 +991,39 @@ export class AvailableTreeDataProvider
         artifacts.push(new AvailableArtifactItem(group.source, pkg, art));
       }
     }
+
+    try {
+      let projectRoot: string | undefined;
+      if (group.source.scope === 'project') {
+        projectRoot = await getWorkspaceRoot();
+      }
+      const state = await readState(group.source.scope, projectRoot);
+      const activeArtifactNames = new Set(artifacts.map((a) => a.artifact.name));
+      const obsoleteInstalled = state.installations.filter(
+        (i) => i.sourceId === group.source.id && !activeArtifactNames.has(i.name)
+      );
+      if (obsoleteInstalled.length > 0) {
+        const names = obsoleteInstalled.map((i) => i.name).join(', ');
+        const choice = await vscode.window.showWarningMessage(
+          `Found ${obsoleteInstalled.length} previously installed item(s) from "${group.source.name ?? group.source.id}" that are no longer in the active package (e.g. moved to _attic or removed): ${names}. Would you like to uninstall them?`,
+          { modal: true },
+          'Uninstall Obsolete Items',
+          'Keep Them'
+        );
+        if (choice === 'Uninstall Obsolete Items') {
+          for (const item of obsoleteInstalled) {
+            try {
+              await uninstallInstallation(item, { projectRoot });
+            } catch (err) {
+              console.warn(`[availableView] Failed to uninstall obsolete item ${item.name}:`, err);
+            }
+          }
+        }
+      }
+    } catch {
+      // non-fatal check
+    }
+
     await this.installBatch(artifacts, `source "${group.source.name ?? group.source.id}"`);
   }
 

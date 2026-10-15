@@ -222,6 +222,29 @@ describe('detect — findSkillDirs with committed fixtures', () => {
     assert.strictEqual(diagnostics.length, 0);
   });
 
+  it('skips _attic, _deprecated, and venv directories when detecting skills', async () => {
+    const tmp = path.join(os.tmpdir(), 'detect-ignore-test-' + Date.now());
+    await fs.promises.mkdir(path.join(tmp, '_attic', 'old-skill'), { recursive: true });
+    await fs.promises.writeFile(path.join(tmp, '_attic', 'old-skill', 'SKILL.md'), '---\nname: old-skill\n---\n');
+
+    await fs.promises.mkdir(path.join(tmp, '_deprecated', 'dep-skill'), { recursive: true });
+    await fs.promises.writeFile(path.join(tmp, '_deprecated', 'dep-skill', 'SKILL.md'), '---\nname: dep-skill\n---\n');
+
+    await fs.promises.mkdir(path.join(tmp, 'venv', 'lib', 'py-skill'), { recursive: true });
+    await fs.promises.writeFile(path.join(tmp, 'venv', 'lib', 'py-skill', 'SKILL.md'), '---\nname: py-skill\n---\n');
+
+    await fs.promises.mkdir(path.join(tmp, 'active-skill'), { recursive: true });
+    await fs.promises.writeFile(path.join(tmp, 'active-skill', 'SKILL.md'), '---\nname: active-skill\n---\n');
+
+    try {
+      const { skills } = await findSkillDirs(tmp);
+      assert.strictEqual(skills.length, 1);
+      assert.strictEqual(skills[0].name, 'active-skill');
+    } finally {
+      await fs.promises.rm(tmp, { recursive: true, force: true });
+    }
+  });
+
   it('throws ENOENT for non-existent directory', async () => {
     try {
       await findSkillDirs(path.join(fixturesRoot, 'does-not-exist-' + Date.now()));
