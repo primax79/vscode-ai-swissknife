@@ -139,8 +139,21 @@ export async function planUpdate(
   let targetPkg: Package | undefined;
   let targetArt: Artifact | undefined;
 
-  if (options?.resolution) {
-    for (const pkg of options.resolution.packages) {
+  let resolution = options?.resolution;
+  if (!resolution) {
+    try {
+      const resolver = getSourceResolver(source.type);
+      resolution = await resolver.resolve(source, {
+        cacheDir: options?.resolverOpts?.cacheDir,
+        homeRoot: options?.homeRoot,
+      });
+    } catch {
+      // resolution fallback
+    }
+  }
+
+  if (resolution) {
+    for (const pkg of resolution.packages) {
       for (const art of pkg.artifacts) {
         if (
           (inst.artifactId && art.id === inst.artifactId) ||

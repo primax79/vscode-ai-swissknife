@@ -349,20 +349,36 @@ export async function resolveArtifactContent(
   if (artifact.packageId !== pkg.id) {
     throw new Error(`Artifact packageId mismatch: expected "${pkg.id}", got "${artifact.packageId}"`);
   }
-  if (!pkg.version?.commit) {
-    throw new Error('Package version commit is required for git-custom content resolution');
-  }
-  validateGitRef('commit', pkg.version.commit);
-
   const baseCacheDir = opts?.cacheDir ?? path.join(opts?.homeRoot ?? os.homedir(), '.ai-swissknife', 'cache', 'sources');
   const { targetDir } = resolveAndValidateCacheDir(baseCacheDir, source.id);
+
+  let commit = pkg.version?.commit;
+  if (!commit) {
+    if (source.commit) {
+      commit = source.commit;
+    } else if (source.tag) {
+      commit = source.tag;
+    } else if (fs.existsSync(path.join(targetDir, '.git'))) {
+      try {
+        const head = await runGit(['rev-parse', 'HEAD'], targetDir);
+        commit = head.stdout.trim();
+      } catch {
+        // non-fatal fallback
+      }
+    }
+  }
+
+  if (!commit) {
+    throw new Error('Package version commit is required for git-custom content resolution');
+  }
+  validateGitRef('commit', commit);
 
   return gitCustomMutex.runExclusive(targetDir, async () => {
     if (!fs.existsSync(path.join(targetDir, '.git'))) {
       throw new Error(`Git cache directory not found or invalid: "${targetDir}"`);
     }
 
-    await runGit(['checkout', pkg.version!.commit, '--'], targetDir);
+    await runGit(['checkout', commit!, '--'], targetDir);
 
     const prefix = `${source.id}:`;
     const pathId = pkg.id.startsWith(prefix) ? pkg.id.slice(prefix.length) : '';
