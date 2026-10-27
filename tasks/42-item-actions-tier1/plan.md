@@ -14,11 +14,6 @@
 
 ## Tasks
 
-### 42.1 - Restore from trash + Empty trash: engine (`listTrash`, `restoreFromTrash`, `deleteFromTrash`, `emptyTrash`) and commands
-
-- **Status:** `delivered` (merged bba4c26 2026-10-09) · **Short:** Restore and empty trash · **Size:** M · **Depends on:** 39.2 · **Spec:** [42.1-restore-from-trash.md](42.1-restore-from-trash.md)
-- **Goal:** Add `.origin.json` sidecar tracking and `listTrash`, `restoreFromTrash`, `deleteFromTrash`, and `emptyTrash` engine functions along with `restoreFromTrash` and `emptyTrash` commands.
-
 ### 42.4 - Dashboard Trash tab: list, Restore, Delete permanently, Empty trash
 
 - **Status:** `open` · **Short:** Dashboard Trash tab · **Size:** M · **Depends on:** 42.1, 40.4 · **Spec:** [42.4-dashboard-trash-tab.md](42.4-dashboard-trash-tab.md)
@@ -38,3 +33,10 @@
 
 - **Status:** `open` · **Short:** Fixed inline trio and overflow · **Size:** M · **Depends on:** 39.2, 40.2, 42.2 · **Spec:** [42.3-surface-policy.md](42.3-surface-policy.md)
 - **Goal:** Enforce a fixed inline action trio on sidebar and Dashboard rows (Favorite/Update/Uninstall for managed; Promote/Diff/Remove for unmanaged) with remaining state-applicable actions in the context/overflow menu.
+
+## Closed
+
+### 42.1 - Restore from trash + Empty trash: engine (`listTrash`, `restoreFromTrash`, `deleteFromTrash`, `emptyTrash`) and commands
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Restore and empty trash · **Size:** M · **Depends on:** 39.2 · **Spec:** [42.1-restore-from-trash.md](42.1-restore-from-trash.md)
+- **Goal:** Add `.origin.json` sidecar tracking and `listTrash`, `restoreFromTrash`, `deleteFromTrash`, and `emptyTrash` engine functions along with `restoreFromTrash` and `emptyTrash` commands.

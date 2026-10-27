@@ -4,16 +4,6 @@
 
 ## Tasks
 
-### 48.1 - Multi-root scanning with ignore rules
-
-- **Status:** `delivered` (merged e7c51e1 2026-10-09) · **Short:** Multi-root workspace scanning · **Size:** M · **Depends on:** 46.1 · **Spec:** [48.1-scan-roots.md](48.1-scan-roots.md)
-- **Goal:** Add `findWorkspaces` and `scanInventoryAcrossRoots` in `src/engine/scanRoots.ts` plus `--roots`, `--max-depth`, `--ignore`, and `--extra-ignore` CLI options for scanning multiple workspaces in one call.
-
-### 48.1b - Evaluate workspace-scan ignore rules relative to each root
-
-- **Status:** `delivered` (merged ca0f1cd 2026-10-09) · **Short:** Relative workspace ignore rules · **Size:** XS · **Kind:** fix · **Depends on:** 48.1
-- **Goal:** Evaluate `findWorkspaces` ignore rules (such as `.kilo/worktrees`) against paths relative to each scanned root rather than the absolute path so roots inside a worktree still scan properly.
-
 ### 48.2 - `installed` flags: link vs copy, broken link, orphan (gone from source), installed twice
 
 - **Status:** `open` (outline only) · **Short:** Installed link and orphan flags · **Size:** M · **Depends on:** 46.1
@@ -69,3 +59,15 @@ Single-item `update <item>`, the "old commit -> new commit, files changed" repor
 ## Follow-ups found while verifying (2026-10-09)
 
 - **48.1b (done 2026-10-09, merged)** — the ignore rules of `findWorkspaces` (notably the `.kilo/worktrees` segment pair) are applied to the **absolute** path, so a root that itself lives under such a path finds nothing (reproduced when the fixture sat inside a Kilo worktree). They should be evaluated on the path **relative to each root**. Small fix + test.
+
+## Closed
+
+### 48.1 - Multi-root scanning with ignore rules
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Multi-root workspace scanning · **Size:** M · **Depends on:** 46.1 · **Spec:** [48.1-scan-roots.md](48.1-scan-roots.md)
+- **Goal:** Add `findWorkspaces` and `scanInventoryAcrossRoots` in `src/engine/scanRoots.ts` plus `--roots`, `--max-depth`, `--ignore`, and `--extra-ignore` CLI options for scanning multiple workspaces in one call.
+
+### 48.1b - Evaluate workspace-scan ignore rules relative to each root
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Relative workspace ignore rules · **Size:** XS · **Kind:** fix · **Depends on:** 48.1
+- **Goal:** Evaluate `findWorkspaces` ignore rules (such as `.kilo/worktrees`) against paths relative to each scanned root rather than the absolute path so roots inside a worktree still scan properly.

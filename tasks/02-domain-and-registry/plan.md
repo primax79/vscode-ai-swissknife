@@ -6,21 +6,6 @@ Tasks (each = one commit; hand one file at a time to a delegated agent):
 
 ## Tasks
 
-### 02.1 - Core domain types
-
-- **Status:** `delivered` (merged eb779ca 2026-08-18) · **Short:** Core domain types · **Size:** S · **Depends on:** 01 · **Spec:** [02.1-domain-types.md](02.1-domain-types.md)
-- **Goal:** Define every core entity from the spec (`AssistantId`, `ItemKind`, `Scope`, `Source`, `Package`, `Artifact`, `ManagedInstallation`, `ObservedArtifact`) as TypeScript interfaces in `src/domain/types.ts`.
-
-### 02.2 - Registry store (read/write JSON, global + project)
-
-- **Status:** `delivered` (merged 6b6c5fe 2026-08-18; commit 7c2c036) · **Short:** Registry JSON store · **Size:** S · **Depends on:** 02.1 · **Spec:** [02.2-registry-store.md](02.2-registry-store.md)
-- **Goal:** Implement pure-Node atomic JSON read/write functions for the registry at global and project scopes.
-
-### 02.3 - Persistence and resolved-artifact model (hardening)
-
-- **Status:** `delivered` (merged 29fe38b 2026-08-19) · **Short:** Portable persistence and hardening · **Size:** M · **Depends on:** 02.2, 03.4 · **Spec:** [02.3-hardening.md](02.3-hardening.md)
-- **Goal:** Split persistence into shareable `manifest.json` (`DesiredSource`, `desiredInstallations`) and machine-local `state.json` under `.ai-swissknife`, and add typed `ResolvedArtifact<CanonicalSkill>` content resolution and a shared Git cache mutex.
-
 ## Shared decisions
 
 Shared decisions for this initiative that every task must honour:
@@ -47,3 +32,20 @@ Shared decisions for this initiative that every task must honour:
   exist so the new files typecheck and build). The open 02.3 hardening
   task additionally depends on 03.4's shared skill codec; completed 02.1/
   02.2 remain the domain/store foundation that 03.4 already uses.
+
+## Closed
+
+### 02.1 - Core domain types
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Core domain types · **Size:** S · **Depends on:** 01 · **Spec:** [02.1-domain-types.md](02.1-domain-types.md)
+- **Goal:** Define every core entity from the spec (`AssistantId`, `ItemKind`, `Scope`, `Source`, `Package`, `Artifact`, `ManagedInstallation`, `ObservedArtifact`) as TypeScript interfaces in `src/domain/types.ts`.
+
+### 02.2 - Registry store (read/write JSON, global + project)
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Registry JSON store · **Size:** S · **Depends on:** 02.1 · **Spec:** [02.2-registry-store.md](02.2-registry-store.md)
+- **Goal:** Implement pure-Node atomic JSON read/write functions for the registry at global and project scopes.
+
+### 02.3 - Persistence and resolved-artifact model (hardening)
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Portable persistence and hardening · **Size:** M · **Depends on:** 02.2, 03.4 · **Spec:** [02.3-hardening.md](02.3-hardening.md)
+- **Goal:** Split persistence into shareable `manifest.json` (`DesiredSource`, `desiredInstallations`) and machine-local `state.json` under `.ai-swissknife`, and add typed `ResolvedArtifact<CanonicalSkill>` content resolution and a shared Git cache mutex.

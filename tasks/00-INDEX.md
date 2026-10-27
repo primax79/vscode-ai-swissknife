@@ -139,54 +139,55 @@ hands-on testing round.
 <!-- ai-orch:generated initiatives -->
 | Priority | #   | Initiative                                                                                | Status                         | Depends on             | Size |
 | -------- | --- | ----------------------------------------------------------------------------------------- | ------------------------------ | ---------------------- | ---- |
-| 1 | 01 | [Project scaffold](01-project-scaffold/plan.md) | in progress (to verify: 01.1–01.3) | — | S |
-| 2 | 02 | [Domain types + registry store](02-domain-and-registry/plan.md) | in progress (to verify: 02.1–02.3) | 01 | S |
-| 3 | 03 | [Claude + Kilo adapters (skill+rule)](03-claude-kilo-adapters/plan.md) | in progress (to verify: 03.1–03.4) | 02 | M |
-| 4 | 04 | [Source resolver (git-custom + local-folder)](04-source-resolver/plan.md) | in progress (to verify: 04.1–04.3) | 02 | M |
-| 5 | 05 | [Canonical model + translator (skill)](05-translator-skill/plan.md) | in progress (to verify: 05.1–05.2) | 03.4 | M |
-| 6 | 06 | [Install engine (pipeline)](06-install-engine/plan.md) | in progress (to verify: 06.1–06.2) | 05, 02.3, 03.4, 04.3 | M |
-| 7 | 07 | [Minimal UI (3 views)](07-minimal-ui/plan.md) | in progress (to verify: 07.1–07.3) | 06 | M |
-| 8 | 08 | [Agent artifact support](08-agent-support/plan.md) | in progress (to verify: 08.1–08.3) | 07 | M |
-| 9 | 09 | [Command artifact support](09-command-support/plan.md) | in progress (to verify: 09.1–09.3) | 08 | M |
-| 10 | 10 | [MCP-server artifact support](10-mcp-support/plan.md) | in progress (to verify: 10.1–10.3) | 08 | L |
-| 11 | 11 | [Marketplace sources resolver](11-marketplace-sources/plan.md) | in progress (to verify: 11.1–11.3) | 08, 09, 10 | M |
-| 12 | 12 | [GitHub Copilot adapter](12-copilot-adapter/plan.md) | in progress (to verify: 12.1–12.3) | 08, 09, 10 | M |
-| 13 | 13 | [Drift & update detection](13-drift-and-updates/plan.md) | in progress (to verify: 13.1–13.3) | 12 | M |
-| 14 | 14 | [Discovery & promotion](14-discovery-promotion/plan.md) | in progress (to verify: 14.1–14.3) | 13 | M |
-| 15 | 15 | [File watchers for consistency](15-file-watchers/plan.md) | in progress (to verify: 15.1–15.2) | 13 | S |
-| 16 | 16 | [Management dashboard webview](16-dashboard-webview/plan.md) | in progress (to verify: 16.1–16.3) | 13, 14, 15 | L |
-| 17 | 17 | [Form editor webview](17-form-editor/plan.md) | in progress (to verify: 17.1–17.3) | 08, 09, 10, 16 | M |
-| 18 | 18 | [Cross-assistant sync](18-cross-assistant-sync/plan.md) | in progress (to verify: 18.1–18.3) | 06, 13, 14, 16 | M |
-| 19 | 19 | [`hook` kind + active `rule` merge](19-hook-and-rule-merge/plan.md) | in progress (to verify: 19.1–19.4) | 03, 06, 12 | L |
-| 20 | 20 | [`remote-url` & `git-single-item` sources](20-remote-url-and-single-item-sources/plan.md) | in progress (to verify: 20.1–20.3) | 04, 11 | M |
-| 21 | 21 | [Codex CLI & Gemini CLI adapters](21-codex-gemini-adapters/plan.md) | in progress (to verify: 21.1–21.4) | 03, 05, 08, 09, 10, 12 | L |
-| 22 | 22 | [Project-scoped recommended installations](22-project-recommendations/plan.md) | in progress (to verify: 22.1–22.5) | 02, 06, 07 | M |
-| 23 | 23 | [Cross-framework identity lookup + shared content accessor](23-cross-framework-lookup/plan.md) | in progress (to verify: 23.1–23.3) | 13, 14 | M |
-| 24 | 24 | [Diff-vs-original + preview-before-install](24-diff-and-preview/plan.md) | in progress (to verify: 24.1–24.2) | 23 | M |
-| 25 | 25 | [Move action + Promote disambiguation fix](25-move-and-promote-fix/plan.md) | in progress (to verify: 25.1–25.5) | 14, 18 | M |
-| 26 | 26 | [Dashboard rebuild: unified table, filters, detail](26-dashboard-rebuild/plan.md) | in progress (to verify: 26.1–26.2) | 16, 23, 24, 25 | L |
-| 27 | 27 | [New Dashboard entry points](27-dashboard-entry-points/plan.md) | in progress (to verify: 27.1–27.2) | 22, 26 | S |
-| 28 | 28 | [Sidebar navigation unification](28-sidebar-unification/plan.md) | in progress (to verify: 28.1–28.2) | 16, 22 | M |
-| 29 | 29 | [Adapter registry & enabled-assistants config](29-adapter-registry/plan.md) | in progress (to verify: 29.1–29.5) | 03, 12, 21 | M |
-| 30 | 30 | [Source-resolver registry](30-source-resolver-registry/plan.md) | in progress (to verify: 30.1–30.4) | 04, 11, 20 | M |
-| 31 | 31 | [Dashboard: provider action-layer decoupling](31-dashboard-action-decoupling/plan.md) | in progress (to verify: 31.1–31.4) | 28, 29, 30 | M |
-| 32 | 32 | [Dashboard: structural skeleton](32-dashboard-skeleton/plan.md) | in progress (to verify: 32.1–32.3) | 28, 29 | M |
-| 33 | 33 | [Dashboard: Sources & Catalog section](33-dashboard-sources-catalog/plan.md) | in progress (to verify: 33.1–33.5) | 31, 32 | L |
-| 34 | 34 | [Dashboard: Recommendations + Installed action parity](34-dashboard-recommendations-parity/plan.md) | in progress (to verify: 34.1–34.3) | 31, 32 | M |
-| 35 | 35 | [Dashboard: hands-on testing fixes](35-dashboard-hands-on-fixes/plan.md) | in progress (to verify: 35.1–35.5) | 31, 32, 33, 34 | M |
-| 36 | 36 | [Add-source wizard](36-add-source-wizard/plan.md) | in progress (to verify: 36.1–36.3) | 29, 30, 31 | M |
-| 37 | 37 | [Install to multiple assistants and scopes](37-install-multi-target/plan.md) | in progress (to verify: 37.1) | 29, 31 | M |
-| 38 | 38 | [Per-source refresh](38-per-source-refresh/plan.md) | in progress (to verify: 38.1–38.2) | 31, 33 | S |
-| 39 | 39 | [Dashboard Installed: bug, action parity, status clarity](39-dashboard-installed-fixes/plan.md) | in progress (running: 39.2; to verify: 39.1, 39.4) | 31, 32, 34, 35 | M |
-| 40 | 40 | [Dashboard Installed: collapsible object tree](40-dashboard-collapsible-objects/plan.md) | in progress (running: 40.3; to verify: 40.1–40.2, 40.4–40.5) | 35, 39.1 | L |
-| 41 | 41 | [Install elsewhere from a Dashboard row](41-install-elsewhere/plan.md) | in progress (running: 41.1) | 37, 40 | M |
-| 42 | 42 | [Item actions, Tier 1 remainder](42-item-actions-tier1/plan.md) | in progress (to verify: 42.1) | 39.2, 40 | M |
-| 43 | 43 | [Disabled state for installed items](43-disabled-state/plan.md) | in progress (to verify: 43.1–43.3) | 40, 42 | L |
-| 44 | 44 | [Hardening and fixes from the kilocode-dev cross-check](44-hardening-from-kilocode-dev/plan.md) | in progress (to verify: 44.1, 44.3–44.6) | 36.1, 38.1 | M |
-| 45 | 45 | [Claude Code plugins, native management](45-claude-plugins/plan.md) | in progress (to verify: 45.2) | 40, 42 | L |
-| 46 | 46 | [CLI access to the extension](46-cli-access/plan.md) | in progress (to verify: 46.1–46.5) | 37.1, 44.1 | M |
-| 47 | 47 | [Update all](47-update-all/plan.md) | in progress (running: 47.3; to verify: 47.1–47.2, 47.4) | 37.1 | M |
-| 48 | 48 | [Maintainer features for the CLI](48-cli-maintainer-features/plan.md) | in progress (to verify: 48.1, 48.1b) | 46, 47 | L |
+| 1 | 01 | [Project scaffold](01-project-scaffold/plan.md) | done | — | S |
+| 2 | 02 | [Domain types + registry store](02-domain-and-registry/plan.md) | done | 01 | S |
+| 3 | 03 | [Claude + Kilo adapters (skill+rule)](03-claude-kilo-adapters/plan.md) | done | 02 | M |
+| 4 | 04 | [Source resolver (git-custom + local-folder)](04-source-resolver/plan.md) | done | 02 | M |
+| 5 | 05 | [Canonical model + translator (skill)](05-translator-skill/plan.md) | done | 03.4 | M |
+| 6 | 06 | [Install engine (pipeline)](06-install-engine/plan.md) | done | 05, 02.3, 03.4, 04.3 | M |
+| 7 | 07 | [Minimal UI (3 views)](07-minimal-ui/plan.md) | done | 06 | M |
+| 8 | 08 | [Agent artifact support](08-agent-support/plan.md) | done | 07 | M |
+| 9 | 09 | [Command artifact support](09-command-support/plan.md) | done | 08 | M |
+| 10 | 10 | [MCP-server artifact support](10-mcp-support/plan.md) | done | 08 | L |
+| 11 | 11 | [Marketplace sources resolver](11-marketplace-sources/plan.md) | done | 08, 09, 10 | M |
+| 12 | 12 | [GitHub Copilot adapter](12-copilot-adapter/plan.md) | done | 08, 09, 10 | M |
+| 13 | 13 | [Drift & update detection](13-drift-and-updates/plan.md) | done | 12 | M |
+| 14 | 14 | [Discovery & promotion](14-discovery-promotion/plan.md) | done | 13 | M |
+| 15 | 15 | [File watchers for consistency](15-file-watchers/plan.md) | done | 13 | S |
+| 16 | 16 | [Management dashboard webview](16-dashboard-webview/plan.md) | done | 13, 14, 15 | L |
+| 17 | 17 | [Form editor webview](17-form-editor/plan.md) | done | 08, 09, 10, 16 | M |
+| 18 | 18 | [Cross-assistant sync](18-cross-assistant-sync/plan.md) | done | 06, 13, 14, 16 | M |
+| 19 | 19 | [`hook` kind + active `rule` merge](19-hook-and-rule-merge/plan.md) | done | 03, 06, 12 | L |
+| 20 | 20 | [`remote-url` & `git-single-item` sources](20-remote-url-and-single-item-sources/plan.md) | done | 04, 11 | M |
+| 21 | 21 | [Codex CLI & Gemini CLI adapters](21-codex-gemini-adapters/plan.md) | done | 03, 05, 08, 09, 10, 12 | L |
+| 22 | 22 | [Project-scoped recommended installations](22-project-recommendations/plan.md) | done | 02, 06, 07 | M |
+| 23 | 23 | [Cross-framework identity lookup + shared content accessor](23-cross-framework-lookup/plan.md) | done | 13, 14 | M |
+| 24 | 24 | [Diff-vs-original + preview-before-install](24-diff-and-preview/plan.md) | done | 23 | M |
+| 25 | 25 | [Move action + Promote disambiguation fix](25-move-and-promote-fix/plan.md) | done | 14, 18 | M |
+| 26 | 26 | [Dashboard rebuild: unified table, filters, detail](26-dashboard-rebuild/plan.md) | done | 16, 23, 24, 25 | L |
+| 27 | 27 | [New Dashboard entry points](27-dashboard-entry-points/plan.md) | done | 22, 26 | S |
+| 28 | 28 | [Sidebar navigation unification](28-sidebar-unification/plan.md) | done | 16, 22 | M |
+| 29 | 29 | [Adapter registry & enabled-assistants config](29-adapter-registry/plan.md) | done | 03, 12, 21 | M |
+| 30 | 30 | [Source-resolver registry](30-source-resolver-registry/plan.md) | done | 04, 11, 20 | M |
+| 31 | 31 | [Dashboard: provider action-layer decoupling](31-dashboard-action-decoupling/plan.md) | done | 28, 29, 30 | M |
+| 32 | 32 | [Dashboard: structural skeleton](32-dashboard-skeleton/plan.md) | done | 28, 29 | M |
+| 33 | 33 | [Dashboard: Sources & Catalog section](33-dashboard-sources-catalog/plan.md) | done | 31, 32 | L |
+| 34 | 34 | [Dashboard: Recommendations + Installed action parity](34-dashboard-recommendations-parity/plan.md) | done | 31, 32 | M |
+| 35 | 35 | [Dashboard: hands-on testing fixes](35-dashboard-hands-on-fixes/plan.md) | done | 31, 32, 33, 34 | M |
+| 36 | 36 | [Add-source wizard](36-add-source-wizard/plan.md) | done | 29, 30, 31 | M |
+| 37 | 37 | [Install to multiple assistants and scopes](37-install-multi-target/plan.md) | in progress (done: 37.1; next: 37.2–37.3) | 29, 31 | M |
+| 38 | 38 | [Per-source refresh](38-per-source-refresh/plan.md) | done | 31, 33 | S |
+| 39 | 39 | [Dashboard Installed: bug, action parity, status clarity](39-dashboard-installed-fixes/plan.md) | in progress (done: 39.1, 39.4; running: 39.2) | 31, 32, 34, 35 | M |
+| 40 | 40 | [Dashboard Installed: collapsible object tree](40-dashboard-collapsible-objects/plan.md) | done | 35, 39.1 | L |
+| 41 | 41 | [Install elsewhere from a Dashboard row](41-install-elsewhere/plan.md) | in progress (done: 41.1; next: 41.2) | 37, 40 | M |
+| 42 | 42 | [Item actions, Tier 1 remainder](42-item-actions-tier1/plan.md) | in progress (done: 42.1; next: 42.2–42.5) | 39.2, 40 | M |
+| 43 | 43 | [Disabled state for installed items](43-disabled-state/plan.md) | in progress (done: 43.1–43.3; next: 43.4) | 40, 42 | L |
+| 44 | 44 | [Hardening and fixes from the kilocode-dev cross-check](44-hardening-from-kilocode-dev/plan.md) | in progress (done: 44.1, 44.3–44.6; next: 44.2) | 36.1, 38.1 | M |
+| 45 | 45 | [Claude Code plugins, native management](45-claude-plugins/plan.md) | in progress (done: 45.2; next: 45.3–45.5) | 40, 42 | L |
+| 46 | 46 | [CLI access to the extension](46-cli-access/plan.md) | done | 37.1, 44.1 | M |
+| 47 | 47 | [Update all](47-update-all/plan.md) | done | 37.1 | M |
+| 48 | 48 | [Maintainer features for the CLI](48-cli-maintainer-features/plan.md) | in progress (done: 48.1, 48.1b; next: 48.2–48.8) | 46, 47 | L |
+| 49 | 49 | [Install provenance and update detection — Implementation plan](49-install-provenance/plan.md) | open | - | - |
 <!-- /ai-orch:generated initiatives -->
 
 ## Next up
@@ -233,6 +234,7 @@ No emergent tasks yet. Add a category folder (`tasks/<category>/` with a `README
 | [dev-deploy-study](specs/dev-deploy-study.md) | - |
 | [disabled-state-study](specs/disabled-state-study.md) | - |
 | [foundations](specs/foundations.md)                          | 01, 02, 03, 04, 05, 06, 07 |
+| [install-provenance-and-update-detection](specs/install-provenance-and-update-detection.md) | - |
 | [mcp-cli-access-study](specs/mcp-cli-access-study.md) | - |
 | [phase-2-spec](specs/phase-2-spec.md)                        | 08, 09, 10, 11, 12         |
 | [phase-3-spec](specs/phase-3-spec.md)                        | 13, 14, 15, 16             |

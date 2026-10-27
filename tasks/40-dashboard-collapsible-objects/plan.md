@@ -32,27 +32,29 @@ None.
 
 ## Tasks
 
+## Closed
+
 ### 40.1 - Pure model: build the object → places tree from managed + observed
 
-- **Status:** `delivered` (merged 259c313 2026-10-09) · **Short:** Object-to-places tree model · **Size:** M · **Depends on:** - · **Spec:** [40.1-installed-tree-model.md](40.1-installed-tree-model.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Object-to-places tree model · **Size:** M · **Depends on:** - · **Spec:** [40.1-installed-tree-model.md](40.1-installed-tree-model.md)
 - **Goal:** Create `src/engine/installedTree.ts` exporting `buildInstalledTree` to group managed and unmanaged items into one `InstalledObject` per `(kind, name)` with sorted `Place` children and `worstState`.
 
 ### 40.2 - One server-side renderer: collapsed row (chip strip + worst state), child rows per place, filters/sort/detail adapted
 
-- **Status:** `delivered` (merged b66e068 2026-10-09) · **Short:** Single installed tree renderer · **Size:** L · **Depends on:** 40.1, 40.4, 39.1 · **Spec:** [40.2-single-renderer.md](40.2-single-renderer.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Single installed tree renderer · **Size:** L · **Depends on:** 40.1, 40.4, 39.1 · **Spec:** [40.2-single-renderer.md](40.2-single-renderer.md)
 - **Goal:** Replace the duplicate matrix builders and separate unmanaged table with a single server-side `renderInstalledTree` rendering collapsible object parent rows with place-chip strips and child place rows.
 
 ### 40.3 - Expand all / Collapse all + collapse state kept across refreshes
 
-- **Status:** `in progress` (committed on unmerged branch kilo/f80111d807ac at 7b40d4f 2026-10-09; not yet merged into main) · **Short:** Expand and collapse all · **Size:** S · **Depends on:** 40.2 · **Spec:** [40.3-expand-collapse-all.md](40.3-expand-collapse-all.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Expand and collapse all · **Size:** S · **Depends on:** 40.2 · **Spec:** [40.3-expand-collapse-all.md](40.3-expand-collapse-all.md)
 - **Goal:** Add Expand all and Collapse all icon buttons to the Installed toolbar and persist expanded parent identities in webview state across data refreshes.
-
-### 40.5 - Filter bar: Env/Scope/Membership/Kind as visually grouped pill groups (replaces the `<select>`s)
-
-- **Status:** `delivered` (merged 4412b33 2026-10-09) · **Short:** Grouped filter bar pills · **Size:** S · **Depends on:** 40.2, 40.4 · **Spec:** [40.5-filter-bar.md](40.5-filter-bar.md)
-- **Goal:** Replace the Scope and Membership `<select>` dropdowns and separate Kind tab row with four visually grouped, labelled pill groups (ENV, SCOPE, MEMBERSHIP, KIND).
 
 ### 40.4 - Scope vocabulary (Global/Workspace) + icons as a shared module — run before 40.2
 
-- **Status:** `delivered` (merged bc4b935 2026-10-09) · **Short:** Shared scope vocabulary and icons · **Size:** S · **Depends on:** - · **Spec:** [40.4-scope-icons.md](40.4-scope-icons.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Shared scope vocabulary and icons · **Size:** S · **Depends on:** - · **Spec:** [40.4-scope-icons.md](40.4-scope-icons.md)
 - **Goal:** Create `src/ui/scopeIcons.ts` as the single source of truth for Global/Workspace labels and icons and replace user-facing "Project" scope strings across the UI.
+
+### 40.5 - Filter bar: Env/Scope/Membership/Kind as visually grouped pill groups (replaces the `<select>`s)
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Grouped filter bar pills · **Size:** S · **Depends on:** 40.2, 40.4 · **Spec:** [40.5-filter-bar.md](40.5-filter-bar.md)
+- **Goal:** Replace the Scope and Membership `<select>` dropdowns and separate Kind tab row with four visually grouped, labelled pill groups (ENV, SCOPE, MEMBERSHIP, KIND).

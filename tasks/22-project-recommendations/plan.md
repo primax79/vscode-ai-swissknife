@@ -10,31 +10,6 @@ Tasks (each = one commit):
 
 ## Tasks
 
-### 22.1 - Recommend/unrecommend commands + tree decoration
-
-- **Status:** `delivered` (merged 66952f8 2026-09-07; commit 903c814) · **Short:** Recommend and unrecommend commands · **Size:** S · **Depends on:** 02, 07 · **Spec:** [22.1-recommend-commands.md](22.1-recommend-commands.md)
-- **Goal:** Add context-menu actions on Available and Installed items to write or remove `DesiredInstallation` entries in the project manifest with a Recommended decoration and dual-view refresh.
-
-### 22.2 - Recommendation resolution engine
-
-- **Status:** `delivered` (merged 716cdbc 2026-09-07; commit d170427) · **Short:** Recommendation resolution engine · **Size:** M · **Depends on:** 02, 06 · **Spec:** [22.2-resolution-engine.md](22.2-resolution-engine.md)
-- **Goal:** Implement pure `resolveRecommendations` in `src/engine/recommendations.ts` classifying `desiredInstallations` against `state.json` and source resolution attempts into `satisfied`, `pending`, and `broken`.
-
-### 22.3 - "Install Recommended" command + Available-view "Recommended" filter
-
-- **Status:** `delivered` (merged 0b01b26 2026-09-07; commit 2b45d66) · **Short:** Install Recommended and tree group · **Size:** M · **Depends on:** 22.2 · **Spec:** [22.3-install-recommended.md](22.3-install-recommended.md)
-- **Goal:** Add the `aiSwissknife.installRecommended` command and the `Recommended` grouping in `AvailableTreeDataProvider` using per-entry target assistant/scope installation.
-
-### 22.4 - Workspace-open detection + notification
-
-- **Status:** `delivered` (merged 1612940 2026-09-07; commit 4252ad6) · **Short:** Workspace-open recommendation prompt · **Size:** S · **Depends on:** 22.2, 22.3 · **Spec:** [22.4-open-prompt.md](22.4-open-prompt.md)
-- **Goal:** Wire a local-only unsatisfied-recommendations check on activation offering `Install All`, `Review`, and `Don't ask again for this workspace`.
-
-### 22.5 - Git hygiene for the shared manifest
-
-- **Status:** `delivered` (merged 8ff9218 2026-09-07; commit fde6da7) · **Short:** Project state.json gitignore hygiene · **Size:** XS · **Depends on:** 02 · **Spec:** [22.5-gitignore-hygiene.md](22.5-gitignore-hygiene.md)
-- **Goal:** Ensure `writeManifest` at project scope non-destructively appends the project `state.json` path to an existing `.gitignore`.
-
 ## Task order and gating
 
 - **22.2 gates 22.3 and 22.4** — both call into the same resolution
@@ -48,3 +23,30 @@ Tasks (each = one commit):
   all four** (centralized in `writeManifest`, not in any UI handler) — both
   could ship in parallel with the others, but are listed in reading order
   for a single agent working through the initiative sequentially.
+
+## Closed
+
+### 22.1 - Recommend/unrecommend commands + tree decoration
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Recommend and unrecommend commands · **Size:** S · **Depends on:** 02, 07 · **Spec:** [22.1-recommend-commands.md](22.1-recommend-commands.md)
+- **Goal:** Add context-menu actions on Available and Installed items to write or remove `DesiredInstallation` entries in the project manifest with a Recommended decoration and dual-view refresh.
+
+### 22.2 - Recommendation resolution engine
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Recommendation resolution engine · **Size:** M · **Depends on:** 02, 06 · **Spec:** [22.2-resolution-engine.md](22.2-resolution-engine.md)
+- **Goal:** Implement pure `resolveRecommendations` in `src/engine/recommendations.ts` classifying `desiredInstallations` against `state.json` and source resolution attempts into `satisfied`, `pending`, and `broken`.
+
+### 22.3 - "Install Recommended" command + Available-view "Recommended" filter
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Install Recommended and tree group · **Size:** M · **Depends on:** 22.2 · **Spec:** [22.3-install-recommended.md](22.3-install-recommended.md)
+- **Goal:** Add the `aiSwissknife.installRecommended` command and the `Recommended` grouping in `AvailableTreeDataProvider` using per-entry target assistant/scope installation.
+
+### 22.4 - Workspace-open detection + notification
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Workspace-open recommendation prompt · **Size:** S · **Depends on:** 22.2, 22.3 · **Spec:** [22.4-open-prompt.md](22.4-open-prompt.md)
+- **Goal:** Wire a local-only unsatisfied-recommendations check on activation offering `Install All`, `Review`, and `Don't ask again for this workspace`.
+
+### 22.5 - Git hygiene for the shared manifest
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Project state.json gitignore hygiene · **Size:** XS · **Depends on:** 02 · **Spec:** [22.5-gitignore-hygiene.md](22.5-gitignore-hygiene.md)
+- **Goal:** Ensure `writeManifest` at project scope non-destructively appends the project `state.json` path to an existing `.gitignore`.

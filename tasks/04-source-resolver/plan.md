@@ -6,21 +6,6 @@ Tasks (each = one commit; hand one file at a time to a delegated agent):
 
 ## Tasks
 
-### 04.1 - Format detection + local-folder resolver
-
-- **Status:** `delivered` (merged 6b6c5fe 2026-08-18; commit 42e92f4) · **Short:** Local-folder resolver and detection · **Size:** M · **Depends on:** 02.1 · **Spec:** [04.1-local-folder-resolver.md](04.1-local-folder-resolver.md)
-- **Goal:** Walk a directory tree without requiring a manifest (`findSkillDirs`) and resolve `local-folder` sources into `Package[]` containing `skill` artifacts.
-
-### 04.2 - git-custom resolver
-
-- **Status:** `delivered` (merged 7904ab6 2026-08-18; commit 24be057) · **Short:** Git-custom source resolver · **Size:** M · **Depends on:** 04.1 · **Spec:** [04.2-git-custom-resolver.md](04.2-git-custom-resolver.md)
-- **Goal:** Resolve `git-custom` sources by cloning/fetching into a local cache directory with branch/tag/commit pinning and reusing `04.1`'s format detection.
-
-### 04.3 - Resolver hardening + portable fixtures
-
-- **Status:** `delivered` (merged ad662b7 2026-08-19; commit 1ca2e87) · **Short:** Resolver diagnostics and fixtures · **Size:** M · **Depends on:** 04.2, 02.3, 03.4 · **Spec:** [04.3-hardening.md](04.3-hardening.md)
-- **Goal:** Return `SourceResolution { packages, diagnostics }` from resolvers, serialize Git checkout and content reads under one mutex, and replace machine-specific test paths with committed fixtures.
-
 ## Shared decisions
 
 Shared decisions for this initiative that every task must honour:
@@ -48,3 +33,20 @@ Shared decisions for this initiative that every task must honour:
   depends on `03.4` for the codec/detector contract and `02.3` for typed
   `resolveArtifactContent`, `ResolvedRevision`, and the shared Git mutex.
   It lands after both.
+
+## Closed
+
+### 04.1 - Format detection + local-folder resolver
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Local-folder resolver and detection · **Size:** M · **Depends on:** 02.1 · **Spec:** [04.1-local-folder-resolver.md](04.1-local-folder-resolver.md)
+- **Goal:** Walk a directory tree without requiring a manifest (`findSkillDirs`) and resolve `local-folder` sources into `Package[]` containing `skill` artifacts.
+
+### 04.2 - git-custom resolver
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Git-custom source resolver · **Size:** M · **Depends on:** 04.1 · **Spec:** [04.2-git-custom-resolver.md](04.2-git-custom-resolver.md)
+- **Goal:** Resolve `git-custom` sources by cloning/fetching into a local cache directory with branch/tag/commit pinning and reusing `04.1`'s format detection.
+
+### 04.3 - Resolver hardening + portable fixtures
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Resolver diagnostics and fixtures · **Size:** M · **Depends on:** 04.2, 02.3, 03.4 · **Spec:** [04.3-hardening.md](04.3-hardening.md)
+- **Goal:** Return `SourceResolution { packages, diagnostics }` from resolvers, serialize Git checkout and content reads under one mutex, and replace machine-specific test paths with committed fixtures.

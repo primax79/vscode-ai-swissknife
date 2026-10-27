@@ -6,21 +6,6 @@ Tasks (each = one commit; hand one file at a time to a delegated agent):
 
 ## Tasks
 
-### 07.1 - Activity Bar container + Sources view
-
-- **Status:** `delivered` (merged 634b8ee 2026-08-19; commit 1a39b7a) · **Short:** Activity Bar and Sources view · **Size:** M · **Depends on:** 02.3 · **Spec:** [07.1-sources-view.md](07.1-sources-view.md)
-- **Goal:** Add the `ai-swissknife` Activity Bar container, reusable multi-root workspace folder picker, and registry-backed `SourcesTreeDataProvider` with add/remove/reload commands.
-
-### 07.2 - Available view (browse + install command)
-
-- **Status:** `delivered` (merged 634b8ee 2026-08-19; commit 1a39b7a) · **Short:** Available view and install command · **Size:** M · **Depends on:** 04.3, 06.1, 06.2, 07.1 · **Spec:** [07.2-available-view.md](07.2-available-view.md)
-- **Goal:** Implement `AvailableTreeDataProvider` displaying resolved packages, artifacts, and diagnostics with preview and conflict-checked installation.
-
-### 07.3 - Installed view (registry-backed)
-
-- **Status:** `delivered` (merged 634b8ee 2026-08-19; commit 1a39b7a) · **Short:** Registry-backed Installed view · **Size:** S · **Depends on:** 02.3, 07.1, 07.2 · **Spec:** [07.3-installed-view.md](07.3-installed-view.md)
-- **Goal:** Implement `InstalledTreeDataProvider` listing `ManagedInstallation` records from `state.json` grouped by assistant and scope.
-
 ## Shared decisions
 
 Shared decisions for this initiative that every task must honour:
@@ -55,3 +40,20 @@ Shared decisions for this initiative that every task must honour:
   `plan.md`) for the Available view's install action, but the Sources
   view (07.1) only depends on 02 (registry, hardened by 02.3) and can be
   built and tested before 06 lands if delegated separately.
+
+## Closed
+
+### 07.1 - Activity Bar container + Sources view
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Activity Bar and Sources view · **Size:** M · **Depends on:** 02.3 · **Spec:** [07.1-sources-view.md](07.1-sources-view.md)
+- **Goal:** Add the `ai-swissknife` Activity Bar container, reusable multi-root workspace folder picker, and registry-backed `SourcesTreeDataProvider` with add/remove/reload commands.
+
+### 07.2 - Available view (browse + install command)
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Available view and install command · **Size:** M · **Depends on:** 04.3, 06.1, 06.2, 07.1 · **Spec:** [07.2-available-view.md](07.2-available-view.md)
+- **Goal:** Implement `AvailableTreeDataProvider` displaying resolved packages, artifacts, and diagnostics with preview and conflict-checked installation.
+
+### 07.3 - Installed view (registry-backed)
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Registry-backed Installed view · **Size:** S · **Depends on:** 02.3, 07.1, 07.2 · **Spec:** [07.3-installed-view.md](07.3-installed-view.md)
+- **Goal:** Implement `InstalledTreeDataProvider` listing `ManagedInstallation` records from `state.json` grouped by assistant and scope.

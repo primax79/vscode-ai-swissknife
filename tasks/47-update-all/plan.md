@@ -19,22 +19,24 @@ Updating is one item at a time: `InstalledTreeDataProvider.doUpdateInstallation`
 
 ## Tasks
 
+## Closed
+
 ### 47.1 - Engine: `planUpdate` extracted from the UI, `planUpdateAll` / `applyUpdateAll`
 
-- **Status:** `delivered` (merged fe12536 2026-10-08) · **Short:** Engine update all · **Size:** M · **Depends on:** 37.1 · **Spec:** [47.1-engine-update-all.md](47.1-engine-update-all.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Engine update all · **Size:** M · **Depends on:** 37.1 · **Spec:** [47.1-engine-update-all.md](47.1-engine-update-all.md)
 - **Goal:** Extract `planUpdate` into `src/engine/update.ts` and implement `planUpdateAll` and `applyUpdateAll` with once-per-source resolution and trash backup for locally modified items.
-
-### 47.4 - Drift check resolves each source once (was once per item: N git fetches)
-
-- **Status:** `delivered` (merged 0b2e558 2026-10-09) · **Short:** Drift resolves each source once · **Size:** S · **Depends on:** 47.1 · **Spec:** [47.4-drift-resolve-once.md](47.4-drift-resolve-once.md)
-- **Goal:** Add `checkDriftForAll` in `src/engine/drift.ts` so a drift check over multiple installations resolves each source once per run instead of once per item.
-
-### 47.3 - Hold an item out of Update all (flag, engine bucket, UI toggle and marker)
-
-- **Status:** `in progress` (committed on unmerged branch kilo/e8c0937be8d1 at 26fde17 2026-10-09; not yet merged into main) · **Short:** Hold item from update all · **Size:** S · **Depends on:** 47.1, 47.2 · **Spec:** [47.3-hold.md](47.3-hold.md)
-- **Goal:** Add an optional `held` flag on `ManagedInstallation`, a `held` bucket in `planUpdateAll`, and Hold/Release UI toggles and pin markers so held items are skipped by Update all.
 
 ### 47.2 - UI: command, per-environment sidebar button, Dashboard button on the filtered selection, summary modal and result report
 
-- **Status:** `delivered` (merged 553a5d6 2026-10-09) · **Short:** Update all UI triggers · **Size:** M · **Depends on:** 47.1 · **Spec:** [47.2-ui-update-all.md](47.2-ui-update-all.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Update all UI triggers · **Size:** M · **Depends on:** 47.1 · **Spec:** [47.2-ui-update-all.md](47.2-ui-update-all.md)
 - **Goal:** Add the `aiSwissknife.updateAll` command, per-environment sidebar buttons, and Dashboard toolbar/stat-card triggers with a confirmation summary modal and per-item result report.
+
+### 47.3 - Hold an item out of Update all (flag, engine bucket, UI toggle and marker)
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Hold item from update all · **Size:** S · **Depends on:** 47.1, 47.2 · **Spec:** [47.3-hold.md](47.3-hold.md)
+- **Goal:** Add an optional `held` flag on `ManagedInstallation`, a `held` bucket in `planUpdateAll`, and Hold/Release UI toggles and pin markers so held items are skipped by Update all.
+
+### 47.4 - Drift check resolves each source once (was once per item: N git fetches)
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Drift resolves each source once · **Size:** S · **Depends on:** 47.1 · **Spec:** [47.4-drift-resolve-once.md](47.4-drift-resolve-once.md)
+- **Goal:** Add `checkDriftForAll` in `src/engine/drift.ts` so a drift check over multiple installations resolves each source once per run instead of once per item.

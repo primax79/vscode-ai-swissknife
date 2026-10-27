@@ -6,21 +6,6 @@ Tasks (each = one commit; hand one file at a time to a delegated agent):
 
 ## Tasks
 
-### 01.1 - package.json + build tooling
-
-- **Status:** `delivered` (merged 30246bc 2026-08-18) · **Short:** Package and build tooling · **Size:** S · **Depends on:** - · **Spec:** [01.1-package-and-build.md](01.1-package-and-build.md)
-- **Goal:** Create `package.json`, `tsconfig.json`, and an esbuild-based build script so the extension can compile.
-
-### 01.2 - Extension entry point + activation
-
-- **Status:** `delivered` (merged ae7e2bb 2026-08-18) · **Short:** Extension entry point · **Size:** S · **Depends on:** 01.1 · **Spec:** [01.2-extension-entry.md](01.2-extension-entry.md)
-- **Goal:** Provide a minimal `src/extension.ts` that activates cleanly in the Extension Development Host with the folder layout later initiatives fill in.
-
-### 01.3 - Lint/format config + npm scripts sanity check
-
-- **Status:** `delivered` (merged 9844f67 2026-08-18) · **Short:** Lint config and build gate · **Size:** S · **Depends on:** 01.2 · **Spec:** [01.3-lint-and-scripts.md](01.3-lint-and-scripts.md)
-- **Goal:** Configure working `eslint`, `typecheck`, and `build` scripts as the standard verification gate.
-
 ## Shared decisions
 
 Shared decisions for this initiative that every task must honour:
@@ -39,3 +24,20 @@ Shared decisions for this initiative that every task must honour:
   (`git@github.com:primax79/vscode-ai-swissknife.git`) and a `.gitignore`
   with `references` — extend it, don't replace it.
 - One commit per task, scoped to just that task's files.
+
+## Closed
+
+### 01.1 - package.json + build tooling
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Package and build tooling · **Size:** S · **Depends on:** - · **Spec:** [01.1-package-and-build.md](01.1-package-and-build.md)
+- **Goal:** Create `package.json`, `tsconfig.json`, and an esbuild-based build script so the extension can compile.
+
+### 01.2 - Extension entry point + activation
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Extension entry point · **Size:** S · **Depends on:** 01.1 · **Spec:** [01.2-extension-entry.md](01.2-extension-entry.md)
+- **Goal:** Provide a minimal `src/extension.ts` that activates cleanly in the Extension Development Host with the folder layout later initiatives fill in.
+
+### 01.3 - Lint/format config + npm scripts sanity check
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Lint config and build gate · **Size:** S · **Depends on:** 01.2 · **Spec:** [01.3-lint-and-scripts.md](01.3-lint-and-scripts.md)
+- **Goal:** Configure working `eslint`, `typecheck`, and `build` scripts as the standard verification gate.

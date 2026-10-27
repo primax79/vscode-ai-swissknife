@@ -17,27 +17,29 @@
 
 ## Tasks
 
+## Closed
+
 ### 46.1 - CLI skeleton + read-only commands (sources, catalog, installed, updates, item, plan-install)
 
-- **Status:** `delivered` (merged 5b0bc70 2026-10-09) · **Short:** CLI skeleton and read commands · **Size:** M · **Depends on:** 37.1, 44.1 · **Spec:** [46.1-cli-read-only.md](46.1-cli-read-only.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** CLI skeleton and read commands · **Size:** M · **Depends on:** 37.1, 44.1 · **Spec:** [46.1-cli-read-only.md](46.1-cli-read-only.md)
 - **Goal:** Build the `vscode`-free `dist/cli.js` bundle (`ai-swissknife`) with pure JSON stdout and read-only commands `sources`, `catalog`, `installed`, `updates`, `item`, and `plan-install`.
 
 ### 46.2 - Agent-facing documentation: AGENTS.md block + `--help --json` self-description
 
-- **Status:** `delivered` (merged 88bd55f 2026-10-09) · **Short:** CLI describe and agent docs · **Size:** S · **Depends on:** 46.1 · **Spec:** [46.2-agent-docs.md](46.2-agent-docs.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** CLI describe and agent docs · **Size:** S · **Depends on:** 46.1 · **Spec:** [46.2-agent-docs.md](46.2-agent-docs.md)
 - **Goal:** Add the machine-readable `describe` command generated from command definitions and document the CLI contract and examples in `AGENTS.md`.
 
 ### 46.3 - Cross-process lock for manifest/state read-modify-write
 
-- **Status:** `delivered` (merged e909ede 2026-10-08) · **Short:** Cross-process state lock · **Size:** S · **Depends on:** - · **Spec:** [46.3-state-lock.md](46.3-state-lock.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Cross-process state lock · **Size:** S · **Depends on:** - · **Spec:** [46.3-state-lock.md](46.3-state-lock.md)
 - **Goal:** Implement `withStateLock` in `src/domain/stateLock.ts` with exclusive lock files and stale-lock recovery around manifest and state read-modify-write sequences.
-
-### 46.5 - `redistribute <path|item>` v1 (installed from a local folder; plan-first, `--write`)
-
-- **Status:** `delivered` (merged 99a127c 2026-10-09) · **Short:** Local-folder redistribute command · **Size:** M · **Depends on:** 46.1, 46.3, 47.1 · **Spec:** [46.5-redistribute.md](46.5-redistribute.md)
-- **Goal:** Add `planRedistribute`/`applyRedistribute` and the CLI `redistribute` command to push edits from a registered `local-folder` source to all installed copies (plan-only without `--write`).
 
 ### 46.4 - Write commands behind `--write`: apply-install, uninstall (soft), add/remove source
 
-- **Status:** `delivered` (merged b0872cb 2026-10-09) · **Short:** CLI write commands · **Size:** M · **Depends on:** 46.1, 46.3, 46.5, 47.1, 42.1 · **Spec:** [46.4-cli-writes.md](46.4-cli-writes.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** CLI write commands · **Size:** M · **Depends on:** 46.1, 46.3, 46.5, 47.1, 42.1 · **Spec:** [46.4-cli-writes.md](46.4-cli-writes.md)
 - **Goal:** Add plan-first CLI write commands behind `--write` (`apply-install`, `uninstall`, `source add/remove`, `update`, and `trash list/restore/empty`).
+
+### 46.5 - `redistribute <path|item>` v1 (installed from a local folder; plan-first, `--write`)
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Local-folder redistribute command · **Size:** M · **Depends on:** 46.1, 46.3, 47.1 · **Spec:** [46.5-redistribute.md](46.5-redistribute.md)
+- **Goal:** Add `planRedistribute`/`applyRedistribute` and the CLI `redistribute` command to push edits from a registered `local-folder` source to all installed copies (plan-only without `--write`).

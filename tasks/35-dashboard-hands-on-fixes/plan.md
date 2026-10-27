@@ -44,31 +44,6 @@ Tasks (each = one commit):
 
 ## Tasks
 
-### 35.1 - Instant loading shell
-
-- **Status:** `delivered` (merged 4a46e04 2026-09-09) · **Short:** Instant loading shell · **Size:** S · **Depends on:** 31, 32, 33, 34 · **Spec:** [35.1-instant-loading-shell.md](35.1-instant-loading-shell.md)
-- **Goal:** Synchronously render an instant loading shell with theme styles and a spinner when the Dashboard opens so it never flashes a blank screen while data loads.
-
-### 35.2 - Overview tab content
-
-- **Status:** `delivered` (merged 366aeb2 2026-09-09) · **Short:** Overview tab content · **Size:** S · **Depends on:** 31, 32, 33, 34 · **Spec:** [35.2-overview-content.md](35.2-overview-content.md)
-- **Goal:** Replace the Overview tab placeholder with an at-a-glance landing view showing summary stat chips and items needing attention.
-
-### 35.3 - Installed matrix view
-
-- **Status:** `delivered` (merged 7f3b8b9 2026-09-09) · **Short:** Installed matrix view · **Size:** L · **Depends on:** 35.1, 35.2, 35.4 · **Spec:** [35.3-installed-matrix-view.md](35.3-installed-matrix-view.md)
-- **Goal:** Replace the Installed flat table with an expandable per-artifact comparison matrix with sub-rows per assistant, quick actions (Preview, Diff, Update), and column sorting.
-
-### 35.4 - Catalog rows as a real table
-
-- **Status:** `delivered` (merged 1afb012 2026-09-09) · **Short:** Catalog grid table · **Size:** S · **Depends on:** 31, 32, 33, 34 · **Spec:** [35.4-catalog-as-table.md](35.4-catalog-as-table.md)
-- **Goal:** Convert Sources & Catalog artifact and folder rows from free-wrapping flex layouts to a fixed-column CSS grid table.
-
-### 35.5 - Icon-only buttons across the Dashboard
-
-- **Status:** `delivered` (merged e656d24 2026-09-09) · **Short:** Icon-only dashboard buttons · **Size:** S · **Depends on:** 35.1, 35.2, 35.3, 35.4 · **Spec:** [35.5-icon-only-buttons.md](35.5-icon-only-buttons.md)
-- **Goal:** Replace text labels with compact Unicode icon buttons and tooltips across all Dashboard sections where text is not indispensable.
-
 ## Task order and gating
 
 - **35.1, 35.2, 35.4 are independent of each other and of 35.3**
@@ -83,3 +58,30 @@ Tasks (each = one commit):
 `isolation='worktree'`, `google/gemini-3.1-pro-preview-customtools`, real
 diff review before merge, full gate (`typecheck && lint && test && build`,
 zero warnings) before and after merge.
+
+## Closed
+
+### 35.1 - Instant loading shell
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Instant loading shell · **Size:** S · **Depends on:** 31, 32, 33, 34 · **Spec:** [35.1-instant-loading-shell.md](35.1-instant-loading-shell.md)
+- **Goal:** Synchronously render an instant loading shell with theme styles and a spinner when the Dashboard opens so it never flashes a blank screen while data loads.
+
+### 35.2 - Overview tab content
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Overview tab content · **Size:** S · **Depends on:** 31, 32, 33, 34 · **Spec:** [35.2-overview-content.md](35.2-overview-content.md)
+- **Goal:** Replace the Overview tab placeholder with an at-a-glance landing view showing summary stat chips and items needing attention.
+
+### 35.3 - Installed matrix view
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Installed matrix view · **Size:** L · **Depends on:** 35.1, 35.2, 35.4 · **Spec:** [35.3-installed-matrix-view.md](35.3-installed-matrix-view.md)
+- **Goal:** Replace the Installed flat table with an expandable per-artifact comparison matrix with sub-rows per assistant, quick actions (Preview, Diff, Update), and column sorting.
+
+### 35.4 - Catalog rows as a real table
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Catalog grid table · **Size:** S · **Depends on:** 31, 32, 33, 34 · **Spec:** [35.4-catalog-as-table.md](35.4-catalog-as-table.md)
+- **Goal:** Convert Sources & Catalog artifact and folder rows from free-wrapping flex layouts to a fixed-column CSS grid table.
+
+### 35.5 - Icon-only buttons across the Dashboard
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Icon-only dashboard buttons · **Size:** S · **Depends on:** 35.1, 35.2, 35.3, 35.4 · **Spec:** [35.5-icon-only-buttons.md](35.5-icon-only-buttons.md)
+- **Goal:** Replace text labels with compact Unicode icon buttons and tooltips across all Dashboard sections where text is not indispensable.

@@ -6,16 +6,6 @@ Tasks (each = one commit; hand one file at a time to a delegated agent):
 
 ## Tasks
 
-### 05.1 - Translator + conversion diagnostics
-
-- **Status:** `delivered` (merged 1143486 2026-08-18; commit 76e484a) · **Short:** Skill and rule translator · **Size:** S · **Depends on:** 03.1 · **Spec:** [05.1-translator.md](05.1-translator.md)
-- **Goal:** Implement `translateSkill` and `translateRule` in `src/translator/skill.ts` returning translated canonical objects alongside `ConversionDiagnostic`.
-
-### 05.2 - Per-field diagnostics (hardening)
-
-- **Status:** `delivered` (merged a602103 2026-08-19) · **Short:** Target-typed per-field diagnostics · **Size:** M · **Depends on:** 05.1, 03.4 · **Spec:** [05.2-hardening.md](05.2-hardening.md)
-- **Goal:** Change `translateSkill` and `translateRule` to take only `targetAssistant: AssistantId` and return structured `TranslationResult<T>` with per-field diagnostics and preserved auxiliary skill files.
-
 ## Shared decisions
 
 Shared decisions for this initiative that every task must honour:
@@ -37,3 +27,15 @@ Shared decisions for this initiative that every task must honour:
   every other Phase-1 target returns an explicit unsupported diagnostic.
 - This initiative depends on 03.4 for the complete `CanonicalSkill`
   directory payload but not on 04.
+
+## Closed
+
+### 05.1 - Translator + conversion diagnostics
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Skill and rule translator · **Size:** S · **Depends on:** 03.1 · **Spec:** [05.1-translator.md](05.1-translator.md)
+- **Goal:** Implement `translateSkill` and `translateRule` in `src/translator/skill.ts` returning translated canonical objects alongside `ConversionDiagnostic`.
+
+### 05.2 - Per-field diagnostics (hardening)
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Target-typed per-field diagnostics · **Size:** M · **Depends on:** 05.1, 03.4 · **Spec:** [05.2-hardening.md](05.2-hardening.md)
+- **Goal:** Change `translateSkill` and `translateRule` to take only `targetAssistant: AssistantId` and return structured `TranslationResult<T>` with per-field diagnostics and preserved auxiliary skill files.

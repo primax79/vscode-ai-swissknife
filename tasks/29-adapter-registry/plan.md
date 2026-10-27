@@ -4,31 +4,6 @@
 
 ## Tasks
 
-### 29.1 - `Adapter` gains `displayName`/`iconId`
-
-- **Status:** `delivered` (merged 4d7d654 2026-09-08) · **Short:** Adapter display and icon fields · **Size:** S · **Depends on:** 03, 12, 21 · **Spec:** [29.1-adapter-interface-fields.md](29.1-adapter-interface-fields.md)
-- **Goal:** Add `displayName` and `iconId` descriptive fields directly onto the `Adapter` interface and its five adapter implementations.
-
-### 29.2 - `src/adapters/registry.ts`
-
-- **Status:** `delivered` (merged de6c9f3 2026-09-08) · **Short:** Adapter registry module · **Size:** S · **Depends on:** 29.1 · **Spec:** [29.2-adapter-registry-module.md](29.2-adapter-registry-module.md)
-- **Goal:** Create `src/adapters/registry.ts` as the single source of truth exporting `ALL_ADAPTERS`, `getAdapter`, and `getAdapterWithHomeRoot`.
-
-### 29.3 - Migrate every duplicated adapter-selection site
-
-- **Status:** `delivered` (merged 8cb71e5 2026-09-08) · **Short:** Migrate adapter call sites · **Size:** M · **Depends on:** 29.2 · **Spec:** [29.3-migrate-call-sites.md](29.3-migrate-call-sites.md)
-- **Goal:** Delete duplicated `getAdapter()` copies and assistant literal arrays across the codebase and replace them with calls into `src/adapters/registry.ts`.
-
-### 29.4 - Enabled-assistants VS Code setting
-
-- **Status:** `delivered` (merged c2be2a0 2026-09-08) · **Short:** Enabled assistants setting · **Size:** M · **Depends on:** 29.3 · **Spec:** [29.4-enabled-assistants-setting.md](29.4-enabled-assistants-setting.md)
-- **Goal:** Add `aiSwissknife.enabledAssistants` VS Code configuration, `getEnabledAdapters()`, and registry-driven sidebar view registration with per-view `when` context keys.
-
-### 29.5 - "Configure enabled assistants" command
-
-- **Status:** `delivered` (merged 80a9bd8 2026-09-08) · **Short:** Configure assistants command · **Size:** S · **Depends on:** 29.4 · **Spec:** [29.5-configure-command.md](29.5-configure-command.md)
-- **Goal:** Add the `aiSwissknife.configureEnabledAssistants` multi-select QuickPick command and reshape `aiSwissknife.enabledAssistants` to an object of booleans.
-
 ## Task order and gating
 
 - **29.1 gates 29.2** (the registry module imports the enriched interface/classes; not strictly required for `getAdapter`/`getAdapterWithHomeRoot` to type-check without the new fields, but 29.2's own point is moot without them, so do 29.1 first).
@@ -41,3 +16,30 @@
 hand-off (expanded packaging, per `tasks/AGENTS.md`). Point the agent at the
 one task file + this spec + `tasks/CONTEXT.md` — not the whole `tasks/`
 tree.
+
+## Closed
+
+### 29.1 - `Adapter` gains `displayName`/`iconId`
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Adapter display and icon fields · **Size:** S · **Depends on:** 03, 12, 21 · **Spec:** [29.1-adapter-interface-fields.md](29.1-adapter-interface-fields.md)
+- **Goal:** Add `displayName` and `iconId` descriptive fields directly onto the `Adapter` interface and its five adapter implementations.
+
+### 29.2 - `src/adapters/registry.ts`
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Adapter registry module · **Size:** S · **Depends on:** 29.1 · **Spec:** [29.2-adapter-registry-module.md](29.2-adapter-registry-module.md)
+- **Goal:** Create `src/adapters/registry.ts` as the single source of truth exporting `ALL_ADAPTERS`, `getAdapter`, and `getAdapterWithHomeRoot`.
+
+### 29.3 - Migrate every duplicated adapter-selection site
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Migrate adapter call sites · **Size:** M · **Depends on:** 29.2 · **Spec:** [29.3-migrate-call-sites.md](29.3-migrate-call-sites.md)
+- **Goal:** Delete duplicated `getAdapter()` copies and assistant literal arrays across the codebase and replace them with calls into `src/adapters/registry.ts`.
+
+### 29.4 - Enabled-assistants VS Code setting
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Enabled assistants setting · **Size:** M · **Depends on:** 29.3 · **Spec:** [29.4-enabled-assistants-setting.md](29.4-enabled-assistants-setting.md)
+- **Goal:** Add `aiSwissknife.enabledAssistants` VS Code configuration, `getEnabledAdapters()`, and registry-driven sidebar view registration with per-view `when` context keys.
+
+### 29.5 - "Configure enabled assistants" command
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Configure assistants command · **Size:** S · **Depends on:** 29.4 · **Spec:** [29.5-configure-command.md](29.5-configure-command.md)
+- **Goal:** Add the `aiSwissknife.configureEnabledAssistants` multi-select QuickPick command and reshape `aiSwissknife.enabledAssistants` to an object of booleans.

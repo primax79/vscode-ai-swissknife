@@ -28,32 +28,34 @@
 
 ## Tasks
 
-### 44.1 - Harden git source resolution (url/ref/id validation, `--`, protocol allow-list, safe cache dir)
-
-- **Status:** `delivered` (merged 103fb34 2026-10-08) · **Short:** Harden git source resolution · **Size:** M · **Priority:** P1 · **Depends on:** 36.1 · **Spec:** [44.1-git-source-hardening.md](44.1-git-source-hardening.md)
-- **Goal:** Validate git URLs, refs, and cache directory IDs at resolve time, pass `--` separators to `git clone`/`checkout`, and restrict `GIT_ALLOW_PROTOCOL`.
-
 ### 44.2 - Workspace Trust: spike, then declare `limited` and skip project sources when untrusted
 
 - **Status:** `open` · **Short:** Workspace Trust gating · **Size:** S · **Priority:** P2 · **Depends on:** - · **Spec:** [44.2-workspace-trust.md](44.2-workspace-trust.md)
 - **Goal:** Verify Restricted Mode behaviour, declare `capabilities.untrustedWorkspaces`, and skip project-scope source resolution and installs when the workspace is untrusted.
 
+## Closed
+
+### 44.1 - Harden git source resolution (url/ref/id validation, `--`, protocol allow-list, safe cache dir)
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Harden git source resolution · **Size:** M · **Priority:** P1 · **Depends on:** 36.1 · **Spec:** [44.1-git-source-hardening.md](44.1-git-source-hardening.md)
+- **Goal:** Validate git URLs, refs, and cache directory IDs at resolve time, pass `--` separators to `git clone`/`checkout`, and restrict `GIT_ALLOW_PROTOCOL`.
+
 ### 44.3 - Kilo MCP config: verify the real target with Kilo, then write to the real `mcp` field (JSONC-safe)
 
-- **Status:** `delivered` (merged 06d9d79 2026-10-09) · **Short:** Kilo MCP JSONC config path · **Size:** M · **Priority:** P1 · **Depends on:** - · **Spec:** [44.3-kilo-mcp-config-path.md](44.3-kilo-mcp-config-path.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Kilo MCP JSONC config path · **Size:** M · **Priority:** P1 · **Depends on:** - · **Spec:** [44.3-kilo-mcp-config-path.md](44.3-kilo-mcp-config-path.md)
 - **Goal:** Write Kilo MCP servers to the real `kilo.jsonc`/`kilo.json`/`opencode.jsonc` `mcp` field in Kilo's `local`/`remote` shape using `jsonc-parser` while keeping legacy `mcp.json` readable/removable.
 
 ### 44.4 - Frontmatter block scalars (`>`, `|`) and multi-line values
 
-- **Status:** `delivered` (merged c941c3c 2026-10-09) · **Short:** Frontmatter block scalars · **Size:** S · **Priority:** P2 · **Depends on:** - · **Spec:** [44.4-frontmatter-block-scalars.md](44.4-frontmatter-block-scalars.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Frontmatter block scalars · **Size:** S · **Priority:** P2 · **Depends on:** - · **Spec:** [44.4-frontmatter-block-scalars.md](44.4-frontmatter-block-scalars.md)
 - **Goal:** Extend line-based frontmatter parsing in `src/sources/detect.ts` and `src/adapters/codec.ts` to support YAML folded (`>`) and literal (`|`) block scalars and multi-line continuations.
-
-### 44.6 - Kilo config edits keep neighbours and their comments untouched (follow-up of 44.3)
-
-- **Status:** `delivered` (merged 9a5a289 2026-10-09) · **Short:** Preserve Kilo JSONC neighbours · **Size:** S · **Priority:** P3 · **Depends on:** 44.3 · **Spec:** [44.6-kilo-jsonc-preserve-neighbors.md](44.6-kilo-jsonc-preserve-neighbors.md)
-- **Goal:** Make Kilo JSONC MCP edits minimal so sibling entries are never reformatted and their trailing comments are never displaced.
 
 ### 44.5 - Sidebar: per-source loading state while sources resolve
 
-- **Status:** `delivered` (merged 4f927f3 2026-10-09) · **Short:** Sidebar per-source loading state · **Size:** S · **Priority:** P3 · **Depends on:** 38.1 · **Spec:** [44.5-sidebar-source-loading.md](44.5-sidebar-source-loading.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Sidebar per-source loading state · **Size:** S · **Priority:** P3 · **Depends on:** 38.1 · **Spec:** [44.5-sidebar-source-loading.md](44.5-sidebar-source-loading.md)
 - **Goal:** Show a spinner icon and `"Refreshing..."` description on each sidebar source item while its catalog group is resolving, rendering finished sources progressively.
+
+### 44.6 - Kilo config edits keep neighbours and their comments untouched (follow-up of 44.3)
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Preserve Kilo JSONC neighbours · **Size:** S · **Priority:** P3 · **Depends on:** 44.3 · **Spec:** [44.6-kilo-jsonc-preserve-neighbors.md](44.6-kilo-jsonc-preserve-neighbors.md)
+- **Goal:** Make Kilo JSONC MCP edits minimal so sibling entries are never reformatted and their trailing comments are never displaced.

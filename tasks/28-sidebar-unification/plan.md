@@ -11,9 +11,11 @@ Two independent tasks, each one commit:
 
 ## Tasks
 
+## Closed
+
 ### 28.1 - Merge Sources + Available into one tree
 
-- **Status:** `delivered` (merged 979e456 2026-09-08) · **Short:** Merge Sources and Available · **Size:** M · **Depends on:** 16, 22
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Merge Sources and Available · **Size:** M · **Depends on:** 16, 22
 - **Goal:** Unify `SourcesTreeDataProvider` and `AvailableTreeDataProvider` into a single sidebar tree so expanding a source shows its catalog content directly without select-to-filter coupling.
 
 **Scope:**
@@ -55,7 +57,7 @@ Two independent tasks, each one commit:
 
 ### 28.2 - Installed kind-grouping
 
-- **Status:** `delivered` (merged 979e456 2026-09-08) · **Short:** Installed kind grouping · **Size:** S · **Depends on:** -
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Installed kind grouping · **Size:** S · **Depends on:** -
 - **Goal:** Add an intermediate per-kind grouping level (`KindGroupItem`) under each assistant/scope group in `InstalledTreeDataProvider`.
 
 **Scope:**

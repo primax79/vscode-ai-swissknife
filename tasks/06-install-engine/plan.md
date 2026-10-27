@@ -14,16 +14,6 @@ Tasks (each = one commit; hand one file at a time to a delegated agent):
 
 ## Tasks
 
-### 06.1 - Plan + preview (revised)
-
-- **Status:** `delivered` (merged 9229aaa 2026-08-19; commit bc55b62) · **Short:** Install plan and preview · **Size:** M · **Depends on:** 02.3, 03.4, 04.3, 05.2 · **Spec:** [06.1-plan-and-preview.md](06.1-plan-and-preview.md)
-- **Goal:** Resolve real skill content, translate it for the target assistant, compute a conflict/file preview against a validated target directory, and return a discriminated `PreparedInstall`.
-
-### 06.2 - Transactional apply + verify (revised)
-
-- **Status:** `delivered` (merged 9229aaa 2026-08-19; commit bc55b62) · **Short:** Transactional apply and verify · **Size:** M · **Depends on:** 06.1 · **Spec:** [06.2-apply-and-verify.md](06.2-apply-and-verify.md)
-- **Goal:** Apply a `PreparedInstall` via a staged directory swap with target-tree snapshot revalidation, post-swap verification, rollback recovery outcomes, and `state.json` persistence.
-
 ## Shared decisions
 
 Shared decisions for this initiative that every task must honour:
@@ -58,3 +48,15 @@ Shared decisions for this initiative that every task must honour:
   initiative that wires all of them together, which is exactly why the
   second review flagged it as the point where incomplete contracts
   upstream become expensive to discover.
+
+## Closed
+
+### 06.1 - Plan + preview (revised)
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Install plan and preview · **Size:** M · **Depends on:** 02.3, 03.4, 04.3, 05.2 · **Spec:** [06.1-plan-and-preview.md](06.1-plan-and-preview.md)
+- **Goal:** Resolve real skill content, translate it for the target assistant, compute a conflict/file preview against a validated target directory, and return a discriminated `PreparedInstall`.
+
+### 06.2 - Transactional apply + verify (revised)
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Transactional apply and verify · **Size:** M · **Depends on:** 06.1 · **Spec:** [06.2-apply-and-verify.md](06.2-apply-and-verify.md)
+- **Goal:** Apply a `PreparedInstall` via a staged directory swap with target-tree snapshot revalidation, post-swap verification, rollback recovery outcomes, and `state.json` persistence.

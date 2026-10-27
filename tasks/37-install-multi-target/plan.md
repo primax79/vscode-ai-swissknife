@@ -31,11 +31,6 @@
 
 ## Tasks
 
-### 37.1 - Engine helper: plan the assistant × scope matrix and summarize it
-
-- **Status:** `delivered` (merged 06d425f 2026-10-08) · **Short:** Install matrix engine helper · **Size:** M · **Depends on:** - · **Spec:** [37.1-target-matrix.md](37.1-target-matrix.md)
-- **Goal:** Create `src/engine/installMatrix.ts` with `planInstallMatrix` and `applyInstallMatrix` to plan and sequentially apply installations across an assistant × scope cross-product.
-
 ### 37.2 - Unified multi-select install flow in `availableView.ts`
 
 - **Status:** `open` · **Short:** Multi-select install flow · **Size:** M · **Depends on:** 37.1 · **Spec:** [37.2-multi-select-flow.md](37.2-multi-select-flow.md)
@@ -45,3 +40,10 @@
 
 - **Status:** `open` · **Short:** Per-target install outcome report · **Size:** S · **Depends on:** 37.2 · **Spec:** [37.3-result-reporting.md](37.3-result-reporting.md)
 - **Goal:** Replace per-flow install notifications with a single summary notification (`applied / skipped / unsupported / failed`), a "Show details" output channel on failure, and a single final refresh.
+
+## Closed
+
+### 37.1 - Engine helper: plan the assistant × scope matrix and summarize it
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Install matrix engine helper · **Size:** M · **Depends on:** - · **Spec:** [37.1-target-matrix.md](37.1-target-matrix.md)
+- **Goal:** Create `src/engine/installMatrix.ts` with `planInstallMatrix` and `applyInstallMatrix` to plan and sequentially apply installations across an assistant × scope cross-product.

@@ -35,12 +35,14 @@ An icon-only button **"Install to other environments"** (`+`-style, tooltip, 35.
 
 ## Tasks
 
-### 41.1 - Pure model: origin resolution + missing places for an object/place
-
-- **Status:** `in progress` (committed on unmerged branch kilo/bc2df0707a16 at 1d6c59d 2026-10-09; not yet merged into main) · **Short:** Missing places model · **Size:** M · **Depends on:** 37.1 · **Spec:** [41.1-missing-places-model.md](41.1-missing-places-model.md)
-- **Goal:** Create `src/engine/missingPlaces.ts` with `resolveOrigin` and `computeMissingPlaces` to determine source/local origin and candidate target environments where an artifact is not yet installed.
-
 ### 41.2 - Button on rows + place picker + hand-off to the 37.2 flow
 
 - **Status:** `open` · **Short:** Install elsewhere button and flow · **Size:** M · **Depends on:** 41.1, 37.2, 40.2 · **Spec:** [41.2-dashboard-button-and-flow.md](41.2-dashboard-button-and-flow.md)
 - **Goal:** Add an "Install to other environments" button on Dashboard rows that opens a multi-select missing-places picker and hands the chosen targets to the unified install flow.
+
+## Closed
+
+### 41.1 - Pure model: origin resolution + missing places for an object/place
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Missing places model · **Size:** M · **Depends on:** 37.1 · **Spec:** [41.1-missing-places-model.md](41.1-missing-places-model.md)
+- **Goal:** Create `src/engine/missingPlaces.ts` with `resolveOrigin` and `computeMissingPlaces` to determine source/local origin and candidate target environments where an artifact is not yet installed.

@@ -40,17 +40,19 @@ the least-informative questions (id, name) first and the most-informative one
 
 ## Tasks
 
+## Closed
+
 ### 36.1 - Pure helper: validate location + derive id/name
 
-- **Status:** `delivered` (merged 4a77022 2026-10-08) · **Short:** Validate location and derive defaults · **Size:** S · **Depends on:** - · **Spec:** [36.1-derive-source-defaults.md](36.1-derive-source-defaults.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Validate location and derive defaults · **Size:** S · **Depends on:** - · **Spec:** [36.1-derive-source-defaults.md](36.1-derive-source-defaults.md)
 - **Goal:** Create `src/sources/sourceDefaults.ts` exporting `validateLocation` and `deriveSourceDefaults` to validate URLs/paths and derive source `id` and `name` without `vscode` imports.
 
 ### 36.2 - Rewrite `addSource` as the type → scope(s) → location → details wizard (single scope)
 
-- **Status:** `delivered` (merged 193b865 2026-10-08) · **Short:** Add-source wizard flow · **Size:** M · **Depends on:** 36.1 · **Spec:** [36.2-wizard-flow.md](36.2-wizard-flow.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Add-source wizard flow · **Size:** M · **Depends on:** 36.1 · **Spec:** [36.2-wizard-flow.md](36.2-wizard-flow.md)
 - **Goal:** Rewrite `SourcesProvider.addSource(forceScope?)` into a type → scope → location → prefilled id/name wizard flow with default branch assumption and optional branch/tag pinning.
 
 ### 36.3 - Multi-scope selection (one write per scope, per-scope local paths) + duplicate-id handling
 
-- **Status:** `delivered` (merged 1c73989 2026-10-09) · **Short:** Multi-scope add-source wizard · **Size:** S · **Depends on:** 36.2 · **Spec:** [36.3-scope-both.md](36.3-scope-both.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Multi-scope add-source wizard · **Size:** S · **Depends on:** 36.2 · **Spec:** [36.3-scope-both.md](36.3-scope-both.md)
 - **Goal:** Turn the add-source scope step into a multi-select (Global and/or Workspace), ask per-scope paths for `local-folder`, and prompt "Replace?" on duplicate source IDs per scope.

@@ -29,22 +29,24 @@
 
 ## Tasks
 
-### 39.1 - Fix `[object Object]` and keep the Unmanaged table in sync
-
-- **Status:** `delivered` (merged 82d8328 2026-10-08) · **Short:** Fix inventoryData row rendering · **Size:** S · **Depends on:** - · **Spec:** [39.1-fix-inventory-rows.md](39.1-fix-inventory-rows.md)
-- **Goal:** Fix the client-side `inventoryData` handler assigning `msg.rowsHtml` as an object to `#unifiedTable` and keep both managed and unmanaged table bodies in sync across refreshes.
-
 ### 39.2 - Dashboard action parity with the sidebar (preview, diff, sync, recommend, edit, delete)
 
 - **Status:** `in progress` (unmanaged delete/preview added in 5e97e59 2026-10-15; missing parity table, unmanaged Edit/Sync, managed Recommend in detail, and soft/hard Remove modal on managed Uninstall) · **Short:** Dashboard action parity · **Size:** M · **Depends on:** 39.1, 39.4, 40.2 · **Spec:** [39.2-action-parity.md](39.2-action-parity.md)
 - **Goal:** Bring Dashboard row and detail-panel actions to full parity with the sidebar (Preview, Diff, Sync, Move, Edit, Update, Recommend/Unrecommend, Promote, and soft/hard Remove).
 
-### 39.4 - Detail panel: computed origin, state in words, location, one labeled action bar
-
-- **Status:** `delivered` (merged cf5eaa5 2026-10-08) · **Short:** Comprehensible detail panel · **Size:** M · **Depends on:** 39.1 · **Spec:** [39.4-detail-panel.md](39.4-detail-panel.md)
-- **Goal:** Restructure the Dashboard detail panel with a clear header, status in words, computed origin (including unmanaged match candidates), disk path, cross-framework list, and one labeled action bar.
-
 ### 39.3 - Verify "differs" data, then clarify identical/differs badges
 
 - **Status:** `open` · **Short:** Clarify identical and differs badges · **Size:** S · **Depends on:** 39.1, 40.2 · **Spec:** [39.3-status-clarity.md](39.3-status-clarity.md)
 - **Goal:** Verify whether unmanaged "differs from <source>" items are genuine divergences or hash artefacts, then unify sidebar and Dashboard badge wording and styling (`✓ Identical to <source>` vs neutral `Custom · differs from <source>`).
+
+## Closed
+
+### 39.1 - Fix `[object Object]` and keep the Unmanaged table in sync
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Fix inventoryData row rendering · **Size:** S · **Depends on:** - · **Spec:** [39.1-fix-inventory-rows.md](39.1-fix-inventory-rows.md)
+- **Goal:** Fix the client-side `inventoryData` handler assigning `msg.rowsHtml` as an object to `#unifiedTable` and keep both managed and unmanaged table bodies in sync across refreshes.
+
+### 39.4 - Detail panel: computed origin, state in words, location, one labeled action bar
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Comprehensible detail panel · **Size:** M · **Depends on:** 39.1 · **Spec:** [39.4-detail-panel.md](39.4-detail-panel.md)
+- **Goal:** Restructure the Dashboard detail panel with a clear header, status in words, computed origin (including unmanaged match candidates), disk path, cross-framework list, and one labeled action bar.
