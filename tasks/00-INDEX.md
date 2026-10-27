@@ -115,7 +115,7 @@ for detail.
 feedback on Phase 9 (instant loading shell, Overview content, Installed
 per-tool comparison matrix replacing the flat table, catalog rows as a
 real grid table, icon-only buttons), specced inline in its own
-[`plan.md`](done/35-dashboard-hands-on-fixes/plan.md) — no separate spec file.
+[Dashboard: correzioni dai test pratici](done/35-dashboard-hands-on-fixes/plan.md) — no separate spec file.
 Followed by two unplanned fixes (Dashboard buttons silently failing on
 artifact names containing an apostrophe).
 
@@ -139,55 +139,55 @@ hands-on testing round.
 <!-- ai-orch:generated initiatives -->
 | Priority | #   | Initiative                                                                                | Status                         | Depends on             | Size |
 | -------- | --- | ----------------------------------------------------------------------------------------- | ------------------------------ | ---------------------- | ---- |
-| 1 | 01 | [Project scaffold](done/01-project-scaffold/plan.md) | done | — | S |
-| 2 | 02 | [Domain types + registry store](done/02-domain-and-registry/plan.md) | done | 01 | S |
-| 3 | 03 | [Claude + Kilo adapters (skill+rule)](done/03-claude-kilo-adapters/plan.md) | done | 02 | M |
-| 4 | 04 | [Source resolver (git-custom + local-folder)](done/04-source-resolver/plan.md) | done | 02 | M |
-| 5 | 05 | [Canonical model + translator (skill)](done/05-translator-skill/plan.md) | done | 03.4 | M |
-| 6 | 06 | [Install engine (pipeline)](done/06-install-engine/plan.md) | done | 05, 02.3, 03.4, 04.3 | M |
-| 7 | 07 | [Minimal UI (3 views)](done/07-minimal-ui/plan.md) | done | 06 | M |
-| 8 | 08 | [Agent artifact support](done/08-agent-support/plan.md) | done | 07 | M |
-| 9 | 09 | [Command artifact support](done/09-command-support/plan.md) | done | 08 | M |
-| 10 | 10 | [MCP-server artifact support](done/10-mcp-support/plan.md) | done | 08 | L |
-| 11 | 11 | [Marketplace sources resolver](done/11-marketplace-sources/plan.md) | done | 08, 09, 10 | M |
-| 12 | 12 | [GitHub Copilot adapter](done/12-copilot-adapter/plan.md) | done | 08, 09, 10 | M |
-| 13 | 13 | [Drift & update detection](done/13-drift-and-updates/plan.md) | done | 12 | M |
-| 14 | 14 | [Discovery & promotion](done/14-discovery-promotion/plan.md) | done | 13 | M |
-| 15 | 15 | [File watchers for consistency](done/15-file-watchers/plan.md) | done | 13 | S |
-| 16 | 16 | [Management dashboard webview](done/16-dashboard-webview/plan.md) | done | 13, 14, 15 | L |
-| 17 | 17 | [Form editor webview](done/17-form-editor/plan.md) | done | 08, 09, 10, 16 | M |
-| 18 | 18 | [Cross-assistant sync](done/18-cross-assistant-sync/plan.md) | done | 06, 13, 14, 16 | M |
-| 19 | 19 | [`hook` kind + active `rule` merge](done/19-hook-and-rule-merge/plan.md) | done | 03, 06, 12 | L |
-| 20 | 20 | [`remote-url` & `git-single-item` sources](done/20-remote-url-and-single-item-sources/plan.md) | done | 04, 11 | M |
-| 21 | 21 | [Codex CLI & Gemini CLI adapters](done/21-codex-gemini-adapters/plan.md) | done | 03, 05, 08, 09, 10, 12 | L |
-| 22 | 22 | [Project-scoped recommended installations](done/22-project-recommendations/plan.md) | done | 02, 06, 07 | M |
-| 23 | 23 | [Cross-framework identity lookup + shared content accessor](done/23-cross-framework-lookup/plan.md) | done | 13, 14 | M |
-| 24 | 24 | [Diff-vs-original + preview-before-install](done/24-diff-and-preview/plan.md) | done | 23 | M |
-| 25 | 25 | [Move action + Promote disambiguation fix](done/25-move-and-promote-fix/plan.md) | done | 14, 18 | M |
-| 26 | 26 | [Dashboard rebuild: unified table, filters, detail](done/26-dashboard-rebuild/plan.md) | done | 16, 23, 24, 25 | L |
-| 27 | 27 | [New Dashboard entry points](done/27-dashboard-entry-points/plan.md) | done | 22, 26 | S |
-| 28 | 28 | [Sidebar navigation unification](done/28-sidebar-unification/plan.md) | done | 16, 22 | M |
-| 29 | 29 | [Adapter registry & enabled-assistants config](done/29-adapter-registry/plan.md) | done | 03, 12, 21 | M |
-| 30 | 30 | [Source-resolver registry](done/30-source-resolver-registry/plan.md) | done | 04, 11, 20 | M |
-| 31 | 31 | [Dashboard: provider action-layer decoupling](done/31-dashboard-action-decoupling/plan.md) | done | 28, 29, 30 | M |
-| 32 | 32 | [Dashboard: structural skeleton](done/32-dashboard-skeleton/plan.md) | done | 28, 29 | M |
-| 33 | 33 | [Dashboard: Sources & Catalog section](done/33-dashboard-sources-catalog/plan.md) | done | 31, 32 | L |
-| 34 | 34 | [Dashboard: Recommendations + Installed action parity](done/34-dashboard-recommendations-parity/plan.md) | done | 31, 32 | M |
-| 35 | 35 | [Dashboard: hands-on testing fixes](done/35-dashboard-hands-on-fixes/plan.md) | done | 31, 32, 33, 34 | M |
-| 36 | 36 | [Add-source wizard](done/36-add-source-wizard/plan.md) | done | 29, 30, 31 | M |
-| 37 | 37 | [Install to multiple assistants and scopes](37-install-multi-target/plan.md) | in progress (done: 37.1; next: 37.2–37.3) | 29, 31 | M |
-| 38 | 38 | [Per-source refresh](done/38-per-source-refresh/plan.md) | done | 31, 33 | S |
-| 39 | 39 | [Dashboard Installed: bug, action parity, status clarity](39-dashboard-installed-fixes/plan.md) | in progress (done: 39.1, 39.4; running: 39.2) | 31, 32, 34, 35 | M |
-| 40 | 40 | [Dashboard Installed: collapsible object tree](done/40-dashboard-collapsible-objects/plan.md) | done | 35, 39.1 | L |
-| 41 | 41 | [Install elsewhere from a Dashboard row](41-install-elsewhere/plan.md) | in progress (done: 41.1; next: 41.2) | 37, 40 | M |
-| 42 | 42 | [Item actions, Tier 1 remainder](42-item-actions-tier1/plan.md) | in progress (done: 42.1; next: 42.2–42.5) | 39.2, 40 | M |
-| 43 | 43 | [Disabled state for installed items](43-disabled-state/plan.md) | in progress (done: 43.1–43.3; next: 43.4) | 40, 42 | L |
-| 44 | 44 | [Hardening and fixes from the kilocode-dev cross-check](44-hardening-from-kilocode-dev/plan.md) | in progress (done: 44.1, 44.3–44.6; next: 44.2) | 36.1, 38.1 | M |
-| 45 | 45 | [Claude Code plugins, native management](45-claude-plugins/plan.md) | in progress (done: 45.2; next: 45.3–45.5) | 40, 42 | L |
-| 46 | 46 | [CLI access to the extension](done/46-cli-access/plan.md) | done | 37.1, 44.1 | M |
-| 47 | 47 | [Update all](done/47-update-all/plan.md) | done | 37.1 | M |
-| 48 | 48 | [Maintainer features for the CLI](48-cli-maintainer-features/plan.md) | in progress (done: 48.1, 48.1b; next: 48.2–48.8) | 46, 47 | L |
-| 49 | 49 | [Install provenance and update detection — Implementation plan](49-install-provenance/plan.md) | in progress (done: 49.1; next: 49.2–49.7) | - | - |
+| 1 | 01 | [Scaffold del progetto](done/01-project-scaffold/plan.md) | done | — | S |
+| 2 | 02 | [Tipi di dominio + store del registro](done/02-domain-and-registry/plan.md) | done | 01 | S |
+| 3 | 03 | [Adapter Claude + Kilo (skill+rule)](done/03-claude-kilo-adapters/plan.md) | done | 02 | M |
+| 4 | 04 | [Resolver delle sorgenti (git-custom + local-folder)](done/04-source-resolver/plan.md) | done | 02 | M |
+| 5 | 05 | [Modello canonico + traduttore (skill)](done/05-translator-skill/plan.md) | done | 03.4 | M |
+| 6 | 06 | [Motore di installazione (pipeline)](done/06-install-engine/plan.md) | done | 05, 02.3, 03.4, 04.3 | M |
+| 7 | 07 | [UI minimale (3 viste)](done/07-minimal-ui/plan.md) | done | 06 | M |
+| 8 | 08 | [Supporto agli artefatti agent](done/08-agent-support/plan.md) | done | 07 | M |
+| 9 | 09 | [Supporto agli artefatti command](done/09-command-support/plan.md) | done | 08 | M |
+| 10 | 10 | [Supporto agli artefatti MCP-server](done/10-mcp-support/plan.md) | done | 08 | L |
+| 11 | 11 | [Resolver delle sorgenti marketplace](done/11-marketplace-sources/plan.md) | done | 08, 09, 10 | M |
+| 12 | 12 | [Adapter GitHub Copilot](done/12-copilot-adapter/plan.md) | done | 08, 09, 10 | M |
+| 13 | 13 | [Rilevamento di drift e aggiornamenti](done/13-drift-and-updates/plan.md) | done | 12 | M |
+| 14 | 14 | [Rilevamento e promozione](done/14-discovery-promotion/plan.md) | done | 13 | M |
+| 15 | 15 | [File watcher per la coerenza](done/15-file-watchers/plan.md) | done | 13 | S |
+| 16 | 16 | [Webview della dashboard di gestione](done/16-dashboard-webview/plan.md) | done | 13, 14, 15 | L |
+| 17 | 17 | [Webview dell'editor a modulo](done/17-form-editor/plan.md) | done | 08, 09, 10, 16 | M |
+| 18 | 18 | [Sincronizzazione tra assistenti](done/18-cross-assistant-sync/plan.md) | done | 06, 13, 14, 16 | M |
+| 19 | 19 | [Tipo `hook` + merge attivo di `rule`](done/19-hook-and-rule-merge/plan.md) | done | 03, 06, 12 | L |
+| 20 | 20 | [Sorgenti `remote-url` e `git-single-item`](done/20-remote-url-and-single-item-sources/plan.md) | done | 04, 11 | M |
+| 21 | 21 | [Adapter Codex CLI e Gemini CLI](done/21-codex-gemini-adapters/plan.md) | done | 03, 05, 08, 09, 10, 12 | L |
+| 22 | 22 | [Installazioni consigliate a livello di progetto](done/22-project-recommendations/plan.md) | done | 02, 06, 07 | M |
+| 23 | 23 | [Ricerca di identità cross-framework + accessor condiviso dei contenuti](done/23-cross-framework-lookup/plan.md) | done | 13, 14 | M |
+| 24 | 24 | [Diff rispetto all'originale + anteprima prima dell'installazione](done/24-diff-and-preview/plan.md) | done | 23 | M |
+| 25 | 25 | [Azione Move + correzione della disambiguazione di Promote](done/25-move-and-promote-fix/plan.md) | done | 14, 18 | M |
+| 26 | 26 | [Ricostruzione della Dashboard: tabella unificata, filtri, dettaglio](done/26-dashboard-rebuild/plan.md) | done | 16, 23, 24, 25 | L |
+| 27 | 27 | [Nuovi punti di accesso alla Dashboard](done/27-dashboard-entry-points/plan.md) | done | 22, 26 | S |
+| 28 | 28 | [Iniziativa 28 — Unificazione della navigazione nella sidebar](done/28-sidebar-unification/plan.md) | done | 16, 22 | M |
+| 29 | 29 | [Registro degli adapter e configurazione degli assistenti abilitati](done/29-adapter-registry/plan.md) | done | 03, 12, 21 | M |
+| 30 | 30 | [Registro dei risolutori di sorgenti](done/30-source-resolver-registry/plan.md) | done | 04, 11, 20 | M |
+| 31 | 31 | [Dashboard: disaccoppiamento del livello di azione dei provider](done/31-dashboard-action-decoupling/plan.md) | done | 28, 29, 30 | M |
+| 32 | 32 | [Dashboard: scheletro strutturale](done/32-dashboard-skeleton/plan.md) | done | 28, 29 | M |
+| 33 | 33 | [Dashboard: sezione Sources & Catalog](done/33-dashboard-sources-catalog/plan.md) | done | 31, 32 | L |
+| 34 | 34 | [Dashboard: sezione Recommendations + parità delle azioni di Installed](done/34-dashboard-recommendations-parity/plan.md) | done | 31, 32 | M |
+| 35 | 35 | [Dashboard: correzioni dai test pratici](done/35-dashboard-hands-on-fixes/plan.md) | done | 31, 32, 33, 34 | M |
+| 36 | 36 | [Wizard di aggiunta sorgente](done/36-add-source-wizard/plan.md) | done | 29, 30, 31 | M |
+| 37 | 37 | [Installazione su più assistenti e ambiti](37-install-multi-target/plan.md) | in progress (done: 37.1; next: 37.2–37.3) | 29, 31 | M |
+| 38 | 38 | [Aggiornamento per singola sorgente](done/38-per-source-refresh/plan.md) | done | 31, 33 | S |
+| 39 | 39 | [Scheda Installed della Dashboard: bug, parità delle azioni, chiarezza degli stati](39-dashboard-installed-fixes/plan.md) | in progress (done: 39.1, 39.4; running: 39.2) | 31, 32, 34, 35 | M |
+| 40 | 40 | [Dashboard Installed: una riga comprimibile per oggetto, una riga figlia per posizione](done/40-dashboard-collapsible-objects/plan.md) | done | 35, 39.1 | L |
+| 41 | 41 | ["Install elsewhere" da una riga della Dashboard](41-install-elsewhere/plan.md) | in progress (done: 41.1; next: 41.2) | 37, 40 | M |
+| 42 | 42 | [Azioni sugli elementi, completamento Tier 1](42-item-actions-tier1/plan.md) | in progress (done: 42.1; next: 42.2–42.5) | 39.2, 40 | M |
+| 43 | 43 | [Stato disabilitato per gli elementi installati](43-disabled-state/plan.md) | in progress (done: 43.1–43.3; next: 43.4) | 40, 42 | L |
+| 44 | 44 | [Hardening e correzioni emersi dal confronto incrociato con kilocode-dev](44-hardening-from-kilocode-dev/plan.md) | in progress (done: 44.1, 44.3–44.6; next: 44.2) | 36.1, 38.1 | M |
+| 45 | 45 | [Plugin di Claude Code, gestione nativa](45-claude-plugins/plan.md) | in progress (done: 45.2; next: 45.3–45.5) | 40, 42 | L |
+| 46 | 46 | [Accesso CLI a ai-swissknife](done/46-cli-access/plan.md) | done | 37.1, 44.1 | M |
+| 47 | 47 | [Aggiorna tutto (Update all)](done/47-update-all/plan.md) | done | 37.1 | M |
+| 48 | 48 | [Funzionalità per i manutentori nella CLI — solo bozza](48-cli-maintainer-features/plan.md) | in progress (done: 48.1, 48.1b; next: 48.2–48.8) | 46, 47 | L |
+| 49 | 49 | [Install provenance and update detection](49-install-provenance/plan.md) | in progress (done: 49.1; next: 49.2–49.7) | - | - |
 <!-- /ai-orch:generated initiatives -->
 
 ## Next up
