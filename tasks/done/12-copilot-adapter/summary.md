@@ -1,34 +1,34 @@
-# 12 — GitHub Copilot adapter — Summary
+# 12 — Adapter GitHub Copilot — Riepilogo
 
 > **Shipped on:** 2026-08-19  
-> **Initiative:** 12 — GitHub Copilot adapter  
-> **Status:** ✅ Done and merged into main
+> **Initiative:** 12 — Adapter GitHub Copilot  
+> **Status:** ✅ Completato e unito in main
 
 ---
 
-## What was built
+## Cosa è stato realizzato
 
 1. **CopilotAdapter (12.1)**:
-   - `CopilotAdapter` implementing `Adapter` interface for GitHub Copilot in VS Code.
-   - Skill path: `.github/skills/<name>/SKILL.md` (project) or `~/.copilot/skills/<name>/SKILL.md` (global).
-   - Agent path: `.github/agents/<name>.agent.md` (project) or `~/.copilot/agents/<name>.agent.md` (global).
-   - Command / Prompt path: `.github/prompts/<name>.prompt.md` (project) or `~/.copilot/prompts/<name>.prompt.md` (global).
-   - MCP Server path: `.vscode/mcp.json` (project) or `~/.copilot/mcp.json` (global).
-   - Instruction / Rule path: `.github/copilot-instructions.md` (project) or `~/.copilot/copilot-instructions.md` (global).
+   - `CopilotAdapter` che implementa l'interfaccia `Adapter` per GitHub Copilot in VS Code.
+   - Percorso skill: `.github/skills/<name>/SKILL.md` (progetto) o `~/.copilot/skills/<name>/SKILL.md` (globale).
+   - Percorso agent: `.github/agents/<name>.agent.md` (progetto) o `~/.copilot/agents/<name>.agent.md` (globale).
+   - Percorso command / prompt: `.github/prompts/<name>.prompt.md` (progetto) o `~/.copilot/prompts/<name>.prompt.md` (globale).
+   - Percorso server MCP: `.vscode/mcp.json` (progetto) o `~/.copilot/mcp.json` (globale).
+   - Percorso istruzioni / regole: `.github/copilot-instructions.md` (progetto) o `~/.copilot/copilot-instructions.md` (globale).
 
-2. **Copilot Translation Matrices (12.2)**:
-   - `translateSkill`: lossless for `github-copilot`.
-   - `translateAgent`: maps tools and model for `github-copilot`.
-   - `translateCommand`: maps prompt template markdown for `github-copilot`.
-   - `translateMcpServer`: maps stdio/sse/http configuration for `github-copilot`.
+2. **Matrici di traduzione per Copilot (12.2)**:
+   - `translateSkill`: senza perdita per `github-copilot`.
+   - `translateAgent`: mappa tool e modello per `github-copilot`.
+   - `translateCommand`: mappa il markdown del template prompt per `github-copilot`.
+   - `translateMcpServer`: mappa la configurazione stdio/sse/http per `github-copilot`.
 
-3. **Install Engine & UI Integration (12.3)**:
-   - GitHub Copilot (`github-copilot`) available in assistant selection quick-pick.
-   - Plan and apply installations to Copilot paths with atomic rollback and state persistence.
+3. **Integrazione nel motore di installazione e nella UI (12.3)**:
+   - GitHub Copilot (`github-copilot`) disponibile nel quick-pick di selezione dell'assistente.
+   - Pianificazione e applicazione delle installazioni nei percorsi di Copilot con rollback atomico e persistenza dello stato.
 
 ## Verification
 
-- Lint (`npm run lint`): 0 errors, 0 warnings.
-- Typecheck (`npm run typecheck`): Clean.
-- Test suite (`npm test`): 122 tests passing out of 122.
-- Build (`npm run build`): Generated bundle `dist/extension.js`.
+- Lint (`npm run lint`): 0 errori, 0 avvisi.
+- Typecheck (`npm run typecheck`): Pulito.
+- Suite di test (`npm test`): 122 test superati su 122.
+- Build (`npm run build`): Generato il bundle `dist/extension.js`.

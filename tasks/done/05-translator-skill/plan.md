@@ -1,41 +1,44 @@
-# 05 — Canonical model + translator (skill) — Implementation plan
+# 05 — Modello canonico + traduttore (skill) — Piano di implementazione
 
-> **Derived from spec:** [../specs/foundations.md](../../specs/foundations.md)
+> **Derivato dalla specifica:** [../specs/foundations.md](../../specs/foundations.md)
 
-Tasks (each = one commit; hand one file at a time to a delegated agent):
+Task (ciascuno = un commit; passare un file alla volta a un agente delegato):
 
 ## Tasks
 
-## Shared decisions
+## Decisioni condivise
 
-Shared decisions for this initiative that every task must honour:
+Decisioni condivise per questa iniziativa che ogni task deve rispettare:
 
-- `skill` and `rule` are format-identical between Claude Code and Kilo
-  Code (`plan.md`s of initiatives 03/04 already establish this,
-  citing SPEC.md §5 "rule convergence" and the `SKILL.md` schema check in
-  `plugin_manager.py`) — so this translator is intentionally the *easy*
-  case. Its purpose in Phase 1 is to prove the translator/diagnostic
-  machinery end-to-end on a case where the right answer is known and
-  simple (`lossless`, always), so Phase 2's genuinely hard case (`agent`:
-  Claude's flat `tools:` list vs Kilo's `mode`/`permission` block, SPEC.md
-  §1) has a working pattern to extend instead of inventing the pipeline
-  and debugging a hard translation in the same pass.
-- **Locked after hardening round 002**: the translator accepts only the
-  target `AssistantId`; it does not accept or infer a source assistant,
-  because a manifest-less custom repo has no trustworthy source identity.
-  It remains filesystem/path agnostic. Claude/Kilo return lossless output;
-  every other Phase-1 target returns an explicit unsupported diagnostic.
-- This initiative depends on 03.4 for the complete `CanonicalSkill`
-  directory payload but not on 04.
+- `skill` e `rule` hanno formato identico tra Claude Code e Kilo Code (i file
+  `plan.md` delle iniziative 03/04 lo stabiliscono già, citando SPEC.md §5 "rule
+  convergence" e il controllo dello schema `SKILL.md` in `plugin_manager.py`) —
+  pertanto questo traduttore rappresenta intenzionalmente il caso *facile*. Il
+  suo scopo nella Fase 1 è dimostrare il funzionamento end-to-end del meccanismo
+  traduttore/diagnostica su un caso in cui la risposta corretta è nota e
+  semplice (sempre `lossless`), così che il caso realmente complesso della Fase 2
+  (`agent`: la lista piatta `tools:` di Claude contro il blocco
+  `mode`/`permission` di Kilo, SPEC.md §1) disponga già di uno schema
+  funzionante da estendere anziché dover inventare la pipeline e fare debug di
+  una traduzione complessa nello stesso passaggio.
+- **Decisione fissata dopo il round di hardening 002**: il traduttore accetta
+  solo l'`AssistantId` di destinazione; non accetta né deduce un assistente
+  sorgente, poiché un repository personalizzato privo di manifest non possiede
+  un'identità sorgente attendibile. Rimane agnostico rispetto a filesystem e
+  percorsi. Claude/Kilo restituiscono un output senza perdita; ogni altra
+  destinazione nella Fase 1 restituisce una diagnostica esplicita di mancato
+  supporto.
+- Questa iniziativa dipende da 03.4 per il payload completo della directory
+  `CanonicalSkill`, ma non dalla 04.
 
-## Closed
+## Chiusi
 
-### 05.1 - Translator + conversion diagnostics
+### 05.1 - Traduttore + diagnostiche di conversione
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Skill and rule translator · **Size:** S · **Depends on:** 03.1 · **Spec:** [05.1-translator.md](05.1-translator.md)
-- **Goal:** Implement `translateSkill` and `translateRule` in `src/translator/skill.ts` returning translated canonical objects alongside `ConversionDiagnostic`.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Traduttore per skill e regole · **Size:** S · **Depends on:** 03.1 · **Spec:** [05.1-translator.md](05.1-translator.md)
+- **Goal:** Implementare `translateSkill` e `translateRule` in `src/translator/skill.ts` restituendo gli oggetti canonici tradotti insieme a `ConversionDiagnostic`.
 
-### 05.2 - Per-field diagnostics (hardening)
+### 05.2 - Diagnostiche per campo (hardening)
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Target-typed per-field diagnostics · **Size:** M · **Depends on:** 05.1, 03.4 · **Spec:** [05.2-hardening.md](05.2-hardening.md)
-- **Goal:** Change `translateSkill` and `translateRule` to take only `targetAssistant: AssistantId` and return structured `TranslationResult<T>` with per-field diagnostics and preserved auxiliary skill files.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Diagnostiche per campo per destinazione · **Size:** M · **Depends on:** 05.1, 03.4 · **Spec:** [05.2-hardening.md](05.2-hardening.md)
+- **Goal:** Modificare `translateSkill` e `translateRule` affinché accettino solo `targetAssistant: AssistantId` e restituiscano un `TranslationResult<T>` strutturato con diagnostiche per campo e file ausiliari della skill preservati.

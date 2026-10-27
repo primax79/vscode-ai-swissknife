@@ -1,62 +1,64 @@
-# 06 — Install engine (pipeline) — Implementation plan
+# 06 — Motore di installazione (pipeline) — Piano di implementazione
 
-> **Derived from spec:** [../specs/foundations.md](../../specs/foundations.md)
+> **Derivato dalla specifica:** [../specs/foundations.md](../../specs/foundations.md)
 
-**Revised 2026-08-18** (second Codex review, `../_inbox/analyzed/
-codex-analysis-2.md` finding B4, and B1/B2/B3 from the initiatives this
-one depends on): both tasks below were rewritten before any code existed
-for them, to depend on the hardened contracts from 02.3/03.4/04.3/05.2
-instead of the original, incomplete ones. No history to preserve — treat
-`06.1-plan-and-preview.md`/`06.2-apply-and-verify.md` as the only version
-that ever existed for delegation purposes.
+**Rivisto il 2026-08-18** (seconda revisione Codex, `../_inbox/analyzed/
+codex-analysis-2.md` rilievo B4, e B1/B2/B3 dalle iniziative da cui questa
+dipende): entrambi i task sottostanti sono stati riscritti prima che esistesse
+alcun codice per essi, in modo da dipendere dai contratti consolidati di
+02.3/03.4/04.3/05.2 anziché da quelli originali incompleti. Nessuna cronologia
+da preservare — considerare `06.1-plan-and-preview.md`/`06.2-apply-and-verify.md`
+come l'unica versione mai esistita ai fini della delega.
 
-Tasks (each = one commit; hand one file at a time to a delegated agent):
+Task (ciascuno = un commit; passare un file alla volta a un agente delegato):
 
 ## Tasks
 
-## Shared decisions
+## Decisioni condivise
 
-Shared decisions for this initiative that every task must honour:
+Decisioni condivise per questa iniziativa che ogni task deve rispettare:
 
-- The pipeline is `resolve → plan → preview → apply → verify` (SPEC.md
-  §2.4) — `resolve` is initiative 04's resolvers (`Package[]`/
-  `Artifact[]`) plus 02.3's `resolveArtifactContent` (metadata →
-  real content); this initiative starts from an already-resolved
-  `Package`+`Artifact` and fetches content itself via that function.
-- `plan` must be a pure function with no side effects — read-only
-  existence/hash checks only, never a write. This is what makes
-  `preview` possible before `apply` touches anything.
-- `apply` is a **staged directory transaction** (stage → verify staged →
-  swap atomically → verify final → persist state → clean up backup),
-  not a direct call to the adapter's write method — see `06.2` for the
-  exact sequence and failure handling. A failed verification must never
-  result in a recorded `ManagedInstallation`.
-- `apply` writes to the **state file** (02.3's `writeState`), never the
-  manifest — installations are machine-local.
-- `PreparedInstall` is discriminated: unsupported plans contain no dummy
-  payload. Supported plans carry `TranslationResult.value` plus one shared
-  canonical hash. Apply verifies that hash and the complete target-tree
-  snapshot before mutation, preserves file modes while staging, and reports
-  manual recovery whenever restoration cannot be proven.
-- Only `artifact.kind === 'skill'` is actually supported end-to-end in
-  this Phase (rule is deferred, `tasks/CONTEXT.md`) — `plan`/`apply` must
-  say so explicitly (`supported: false` / `{status: 'refused'}`) for
-  anything else, not silently no-op or throw.
-- This initiative depends on 03 (adapters, hardened by 03.4), 04
-  (resolvers, hardened by 04.3), 05 (translator, hardened by 05.2), and
-  02.3 (resolved-artifact + state/manifest split) — it's the first
-  initiative that wires all of them together, which is exactly why the
-  second review flagged it as the point where incomplete contracts
-  upstream become expensive to discover.
+- La pipeline è `resolve → plan → preview → apply → verify` (SPEC.md
+  §2.4) — `resolve` corrisponde ai resolver dell'iniziativa 04 (`Package[]`/
+  `Artifact[]`) più `resolveArtifactContent` di 02.3 (metadati →
+  contenuto reale); questa iniziativa parte da una coppia `Package`+`Artifact`
+  già risolta e recupera direttamente il contenuto tramite tale funzione.
+- `plan` deve essere una funzione pura priva di effetti collaterali — solo
+  controlli in sola lettura di esistenza/hash, mai una scrittura. Questo è ciò
+  che rende possibile `preview` prima che `apply` modifichi alcunché.
+- `apply` è una **transazione su directory con staging** (staging → verifica
+  staging → scambio atomico → verifica finale → persistenza dello stato →
+  pulizia del backup), non una chiamata diretta al metodo di scrittura
+  dell'adapter — vedere `06.2` per la sequenza esatta e la gestione dei
+  fallimenti. Una verifica fallita non deve mai tradursi in una
+  `ManagedInstallation` registrata.
+- `apply` scrive nel **file di stato** (`writeState` di 02.3), mai nel
+  manifest — le installazioni sono locali alla macchina.
+- `PreparedInstall` è discriminato: i piani non supportati non contengono
+  payload fittizi. I piani supportati trasportano `TranslationResult.value` più
+  un unico hash canonico condiviso. L'applicazione verifica tale hash e
+  l'intero snapshot dell'albero di destinazione prima di apportare modifiche,
+  preserva i permessi dei file durante lo staging e segnala la necessità di
+  ripristino manuale ogniqualvolta il ripristino non possa essere dimostrato.
+- Solo `artifact.kind === 'skill'` è effettivamente supportato end-to-end in
+  questa Fase (rule è rimandato, `tasks/CONTEXT.md`) — `plan`/`apply` devono
+  dichiararlo esplicitamente (`supported: false` / `{status: 'refused'}`) per
+  qualsiasi altro tipo, senza eseguire silenziosamente un no-op o sollevare
+  eccezioni.
+- Questa iniziativa dipende da 03 (adapter, consolidati da 03.4), 04 (resolver,
+  consolidati da 04.3), 05 (traduttore, consolidato da 05.2) e 02.3 (artefatto
+  risolto + separazione stato/manifest) — è la prima iniziativa che li collega
+  tutti insieme, motivo per cui la seconda revisione l'ha segnalata come il
+  punto in cui contratti incompleti a monte diventano costosi da scoprire.
 
-## Closed
+## Chiusi
 
-### 06.1 - Plan + preview (revised)
+### 06.1 - Pianificazione + anteprima (rivisto)
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Install plan and preview · **Size:** M · **Depends on:** 02.3, 03.4, 04.3, 05.2 · **Spec:** [06.1-plan-and-preview.md](06.1-plan-and-preview.md)
-- **Goal:** Resolve real skill content, translate it for the target assistant, compute a conflict/file preview against a validated target directory, and return a discriminated `PreparedInstall`.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Piano e anteprima di installazione · **Size:** M · **Depends on:** 02.3, 03.4, 04.3, 05.2 · **Spec:** [06.1-plan-and-preview.md](06.1-plan-and-preview.md)
+- **Goal:** Risolvere il contenuto reale della skill, tradurlo per l'assistente di destinazione, calcolare un'anteprima di conflitti/file rispetto a una directory di destinazione validata e restituire un `PreparedInstall` discriminato.
 
-### 06.2 - Transactional apply + verify (revised)
+### 06.2 - Applicazione transazionale + verifica (rivisto)
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Transactional apply and verify · **Size:** M · **Depends on:** 06.1 · **Spec:** [06.2-apply-and-verify.md](06.2-apply-and-verify.md)
-- **Goal:** Apply a `PreparedInstall` via a staged directory swap with target-tree snapshot revalidation, post-swap verification, rollback recovery outcomes, and `state.json` persistence.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Applicazione transazionale e verifica · **Size:** M · **Depends on:** 06.1 · **Spec:** [06.2-apply-and-verify.md](06.2-apply-and-verify.md)
+- **Goal:** Applicare un `PreparedInstall` tramite uno scambio di directory con staging con rivalidazione dello snapshot dell'albero di destinazione, verifica post-scambio, esiti di ripristino rollback e persistenza in `state.json`.

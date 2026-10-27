@@ -1,19 +1,19 @@
-# 02 — Domain types + registry store — Summary
+# 02 — Tipi di dominio + store del registro — Riepilogo
 
-> **Closed on:** 2026-10-27 (registry tidy; verifier ai-coding-tools-c1)  
-> **Initiative:** 02 — Domain types + registry store  
-> **Status:** ✅ Done and merged into main
+> **Closed on:** 2026-10-27 (riordino del registro; verificatore ai-coding-tools-c1)  
+> **Initiative:** 02 — Tipi di dominio + store del registro  
+> **Status:** ✅ Completato e unito in main
 
-Summary written at closure from the plan and the git history; the per-task specs in this folder hold the detail.
+Riepilogo scritto alla chiusura a partire dal piano e dalla cronologia git; le specifiche per singolo task in questa cartella contengono i dettagli.
 
-## What was built
+## Cosa è stato realizzato
 
-- **02.1 Core domain types** — merged eb779ca 2026-08-18. Define every core entity from the spec (`AssistantId`, `ItemKind`, `Scope`, `Source`, `Package`, `Artifact`, `ManagedInstallation`, `ObservedArtifact`) as TypeScript interfaces in `src/domain/types.ts`.
-- **02.2 Registry store (read/write JSON, global + project)** — merged 6b6c5fe 2026-08-18; commit 7c2c036. Implement pure-Node atomic JSON read/write functions for the registry at global and project scopes.
-- **02.3 Persistence and resolved-artifact model (hardening)** — merged 29fe38b 2026-08-19. Split persistence into shareable `manifest.json` (`DesiredSource`, `desiredInstallations`) and machine-local `state.json` under `.ai-swissknife`, and add typed `ResolvedArtifact<CanonicalSkill>` content resolution and a shared Git cache mutex.
+- **02.1 Tipi di dominio fondamentali** — unito eb779ca 2026-08-18. Definire ogni entità fondamentale della specifica (`AssistantId`, `ItemKind`, `Scope`, `Source`, `Package`, `Artifact`, `ManagedInstallation`, `ObservedArtifact`) come interfacce TypeScript in `src/domain/types.ts`.
+- **02.2 Store del registro (lettura/scrittura JSON, globale + progetto)** — unito 6b6c5fe 2026-08-18; commit 7c2c036. Implementare funzioni puro-Node di lettura/scrittura JSON atomica per il registro negli scope globale e di progetto.
+- **02.3 Modello di persistenza e artefatti risolti (hardening)** — unito 29fe38b 2026-08-19. Suddividere la persistenza in `manifest.json` condivisibile (`DesiredSource`, `desiredInstallations`) e `state.json` locale alla macchina sotto `.ai-swissknife`, e aggiungere la risoluzione tipizzata del contenuto `ResolvedArtifact<CanonicalSkill>` e un mutex condiviso per la cache Git.
 
 ## Verification
 
-- Every task's work is merged into `main` (evidence: the commits named above, from `git log --grep '<id>'`).
-- `npm test` on `main` at 5e85109 (2026-10-27): 577 tests, 576 pass, 0 fail, 1 opt-in skip (`AISK_REAL_KILO=1`).
-- `ai-orch tasks validate --tasks-dir tasks`: 0 errors.
+- Il lavoro di ogni task è stato unito in `main` (evidenza: i commit indicati sopra, da `git log --grep '<id>'`).
+- `npm test` su `main` a 5e85109 (2026-10-27): 577 test, 576 superati, 0 falliti, 1 saltato opt-in (`AISK_REAL_KILO=1`).
+- `ai-orch tasks validate --tasks-dir tasks`: 0 errori.
