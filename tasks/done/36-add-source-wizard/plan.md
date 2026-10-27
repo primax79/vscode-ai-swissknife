@@ -1,58 +1,58 @@
-# 36 — Add-source wizard — Implementation plan
+# 36 — Wizard di aggiunta sorgente — Piano di implementazione
 
-> Source: owner idea of 2026-10-08, `_inbox/analyzed/2026-10-08-add-source-wizard.md`.
-> Small, well-grounded UX rewrite of one method; no separate spec (inline
-> option of `tasks/AGENTS.md`), tasks expanded because it is delegated.
+> Fonte: idea del proprietario del 2026-10-08, `_inbox/analyzed/2026-10-08-add-source-wizard.md`.
+> Riscrittura UX contenuta e ben fondata di un singolo metodo; nessuna specifica separata (opzione
+> inline di `tasks/AGENTS.md`), task espansi perché delegati.
 
-**Depends on:** 29, 30 (resolver registry), 31 (Dashboard action layer) — all merged.
+**Depends on:** 29, 30 (registro dei resolver), 31 (livello di azioni della Dashboard) — tutti uniti.
 
-## Problem (grounded)
+## Problema (fondato sul codice)
 
-`SourcesProvider.addSource(forceScope?)` (`src/ui/sourcesView.ts:173-280`) asks, in
-this order: scope → type → **id** → display name → location (url or path) →
-ref choice (branch/tag/default, then a further input) — up to 7 prompts, with
-the least-informative questions (id, name) first and the most-informative one
-(location) fifth. Nothing is derived from the location.
+`SourcesProvider.addSource(forceScope?)` (`src/ui/sourcesView.ts:173-280`) chiede, in
+questo ordine: scope → tipo → **id** → nome visualizzato → posizione (URL o percorso) →
+scelta del ref (branch/tag/default, seguita da un ulteriore input) — fino a 7 prompt, con
+le domande meno informative (id, nome) per prime e quella più informativa
+(posizione) per quinta. Nulla viene derivato dalla posizione.
 
-## Target flow (owner decision, revised 2026-10-08)
+## Flusso obiettivo (decisione del proprietario, rivista il 2026-10-08)
 
-1. **Type** (QuickPick of `ALL_SOURCE_RESOLVERS`, using each resolver's `displayName`/`iconThemeId` instead of raw ids).
-2. **Scope(s)**: multi-select Global and/or Workspace (at least one). Skipped when `forceScope` is passed (Dashboard `+` buttons, `recommendations.ts:271`).
-3. **Location**: git types and `remote-url` ask one URL shared by all selected scopes. `local-folder` asks **one path per selected scope, independently** (each validated against its own scope constraint, so a global path under home and a project path inside the workspace can differ).
-4. **Details, prefilled from the location**: `id` (slug of repo/folder name, from the first location entered) and `name`; one input box each, Enter accepts. Branch/tag is not asked by default for git types (default branch assumed); pinning is reachable only via an explicit optional step (Q2).
-5. Write one `DesiredSource` per selected scope, same id/name/type, with that scope's own location.
+1. **Tipo** (QuickPick di `ALL_SOURCE_RESOLVERS`, usando `displayName`/`iconThemeId` di ciascun resolver invece degli id grezzi).
+2. **Scope**: selezione multipla Global e/o Workspace (almeno uno). Saltato quando viene passato `forceScope` (pulsanti `+` della Dashboard, `recommendations.ts:271`).
+3. **Posizione**: i tipi git e `remote-url` chiedono un unico URL condiviso da tutti gli scope selezionati. `local-folder` chiede **un percorso per ciascuno scope selezionato, in modo indipendente** (ciascuno validato rispetto al vincolo del proprio scope, così che un percorso globale sotto la home e un percorso di progetto dentro il workspace possano differire).
+4. **Dettagli, precompilati dalla posizione**: `id` (slug del nome del repo/cartella, dalla prima posizione inserita) e `name`; una casella di input ciascuno, Invio accetta. Branch/tag non viene chiesto di default per i tipi git (si assume il branch di default); il fissaggio a un ref è raggiungibile solo tramite un passo opzionale esplicito (Q2).
+5. Scrivere un `DesiredSource` per ciascuno scope selezionato, con stessi id/nome/tipo e con la posizione propria di quello scope.
 
-## Locked-in decisions
+## Decisioni consolidate
 
-- Vocabulary: the `project` scope is shown to the user as **"Workspace"** (CONTEXT.md). Use the literal until 40.4's `getScopeLabel` exists, then that helper.
+- Vocabolario: lo scope `project` è mostrato all'utente come **"Workspace"** (CONTEXT.md). Usare la stringa letterale finché non esiste `getScopeLabel` di 40.4, poi usare quell'helper.
 
-- Type first, then scope(s), then location (owner, revised). Why: asking scope(s) up front lets `local-folder` ask the right path for each scope, which removes the old "Both only when one path fits both constraints" workaround.
-- `local-folder` locations are per scope; git/remote-url are shared.
-- `addSource(forceScope?)` keeps its signature and return value (`Source | undefined`; when several scopes are written, return the first): three callers depend on it (`extension.ts:242`, `dashboard.ts:127`, `recommendations.ts:271`).
-- Wizard logic that does not need `vscode` (derivation, validation) lives in a pure module so it is unit-testable without the extension host.
+- Prima il tipo, poi gli scope, poi la posizione (proprietario, rivisto). Motivo: chiedere gli scope all'inizio permette a `local-folder` di chiedere il percorso giusto per ciascuno scope, eliminando il vecchio ripiego "Entrambi solo quando un unico percorso soddisfa entrambi i vincoli".
+- Le posizioni `local-folder` sono per scope; git/remote-url sono condivisi.
+- `addSource(forceScope?)` mantiene la sua firma e il valore di ritorno (`Source | undefined`; quando vengono scritti più scope, restituisce il primo): tre chiamanti dipendono da questo (`extension.ts:242`, `dashboard.ts:127`, `recommendations.ts:271`).
+- La logica del wizard che non richiede `vscode` (derivazione, validazione) risiede in un modulo puro così da essere testabile unitariamente senza l'extension host.
 
-## Open questions (resolve with the owner before 36.2/36.3 are dispatched)
+## Questioni aperte (da risolvere con il proprietario prima di delegare 36.2/36.3)
 
-- ~~36-Q1 ("Both" + `local-folder`)~~ resolved: scope(s) asked up front, path asked independently per scope.
-- ~~36-Q2~~ resolved (owner, 2026-10-08): branch/tag pin is out of the main flow; default branch is assumed; pinning is an optional "Advanced: pin to branch/tag" step.
-- ~~36-Q3~~ resolved (owner, 2026-10-08): same id already in a chosen scope → modal "Replace?" per scope instead of the silent overwrite at `src/ui/sourcesView.ts:268`; answering No skips that scope only.
-- ~~36-Q4~~ resolved (owner, 2026-10-08, revised): the workspace is known before the scope step, so with no workspace the scope multi-select offers only Global (Workspace not shown, with a one-line hint). No drop-after-selection logic.
+- ~~36-Q1 ("Both" + `local-folder`)~~ risolta: scope chiesti all'inizio, percorso chiesto in modo indipendente per ciascuno scope.
+- ~~36-Q2~~ risolta (proprietario, 2026-10-08): il fissaggio di branch/tag è fuori dal flusso principale; si assume il branch di default; il fissaggio è un passo opzionale "Advanced: pin to branch/tag".
+- ~~36-Q3~~ risolta (proprietario, 2026-10-08): stesso id già presente in uno scope scelto → modale "Replace?" per scope invece della sovrascrittura silenziosa in `src/ui/sourcesView.ts:268`; rispondere No salta solo quello scope.
+- ~~36-Q4~~ risolta (proprietario, 2026-10-08, rivista): il workspace è noto prima del passo dello scope, quindi senza workspace la selezione multipla dello scope offre solo Global (Workspace non mostrato, con un suggerimento su una riga). Nessuna logica di scarto post-selezione.
 
 ## Tasks
 
-## Closed
+## Chiusi
 
-### 36.1 - Pure helper: validate location + derive id/name
+### 36.1 - Helper puro: validazione della posizione + derivazione di id/nome
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Validate location and derive defaults · **Size:** S · **Depends on:** - · **Spec:** [36.1-derive-source-defaults.md](36.1-derive-source-defaults.md)
-- **Goal:** Create `src/sources/sourceDefaults.ts` exporting `validateLocation` and `deriveSourceDefaults` to validate URLs/paths and derive source `id` and `name` without `vscode` imports.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Valida posizione e deriva default · **Size:** S · **Depends on:** - · **Spec:** [36.1-derive-source-defaults.md](36.1-derive-source-defaults.md)
+- **Goal:** Creare `src/sources/sourceDefaults.ts` che esporta `validateLocation` e `deriveSourceDefaults` per validare URL/percorsi e derivare `id` e `name` della sorgente senza importare `vscode`.
 
-### 36.2 - Rewrite `addSource` as the type → scope(s) → location → details wizard (single scope)
+### 36.2 - Riscrittura di `addSource` come wizard tipo → scope → posizione → dettagli (scope singolo)
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Add-source wizard flow · **Size:** M · **Depends on:** 36.1 · **Spec:** [36.2-wizard-flow.md](36.2-wizard-flow.md)
-- **Goal:** Rewrite `SourcesProvider.addSource(forceScope?)` into a type → scope → location → prefilled id/name wizard flow with default branch assumption and optional branch/tag pinning.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Flusso wizard aggiunta sorgente · **Size:** M · **Depends on:** 36.1 · **Spec:** [36.2-wizard-flow.md](36.2-wizard-flow.md)
+- **Goal:** Riscrivere `SourcesProvider.addSource(forceScope?)` in un flusso wizard tipo → scope → posizione → id/nome precompilati con assunzione del branch di default e fissaggio opzionale di branch/tag.
 
-### 36.3 - Multi-scope selection (one write per scope, per-scope local paths) + duplicate-id handling
+### 36.3 - Selezione multi-scope (una scrittura per scope, percorsi locali per scope) + gestione degli id duplicati
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Multi-scope add-source wizard · **Size:** S · **Depends on:** 36.2 · **Spec:** [36.3-scope-both.md](36.3-scope-both.md)
-- **Goal:** Turn the add-source scope step into a multi-select (Global and/or Workspace), ask per-scope paths for `local-folder`, and prompt "Replace?" on duplicate source IDs per scope.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Wizard aggiunta sorgente multi-scope · **Size:** S · **Depends on:** 36.2 · **Spec:** [36.3-scope-both.md](36.3-scope-both.md)
+- **Goal:** Trasformare il passo dello scope di aggiunta sorgente in una selezione multipla (Global e/o Workspace), chiedere percorsi per scope per `local-folder` e chiedere "Replace?" in caso di ID sorgente duplicati per scope.
