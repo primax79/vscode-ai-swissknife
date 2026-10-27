@@ -4,11 +4,24 @@
 
 Tasks (each = one commit):
 
-1. **[23.1 — Extract shared resolve+translate content accessor](23.1-shared-content-accessor.md)**: pull `plan.ts`'s `resolveContentFromSource` + per-kind translation calls (the fullest existing implementation — all 5 source types, all 6 kinds) into one reusable function, without changing `planInstall`'s own behavior.
-2. **[23.2 — Migrate drift.ts and discovery.ts onto the shared accessor](23.2-migrate-drift-discovery.md)**: replace `checkForUpstreamUpdate`'s and the discovery match loop's narrower (3 source types, 4 kinds) inline resolve+translate logic with calls to 23.1's accessor — closes the `hook`/`rule` gap (including the `analyzeLocalDrift` bug that always reports them as drifted) as a side effect.
-3. **[23.3 — Cross-framework identity lookup function](23.3-cross-framework-lookup.md)**: pure function returning every other `ManagedInstallation` representing "the same logical artifact" as a given one — independent of 23.1/23.2, can be built in parallel.
+## Tasks
 
-**Task order and gating:**
+### 23.1 - Extract shared resolve+translate content accessor
+
+- **Status:** `delivered` (merged ab02786 2026-09-07; commit a820f3b) · **Short:** Shared resolveAndTranslate accessor · **Size:** M · **Depends on:** 13, 14 · **Spec:** [23.1-shared-content-accessor.md](23.1-shared-content-accessor.md)
+- **Goal:** Extract `resolveContentFromSource` and per-kind translation calls from `plan.ts` into a shared `resolveAndTranslate` content accessor supporting all 5 source types and 6 artifact kinds.
+
+### 23.2 - Migrate drift.ts and discovery.ts onto the shared accessor
+
+- **Status:** `delivered` (merged 6bd0da3 2026-09-08; commit 77f6a4a) · **Short:** Migrate drift and discovery · **Size:** M · **Depends on:** 23.1 · **Spec:** [23.2-migrate-drift-discovery.md](23.2-migrate-drift-discovery.md)
+- **Goal:** Replace inline resolve-and-translate logic in `drift.ts` and `discovery.ts` with calls to `resolveAndTranslate`, closing the `hook` and `rule` drift/discovery gap.
+
+### 23.3 - Cross-framework identity lookup function
+
+- **Status:** `delivered` (merged d0e6160 2026-09-07; commit 7c95667) · **Short:** Cross-framework identity lookup · **Size:** S · **Depends on:** 13, 14 · **Spec:** [23.3-cross-framework-lookup.md](23.3-cross-framework-lookup.md)
+- **Goal:** Implement `findRelatedInstallations` in `src/engine/crossFrameworkLookup.ts` to find all `ManagedInstallation` records representing the same logical artifact across assistants and scopes.
+
+## Task order and gating
 
 - **23.1 gates 23.2** (23.2 calls what 23.1 extracts).
 - **23.3 is independent** of 23.1/23.2 — it only reads `ManagedInstallation[]`, no source resolution involved.

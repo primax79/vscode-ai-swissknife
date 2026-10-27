@@ -4,9 +4,28 @@
 
 Tasks (each = one commit):
 
-1. **[21.1 — Gemini `agent` verification spike](21.1-gemini-agent-verification.md)**: **no adapter code** — confirm whether Gemini CLI has a standalone `agent` format before 21.3 writes (or explicitly skips) it.
-2. **[21.2 — Codex CLI adapter](21.2-codex-adapter.md)**: TOML parse/serialize for `agent`/`mcp-server`, plain `AGENTS.md` for `rule`, same `SKILL.md` for `skill`, read-only import for the deprecated `command`.
-3. **[21.3 — Gemini CLI adapter](21.3-gemini-adapter.md)**: TOML `command` with path→`:` name mapping, hierarchical `GEMINI.md` for `rule`, `mcpServers` in `settings.json`, same `SKILL.md` for `skill`, `agent` per 21.1's finding.
-4. **[21.4 — Translator wiring & UI integration](21.4-codex-gemini-ui.md)**: extend every existing translator with `codex-cli`/`gemini-cli` branches and add both to the assistant pickers across the UI, then verify.
+## Tasks
+
+### 21.1 - Gemini `agent` verification spike
+
+- **Status:** `delivered` (merged c03300a 2026-08-19; commit a938bf5; recorded in summary.md and SPEC.md 6f3b6cc) · **Short:** Gemini agent verification spike · **Size:** S · **Kind:** investigation · **Depends on:** 08 · **Spec:** [21.1-gemini-agent-verification.md](21.1-gemini-agent-verification.md)
+- **Goal:** Verify whether Gemini CLI supports a standalone `agent` format outside extension bundles before implementing `GeminiAdapter`.
+
+### 21.2 - Codex CLI adapter
+
+- **Status:** `delivered` (merged c03300a 2026-08-19; commit a938bf5) · **Short:** Codex CLI adapter · **Size:** M · **Depends on:** 03, 05, 08, 09, 10, 12 · **Spec:** [21.2-codex-adapter.md](21.2-codex-adapter.md)
+- **Goal:** Implement `CodexAdapter` in `src/adapters/codex.ts` supporting `skill` (`SKILL.md`), `agent` (`.codex/agents/*.toml`), `command` (`.codex/prompts/*.md`), `mcp-server` (`.codex/config.json`), and `rule` (`AGENTS.md`).
+
+### 21.3 - Gemini CLI adapter
+
+- **Status:** `delivered` (merged c03300a 2026-08-19; commit a938bf5) · **Short:** Gemini CLI adapter · **Size:** M · **Depends on:** 21.1, 03, 05, 08, 09, 10, 12 · **Spec:** [21.3-gemini-adapter.md](21.3-gemini-adapter.md)
+- **Goal:** Implement `GeminiAdapter` in `src/adapters/gemini.ts` supporting `skill` (`SKILL.md`), TOML `command` (`.gemini/commands/*.toml`), `mcp-server` (`settings.json`), and `rule` (`GEMINI.md`).
+
+### 21.4 - Translator wiring & UI integration
+
+- **Status:** `delivered` (merged c03300a 2026-08-19; commit a938bf5) · **Short:** Codex and Gemini UI integration · **Size:** M · **Depends on:** 21.2, 21.3 · **Spec:** [21.4-codex-gemini-ui.md](21.4-codex-gemini-ui.md)
+- **Goal:** Extend all per-kind translators with `codex-cli` and `gemini-cli` target branches and expose all five assistants across UI pickers, sync, discovery, and drift.
+
+## Gating
 
 **Task 21.1 gates the `agent` portion of 21.3** (the rest of 21.3 doesn't depend on it and can proceed in parallel).

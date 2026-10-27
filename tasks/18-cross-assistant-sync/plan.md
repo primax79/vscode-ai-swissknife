@@ -4,6 +4,19 @@
 
 Tasks (each = one commit):
 
-1. **[18.1 — `planSync` engine core](18.1-sync-engine-core.md)**: implement `planSync` in a new `src/engine/sync.ts`, reusing the existing per-kind translators and producing the same `SupportedInstallPlan`/`UnsupportedInstallPlan` shape `planInstall` already produces.
-2. **[18.2 — Conflict policy & on-the-fly promotion](18.2-sync-conflict-and-promotion.md)**: add a skip/overwrite/cancel conflict prompt reusable for single-item and batch sync, and support syncing an `ObservedArtifact` by promoting it first via the existing promotion engine (initiative 14).
-3. **[18.3 — "Copy to..." UI action](18.3-sync-ui-integration.md)**: add the sync action to Installed view and Dashboard, target assistant/scope picker, batch sync, and verify.
+## Tasks
+
+### 18.1 - `planSync` engine core
+
+- **Status:** `delivered` (merged cd26783 2026-08-19; commit 671e18e) · **Short:** planSync engine core · **Size:** M · **Depends on:** 06, 13, 14 · **Spec:** [18.1-sync-engine-core.md](18.1-sync-engine-core.md)
+- **Goal:** Implement `planSync` in `src/engine/sync.ts` reusing per-kind translators to produce a `PreparedInstall` from an existing installed or observed artifact.
+
+### 18.2 - Conflict policy & on-the-fly promotion
+
+- **Status:** `delivered` (merged cd26783 2026-08-19; commit 671e18e) · **Short:** Sync conflict and promotion · **Size:** S · **Depends on:** 18.1 · **Spec:** [18.2-sync-conflict-and-promotion.md](18.2-sync-conflict-and-promotion.md)
+- **Goal:** Add conflict handling for single and batch sync and support syncing an `ObservedArtifact` by promoting it via `promoteObservedArtifact`.
+
+### 18.3 - "Copy to..." UI action
+
+- **Status:** `delivered` (merged cd26783 2026-08-19; commit 671e18e) · **Short:** Copy to UI action · **Size:** S · **Depends on:** 16, 18.2 · **Spec:** [18.3-sync-ui-integration.md](18.3-sync-ui-integration.md)
+- **Goal:** Wire the `syncItem` ("Copy to...") action and target assistant/scope picker into the Installed view and Dashboard.

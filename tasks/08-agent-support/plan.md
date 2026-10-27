@@ -4,6 +4,19 @@
 
 Tasks (each = one commit):
 
-1. **[08.1 — CanonicalAgent model and Claude/Kilo agent adapters](08.1-agent-adapter.md)**: define `CanonicalAgent` in `src/adapters/types.ts`, implement `parseAgentMarkdown` / `serializeAgentMarkdown` / `readAgent` / `writeAgent` / `listAgents` in Claude and Kilo adapters, with verified paths (`.claude/agents/<name>.md`, `.kilo/agents/<name>.md` and `.kilo/agent/<name>.md`).
-2. **[08.2 — Agent translator & install engine](08.2-agent-translator-engine.md)**: implement `translateAgent(source: CanonicalAgent, target: AssistantId): TranslationResult<CanonicalAgent>` with tool-permission mapping, extend `planInstall` and `applyInstall` to handle `kind: 'agent'`.
-3. **[08.3 — Agent detection & UI integration](08.3-agent-ui.md)**: detect agent files in `localFolder` and `gitCustom` resolvers, display agents in Available and Installed views with distinct icons, and enable direct / batch installation.
+## Tasks
+
+### 08.1 - CanonicalAgent model and Claude/Kilo agent adapters
+
+- **Status:** `delivered` (merged 5e565b4 2026-08-19; commit 0283cb7) · **Short:** CanonicalAgent and Claude/Kilo adapters · **Size:** M · **Depends on:** 07 · **Spec:** [08.1-agent-adapter.md](08.1-agent-adapter.md)
+- **Goal:** Define `CanonicalAgent` in `src/adapters/types.ts` and implement `parseAgentMarkdown`, `serializeAgentMarkdown`, `readAgent`, `writeAgent`, and `listAgents` in Claude and Kilo adapters.
+
+### 08.2 - Agent translator & install engine
+
+- **Status:** `delivered` (merged 9b81dfa 2026-08-19; commit c35806d) · **Short:** Agent translator and install engine · **Size:** M · **Depends on:** 08.1 · **Spec:** [08.2-agent-translator-engine.md](08.2-agent-translator-engine.md)
+- **Goal:** Implement `translateAgent` with tool-permission mapping and extend `planInstall` and `applyInstall` to handle `kind: 'agent'`.
+
+### 08.3 - Agent detection & UI integration
+
+- **Status:** `delivered` (merged 09d8300 2026-08-19; commit e7174a6) · **Short:** Agent detection and UI · **Size:** S · **Depends on:** 08.2 · **Spec:** [08.3-agent-ui.md](08.3-agent-ui.md)
+- **Goal:** Detect agent files in `localFolder` and `gitCustom` resolvers, display agents in Available and Installed views with distinct icons, and enable single/batch installation.

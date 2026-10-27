@@ -4,6 +4,19 @@
 
 Tasks (each = one commit):
 
-1. **[20.1 — `git-single-item` resolver](20.1-git-single-item-resolver.md)**: implement `src/sources/gitSingleItem.ts`, reusing `gitCustom.ts`'s clone/checkout/mutex machinery, treating the checked-out root as a single `Artifact`.
-2. **[20.2 — `remote-url` resolver](20.2-remote-url-resolver.md)**: implement `src/sources/remoteUrl.ts`, plain HTTP(S) fetch of a single file/manifest with hash-based re-fetch and shared caching.
-3. **[20.3 — Sources-view wiring & verification](20.3-source-types-ui.md)**: extend the "Add Source" flow to offer both types, wire into resolve/plan, and verify.
+## Tasks
+
+### 20.1 - `git-single-item` resolver
+
+- **Status:** `delivered` (merged 36deb24 2026-08-19; commit 93d4989) · **Short:** git-single-item source resolver · **Size:** M · **Depends on:** 04, 11 · **Spec:** [20.1-git-single-item-resolver.md](20.1-git-single-item-resolver.md)
+- **Goal:** Implement `src/sources/gitSingleItem.ts` reusing `gitCustom.ts`'s clone/checkout/mutex machinery and treating the checked-out repository root as a single `Artifact`.
+
+### 20.2 - `remote-url` resolver
+
+- **Status:** `delivered` (merged 36deb24 2026-08-19; commit 93d4989) · **Short:** remote-url source resolver · **Size:** M · **Depends on:** 04 · **Spec:** [20.2-remote-url-resolver.md](20.2-remote-url-resolver.md)
+- **Goal:** Implement `src/sources/remoteUrl.ts` for HTTP(S) fetching of a single artifact file or manifest with hash-based caching.
+
+### 20.3 - Sources-view wiring & verification
+
+- **Status:** `delivered` (merged 36deb24 2026-08-19; commit 93d4989) · **Short:** Source types UI wiring · **Size:** S · **Depends on:** 20.1, 20.2 · **Spec:** [20.3-source-types-ui.md](20.3-source-types-ui.md)
+- **Goal:** Extend the Add Source flow, catalog resolution, and install planning to support `git-single-item` and `remote-url` sources.
