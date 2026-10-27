@@ -415,6 +415,30 @@ export class DashboardPanel {
             }
             break;
           }
+          case 'relinkItem': {
+            if (message.key) {
+              const inst = await this.resolveManagedInstallationByKey(message.key);
+              if (inst) {
+                await this._provider.doRelinkInstallation(inst);
+                this._refreshCallback();
+                await this.update();
+                await this.handleRequestDetail(message.key);
+              }
+            }
+            break;
+          }
+          case 'reinstallItem': {
+            if (message.key) {
+              const inst = await this.resolveManagedInstallationByKey(message.key);
+              if (inst) {
+                await this._provider.doReinstallInstallation(inst);
+                this._refreshCallback();
+                await this.update();
+                await this.handleRequestDetail(message.key);
+              }
+            }
+            break;
+          }
           case 'toggleHoldItem': {
             if (message.key) {
               const inst = await this.resolveManagedInstallationByKey(message.key);
@@ -1302,6 +1326,8 @@ export class DashboardPanel {
         return 'badge-error';
       case 'local-only':
         return 'badge-unmanaged';
+      case 'provenance-unknown':
+      case 'source-unavailable':
       case 'checking':
       case 'checking…':
       default:
@@ -1321,6 +1347,10 @@ export class DashboardPanel {
         return 'Modified & update available';
       case 'missing-on-disk':
         return 'Missing on disk';
+      case 'provenance-unknown':
+        return 'Provenance unknown';
+      case 'source-unavailable':
+        return 'Source unavailable';
       case 'different':
         return 'Differs from source';
       case 'identical':
@@ -1347,6 +1377,10 @@ export class DashboardPanel {
         return '● Managed · modified locally';
       case 'missing-on-disk':
         return '● Managed · missing on disk';
+      case 'provenance-unknown':
+        return '● Managed · provenance unknown';
+      case 'source-unavailable':
+        return '● Managed · source unavailable';
       case 'checking':
       case 'checking…':
         return '● Managed · checking…';
@@ -2647,6 +2681,18 @@ export class DashboardPanel {
       }
     }
 
+    function detailRelinkItem() {
+      if (selectedItemKey) {
+        vscode.postMessage({ command: 'relinkItem', key: selectedItemKey });
+      }
+    }
+
+    function detailReinstallItem() {
+      if (selectedItemKey) {
+        vscode.postMessage({ command: 'reinstallItem', key: selectedItemKey });
+      }
+    }
+
     function triggerUpdateAll() {
       const filter = {};
       if (currentEnv !== 'all') filter.assistant = currentEnv;
@@ -3116,6 +3162,8 @@ export class DashboardPanel {
             badgeText = msg.hasLocalPatch ? '● Managed · adapted (local.patch)' : '● Managed · modified locally';
           }
           else if (msg.status === 'missing-on-disk') { badgeClass = 'badge-error'; badgeText = '● Managed · missing on disk'; }
+          else if (msg.status === 'provenance-unknown') { badgeClass = 'badge-pending'; badgeText = '● Managed · provenance unknown'; }
+          else if (msg.status === 'source-unavailable') { badgeClass = 'badge-pending'; badgeText = '● Managed · source unavailable'; }
           else if (msg.status === 'checking' || msg.status === 'checking…') { badgeClass = 'badge-pending'; badgeText = '● Managed · checking…'; }
           
           cell.innerHTML = '<span class="badge ' + badgeClass + '">' + badgeText + '</span>';
@@ -3185,6 +3233,8 @@ export class DashboardPanel {
                 else if (worstStatus === 'modified-locally') { wbClass = 'badge-warning'; wbText = 'Modified locally'; }
                 else if (worstStatus === 'modified-and-update-available') { wbClass = 'badge-warning'; wbText = 'Modified & update available'; }
                 else if (worstStatus === 'missing-on-disk') { wbClass = 'badge-error'; wbText = 'Missing on disk'; }
+                else if (worstStatus === 'provenance-unknown') { wbClass = 'badge-pending'; wbText = 'Provenance unknown'; }
+                else if (worstStatus === 'source-unavailable') { wbClass = 'badge-pending'; wbText = 'Source unavailable'; }
                 else if (worstStatus === 'different') { wbClass = 'badge-warning'; wbText = 'Differs from source'; }
                 else if (worstStatus === 'identical') { wbClass = 'badge-success'; wbText = 'Identical to source'; }
                 else if (worstStatus === 'local-only') { wbClass = 'badge-unmanaged'; wbText = 'Local only'; }
@@ -3344,6 +3394,13 @@ export class DashboardPanel {
           } else {
             if (msg.status === 'update-available' || msg.status === 'modified-and-update-available') {
               primaryActions.push('<button class="btn btn-sm btn-primary" title="Update to latest" onclick="detailUpdateItem()"><span class="btn-icon">⟳</span> Update</button>');
+            }
+            if (msg.status === 'provenance-unknown' || msg.status === 'source-unavailable') {
+              primaryActions.push('<button class="btn btn-sm btn-primary" title="Re-link to source…" onclick="detailRelinkItem()"><span class="btn-icon">🔗</span> Re-link to source…</button>');
+              secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Reinstall" onclick="detailReinstallItem()"><span class="btn-icon">↻</span> Reinstall</button>');
+            } else {
+              secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Re-link to source…" onclick="detailRelinkItem()"><span class="btn-icon">🔗</span> Re-link</button>');
+              secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Reinstall" onclick="detailReinstallItem()"><span class="btn-icon">↻</span> Reinstall</button>');
             }
             secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Preview" onclick="detailPreviewItem()"><span class="btn-icon">👁</span> Preview</button>');
             if (msg.diffAvailable) {

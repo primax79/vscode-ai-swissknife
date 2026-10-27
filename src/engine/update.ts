@@ -1,18 +1,37 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import type {
-  AssistantId,
-  ItemKind,
-  ManagedInstallation,
-  Package,
-  Artifact,
-  Scope,
-  Source,
+import {
+  toInstallationSourceIdentity,
+  type AssistantId,
+  type InstallationSourceIdentity,
+  type ItemKind,
+  type ManagedInstallation,
+  type Package,
+  type Artifact,
+  type ResolvedRevision,
+  type Scope,
+  type Source,
 } from '../domain/types';
-import type { Adapter } from '../adapters/types';
+import type {
+  Adapter,
+  CanonicalSkill,
+  CanonicalAgent,
+  CanonicalCommand,
+  CanonicalMcpServer,
+  CanonicalHook,
+  CanonicalRule,
+} from '../adapters/types';
+import {
+  canonicalSkillHash,
+  canonicalAgentHash,
+  canonicalCommandHash,
+  canonicalMcpServerHash,
+  canonicalHookHash,
+  canonicalRuleHash,
+} from '../adapters/codec';
 import { getAdapter, getAdapterWithHomeRoot } from '../adapters/registry';
 import { getSourceResolver } from '../sources/registry';
-import { planInstall } from './plan';
+import { planInstall, resolveAndTranslate } from './plan';
 import { applyInstall } from './apply';
 import {
   checkForUpstreamUpdate,
@@ -341,8 +360,10 @@ export async function planUpdateAll(params: PlanUpdateAllParams): Promise<PlanUp
     // 3. Find source in manifest
     const resolvedSource = resolveInstallationSource(inst, sources);
     if ('unavailable' in resolvedSource) {
+      const report = findReport(effectiveReports, inst);
       cannotUpdate.push({
         installation: inst,
+        report,
         reason: resolvedSource.hint
           ? `${resolvedSource.unavailable} ${resolvedSource.hint}`
           : resolvedSource.unavailable,
@@ -671,4 +692,383 @@ export async function setHeld(
     inst.held = held;
     return inst;
   });
+}
+
+function computeHashForKind(kind: ItemKind, content: unknown): string {
+  switch (kind) {
+    case 'skill':
+      return canonicalSkillHash(content as CanonicalSkill);
+    case 'agent':
+      return canonicalAgentHash(content as CanonicalAgent);
+    case 'command':
+      return canonicalCommandHash(content as CanonicalCommand);
+    case 'mcp-server':
+      return canonicalMcpServerHash(content as CanonicalMcpServer);
+    case 'hook':
+      return canonicalHookHash(content as CanonicalHook);
+    case 'rule':
+      return canonicalRuleHash(content as CanonicalRule);
+  }
+}
+
+export interface RelinkOptions {
+  homeRoot?: string;
+  projectRoot?: string;
+  write?: boolean;
+  resolution?: SourceResolution;
+  resolverOpts?: { cacheDir?: string; offline?: boolean };
+}
+
+export interface RelinkResult {
+  mode: 'plan' | 'applied';
+  key: string;
+  item: string;
+  assistant: AssistantId;
+  scope: Scope;
+  kind: ItemKind;
+  path: string;
+  oldSource?: InstallationSourceIdentity;
+  oldSourceId?: string;
+  newSource: InstallationSourceIdentity;
+  packageId?: string;
+  artifactId?: string;
+  sourceRevision?: ResolvedRevision;
+  sourceContentHash?: string;
+  installation: ManagedInstallation;
+}
+
+/**
+ * Re-links a managed installation to a chosen registered `Source`, writing `source`
+ * (and updating `packageId`, `artifactId`, `sourceRevision`, `sourceContentHash` when
+ * resolved) and clearing `provenance: 'unknown'`.
+ * When `options.write === false`, computes and returns the plan without writing `state.json`.
+ */
+export async function relinkInstallation(
+  inst: ManagedInstallation,
+  targetSource: Source,
+  options?: RelinkOptions
+): Promise<RelinkResult> {
+  const projectRoot = inst.projectPath ?? options?.projectRoot;
+  const homeRoot = options?.homeRoot;
+  const write = options?.write ?? true;
+  const newSource = toInstallationSourceIdentity(targetSource, homeRoot);
+
+  let newPackageId = inst.packageId;
+  let newArtifactId = inst.artifactId;
+  if (inst.sourceId && inst.sourceId !== targetSource.id) {
+    const oldPrefix = `${inst.sourceId}:`;
+    if (newPackageId?.startsWith(oldPrefix)) {
+      newPackageId = `${targetSource.id}:${newPackageId.slice(oldPrefix.length)}`;
+    }
+    if (newArtifactId?.startsWith(oldPrefix)) {
+      newArtifactId = `${targetSource.id}:${newArtifactId.slice(oldPrefix.length)}`;
+    }
+  }
+
+  let newRevision: ResolvedRevision | undefined;
+  let newSourceContentHash: string | undefined = inst.contentHash;
+
+  try {
+    const effectiveSource: Source =
+      targetSource.type === 'local-folder'
+        ? { ...targetSource, readWorkingTree: false }
+        : targetSource;
+    const resolution =
+      options?.resolution ??
+      (await getSourceResolver(effectiveSource.type).resolve(effectiveSource, {
+        homeRoot,
+        cacheDir: options?.resolverOpts?.cacheDir,
+        offline: options?.resolverOpts?.offline,
+      }));
+
+    const probeInst: ManagedInstallation = {
+      ...inst,
+      source: newSource,
+      sourceId: targetSource.id,
+      packageId: newPackageId,
+      artifactId: newArtifactId,
+    };
+
+    let matchedPkg: Package | undefined;
+    let matchedArt: Artifact | undefined;
+
+    const matched = matchInstallationArtifact(probeInst, effectiveSource, resolution);
+    if (matched.matched) {
+      matchedPkg = matched.pkg;
+      matchedArt = matched.artifact;
+    } else {
+      const byKindAndName: Array<{ pkg: Package; artifact: Artifact }> = [];
+      for (const pkg of resolution.packages) {
+        for (const art of pkg.artifacts) {
+          if (art.kind === inst.kind && art.name === inst.name) {
+            byKindAndName.push({ pkg, artifact: art });
+          }
+        }
+      }
+      if (byKindAndName.length === 1) {
+        matchedPkg = byKindAndName[0].pkg;
+        matchedArt = byKindAndName[0].artifact;
+      }
+    }
+
+    if (matchedPkg && matchedArt) {
+      newPackageId = matchedPkg.id;
+      newArtifactId = matchedArt.id;
+
+      try {
+        const { translated } = await resolveAndTranslate(
+          effectiveSource,
+          matchedPkg,
+          matchedArt,
+          inst.assistant,
+          {
+            homeRoot,
+            cacheDir: options?.resolverOpts?.cacheDir,
+          }
+        );
+        const sourceHash = computeHashForKind(matchedArt.kind, translated);
+        if (sourceHash === inst.contentHash && matchedPkg.version?.commit) {
+          newRevision = {
+            commit: matchedPkg.version.commit,
+            ...(matchedPkg.version.requestedRef
+              ? { requestedRef: matchedPkg.version.requestedRef }
+              : {}),
+          };
+          newSourceContentHash = sourceHash;
+        }
+      } catch {
+        // leave revision undefined if content translation fails
+      }
+    }
+  } catch {
+    // If source resolution fails during relink, still record the explicit source identity
+  }
+
+  const updatedInst: ManagedInstallation = {
+    ...inst,
+    source: newSource,
+    sourceId: targetSource.id,
+    ...(newPackageId ? { packageId: newPackageId } : {}),
+    ...(newArtifactId ? { artifactId: newArtifactId } : {}),
+    ...(newRevision ? { sourceRevision: newRevision } : {}),
+    ...(newSourceContentHash ? { sourceContentHash: newSourceContentHash } : {}),
+  };
+  if (!newRevision) {
+    delete updatedInst.sourceRevision;
+  }
+  delete updatedInst.provenance;
+  delete updatedInst.provenanceReason;
+  delete updatedInst.provenanceHint;
+
+  const oldSource = inst.source;
+  const oldSourceId = inst.sourceId;
+
+  if (write) {
+    await withStateLock(inst.scope, projectRoot, homeRoot, async () => {
+      const state = await readState(inst.scope, projectRoot, homeRoot);
+      let matched = false;
+      state.installations = state.installations.map((item) => {
+        if (isSameInstallation(item, inst)) {
+          matched = true;
+          return updatedInst;
+        }
+        return item;
+      });
+
+      if (!matched) {
+        const idx = state.installations.findIndex(
+          (i) =>
+            i.assistant === inst.assistant &&
+            i.kind === inst.kind &&
+            i.name === inst.name &&
+            i.scope === inst.scope
+        );
+        if (idx !== -1) {
+          state.installations[idx] = updatedInst;
+        } else {
+          state.installations.push(updatedInst);
+        }
+      }
+
+      await writeState(inst.scope, state, projectRoot, homeRoot);
+    });
+
+    inst.source = updatedInst.source;
+    inst.sourceId = updatedInst.sourceId;
+    inst.packageId = updatedInst.packageId;
+    inst.artifactId = updatedInst.artifactId;
+    inst.sourceRevision = updatedInst.sourceRevision;
+    inst.sourceContentHash = updatedInst.sourceContentHash;
+    delete inst.provenance;
+    delete inst.provenanceReason;
+    delete inst.provenanceHint;
+  }
+
+  return {
+    mode: write ? 'applied' : 'plan',
+    key: `${inst.assistant}:${inst.scope}:${inst.kind}:${inst.name}`,
+    item: inst.name,
+    assistant: inst.assistant,
+    scope: inst.scope,
+    kind: inst.kind,
+    path: inst.path,
+    oldSource,
+    oldSourceId,
+    newSource,
+    packageId: updatedInst.packageId,
+    artifactId: updatedInst.artifactId,
+    sourceRevision: updatedInst.sourceRevision,
+    sourceContentHash: updatedInst.sourceContentHash,
+    installation: updatedInst,
+  };
+}
+
+export interface ReinstallOptions {
+  homeRoot?: string;
+  projectRoot?: string;
+  resolution?: SourceResolution;
+  targetAdapter?: Adapter;
+  resolverOpts?: { cacheDir?: string };
+}
+
+export interface ReinstallResult {
+  status: 'applied' | 'refused' | 'rolled-back' | 'manual-recovery-required';
+  installation: ManagedInstallation;
+  backupPath?: string;
+  reason?: string;
+}
+
+/**
+ * Reinstalls an existing managed installation from `source`, backing up any local
+ * modifications to the trash first, and recording full `source` provenance.
+ */
+export async function reinstallInstallation(
+  inst: ManagedInstallation,
+  source: Source,
+  options?: ReinstallOptions
+): Promise<ReinstallResult> {
+  const homeRoot = options?.homeRoot;
+  const projectRoot = inst.projectPath ?? options?.projectRoot;
+
+  let resolution = options?.resolution;
+  if (!resolution) {
+    try {
+      const resolver = getSourceResolver(source.type);
+      resolution = await resolver.resolve(source, {
+        homeRoot,
+        cacheDir: options?.resolverOpts?.cacheDir,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        status: 'refused',
+        installation: inst,
+        reason: `Failed to resolve source "${source.id}": ${msg}`,
+      };
+    }
+  }
+
+  const probeInst: ManagedInstallation = {
+    ...inst,
+    source: toInstallationSourceIdentity(source, homeRoot),
+    sourceId: source.id,
+  };
+  if (inst.sourceId && inst.sourceId !== source.id) {
+    const oldPrefix = `${inst.sourceId}:`;
+    if (probeInst.packageId?.startsWith(oldPrefix)) {
+      probeInst.packageId = `${source.id}:${probeInst.packageId.slice(oldPrefix.length)}`;
+    }
+    if (probeInst.artifactId?.startsWith(oldPrefix)) {
+      probeInst.artifactId = `${source.id}:${probeInst.artifactId.slice(oldPrefix.length)}`;
+    }
+  }
+
+  let matchedPkg: Package | undefined;
+  let matchedArt: Artifact | undefined;
+  const matched = matchInstallationArtifact(probeInst, source, resolution);
+  if (matched.matched) {
+    matchedPkg = matched.pkg;
+    matchedArt = matched.artifact;
+  } else {
+    const byKindAndName: Array<{ pkg: Package; artifact: Artifact }> = [];
+    for (const pkg of resolution.packages) {
+      for (const art of pkg.artifacts) {
+        if (art.kind === inst.kind && art.name === inst.name) {
+          byKindAndName.push({ pkg, artifact: art });
+        }
+      }
+    }
+    if (byKindAndName.length === 1) {
+      matchedPkg = byKindAndName[0].pkg;
+      matchedArt = byKindAndName[0].artifact;
+    }
+  }
+
+  if (!matchedPkg || !matchedArt) {
+    return {
+      status: 'refused',
+      installation: inst,
+      reason: `Artifact "${inst.name}" not found in source "${source.id}".`,
+    };
+  }
+
+  let backupPath: string | undefined;
+  try {
+    const localDrift = await analyzeLocalDrift(inst, homeRoot);
+    if (localDrift.status === 'modified-locally') {
+      backupPath = await backupItemToTrash(inst, homeRoot);
+    }
+  } catch {
+    // ignore backup error if missing on disk
+  }
+
+  const targetAdapter =
+    options?.targetAdapter ??
+    (homeRoot ? getAdapterWithHomeRoot(inst.assistant, homeRoot) : getAdapter(inst.assistant));
+
+  const prepared = await planInstall({
+    source,
+    pkg: matchedPkg,
+    artifact: matchedArt,
+    targetAdapter,
+    targetScope: inst.scope,
+    projectRoot: inst.scope === 'project' ? projectRoot : undefined,
+    homeRoot,
+    resolverOpts: options?.resolverOpts,
+  });
+
+  if (!prepared.supported) {
+    return {
+      status: 'refused',
+      installation: inst,
+      ...(backupPath ? { backupPath } : {}),
+      reason: prepared.plan.reason,
+    };
+  }
+
+  const outcome = await applyInstall(prepared, homeRoot);
+  if (outcome.status === 'applied') {
+    inst.source = outcome.installation.source;
+    inst.sourceId = outcome.installation.sourceId;
+    inst.packageId = outcome.installation.packageId;
+    inst.artifactId = outcome.installation.artifactId;
+    inst.sourceRevision = outcome.installation.sourceRevision;
+    inst.contentHash = outcome.installation.contentHash;
+    inst.sourceContentHash = outcome.installation.sourceContentHash;
+    delete inst.provenance;
+    delete inst.provenanceReason;
+    delete inst.provenanceHint;
+    return {
+      status: 'applied',
+      installation: outcome.installation,
+      ...(backupPath ? { backupPath } : {}),
+    };
+  }
+
+  return {
+    status: outcome.status,
+    installation: inst,
+    ...(backupPath ? { backupPath } : {}),
+    reason: outcome.reason,
+  };
 }

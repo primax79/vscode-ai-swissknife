@@ -264,6 +264,18 @@
         "category": "AI Swissknife"
       },
       {
+        "command": "aiSwissknife.relinkItem",
+        "title": "Re-link to Source...",
+        "icon": "$(link)",
+        "category": "AI Swissknife"
+      },
+      {
+        "command": "aiSwissknife.reinstallItem",
+        "title": "Reinstall",
+        "icon": "$(refresh)",
+        "category": "AI Swissknife"
+      },
+      {
         "command": "aiSwissknife.diffAgainstOriginal",
         "title": "Diff vs. Original",
         "icon": "$(diff)",
@@ -537,7 +549,17 @@
         {
           "command": "aiSwissknife.holdItem",
           "when": "view =~ /^aiSwissknife\\.installed/ && viewItem =~ /^installedInstallation/ && !(viewItem =~ /:held/)",
-          "group": "inline@6"
+          "group": "2_hold@1"
+        },
+        {
+          "command": "aiSwissknife.relinkItem",
+          "when": "view =~ /^aiSwissknife\\.installed/ && viewItem =~ /^installedInstallation/",
+          "group": "2_hold@2"
+        },
+        {
+          "command": "aiSwissknife.reinstallItem",
+          "when": "view =~ /^aiSwissknife\\.installed/ && viewItem =~ /^installedInstallation/",
+          "group": "2_hold@3"
         },
         {
           "command": "aiSwissknife.releaseItem",

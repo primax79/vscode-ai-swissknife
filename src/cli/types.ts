@@ -1,4 +1,10 @@
-import type { AssistantId, ItemKind, Scope, ResolvedRevision } from '../domain/types';
+import type {
+  AssistantId,
+  InstallationSourceIdentity,
+  ItemKind,
+  Scope,
+  ResolvedRevision,
+} from '../domain/types';
 import type { MatrixSummary } from '../engine/installMatrix';
 import type { DriftReport } from '../engine/types';
 
@@ -97,9 +103,30 @@ export interface CliInstalledItem {
   scope: Scope;
   membership: 'managed' | 'observed';
   path: string;
+  source?: InstallationSourceIdentity;
   sourceId?: string;
+  provenance?: 'unknown';
+  provenanceReason?: string;
+  provenanceHint?: string;
   match?: 'identical' | 'different';
   workspace?: string | null;
+}
+
+export interface CliRelinkOutput {
+  mode: 'plan' | 'applied';
+  key: string;
+  item: string;
+  assistant: AssistantId;
+  scope: Scope;
+  kind: ItemKind;
+  path: string;
+  oldSource?: InstallationSourceIdentity;
+  oldSourceId?: string;
+  newSource: InstallationSourceIdentity;
+  packageId?: string;
+  artifactId?: string;
+  sourceRevision?: ResolvedRevision;
+  sourceContentHash?: string;
 }
 
 export interface CliInstalledRootsResult {

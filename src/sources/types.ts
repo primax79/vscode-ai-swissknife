@@ -80,7 +80,7 @@ export interface SourceResolver {
   readonly type: SourceType;
   readonly displayName: string;
   readonly iconThemeId: string;
-  resolve(source: Source, opts?: { cacheDir?: string; homeRoot?: string }): Promise<SourceResolution>;
+  resolve(source: Source, opts?: { cacheDir?: string; homeRoot?: string; offline?: boolean }): Promise<SourceResolution>;
   resolveArtifactContent(
     source: Source,
     pkg: Package,

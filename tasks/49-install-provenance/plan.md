@@ -10,8 +10,9 @@ folders read from the live working tree, catalog vs check commit, artifact match
 
 ### 49.6 - Migration of existing state
 
-- **Status:** `open` · **Short:** State migration · **Size:** M · **Depends on:** 49.2, 49.5
+- **Status:** `delivered` (2026-10-27) · **Short:** State migration · **Size:** M · **Depends on:** 49.2, 49.5
 - **Goal:** spec §5 with backup of the old state file; `provenance-unknown` + re-link / reinstall actions; case 8 passes; verified on a copy of the real `~/.ai-swissknife/state.json`.
+- **Result:** Implementata la migrazione offline delle installazioni prive di `source` al caricamento di `state.json` (`readState`/`migrateStateFile`) con backup singolo `state.json.bak-<timestamp>`, marcatura `provenance: 'unknown'` (con `provenanceHint: "check sources to resolve"` e risoluzione lazy al successivo controllo drift esplicito quando una sorgente richiede fetch), stato neutrale `provenance-unknown` in UI/CLI (mai un falso `update-available`), funzioni engine `relinkInstallation`/`reinstallInstallation`, comando CLI `relink <item> --source <scope>:<id>` e azioni UI "Re-link to Source…"/"Reinstall"; i casi 8 e 8b in `src/engine/provenance.test.ts` sono verdi e la migrazione è stata verificata su copia isolata del `~/.ai-swissknife/state.json` reale (67 installazioni: 8 adottate, 59 `provenance-unknown`).
 
 ### 49.7 - Explain the state in UI and CLI
 

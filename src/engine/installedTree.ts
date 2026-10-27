@@ -266,7 +266,9 @@ export function buildInstalledTree(
     const key = getIdentityKey(inst);
     const injected = lookupStatus(opts?.statusByKey, key);
     const disabled = Boolean(inst.disabled || injected === 'disabled');
-    const state: PlaceState = disabled ? 'disabled' : (injected ?? 'checking');
+    const state: PlaceState = disabled
+      ? 'disabled'
+      : (injected ?? (inst.provenance === 'unknown' ? 'provenance-unknown' : 'checking'));
 
     const place: Place = {
       key,

@@ -225,6 +225,12 @@ describe('registry store (manifest & state)', () => {
         kind: 'skill',
         name: 'test-skill',
         path: path.join(testTempDir, '.claude', 'skills', 'test-skill'),
+        source: {
+          id: 'git-src-1',
+          scope: 'workspace',
+          type: 'git-custom',
+          location: 'https://github.com/example/skills.git',
+        },
         sourceId: 'git-src-1',
         sourceRevision: {
           commit: 'abcdef1234567890abcdef1234567890abcdef12',
@@ -239,8 +245,8 @@ describe('registry store (manifest & state)', () => {
         installations: [installation],
       };
 
-      await writeState('project', stateData, testTempDir);
-      const loaded = await readState('project', testTempDir);
+      await writeState('project', stateData, testTempDir, testHomeDir);
+      const loaded = await readState('project', testTempDir, testHomeDir);
       assert.deepStrictEqual(loaded, stateData);
     });
 

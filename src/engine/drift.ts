@@ -3,6 +3,7 @@ import * as path from 'path';
 import {
   toInstallationSourceIdentity,
   type ManagedInstallation,
+  type ResolvedRevision,
   type Source,
   type Package,
   type Artifact,
@@ -47,7 +48,50 @@ export type SourceLookupInput =
 
 export type ResolvedInstallationSource =
   | { source: Source }
-  | { unavailable: string; hint?: string };
+  | { unavailable: string; hint?: string; provenanceUnknown?: boolean };
+
+export type ProvenanceUnknownReason =
+  | 'no-source-id'
+  | 'no-content-hash'
+  | 'source-not-in-manifest'
+  | 'needs-fetch'
+  | 'artifact-not-in-source'
+  | 'hash-mismatch'
+  | 'ambiguous-sources-hash-mismatch'
+  | 'ambiguous-multiple-matches';
+
+export interface ProvenanceCandidateMatch {
+  source: Source;
+  pkg: Package;
+  artifact: Artifact;
+  sourceHash: string;
+  revision?: ResolvedRevision;
+}
+
+export type ProvenanceEvaluationResult =
+  | {
+      outcome: 'adopted';
+      match: ProvenanceCandidateMatch;
+    }
+  | {
+      outcome: 'unknown';
+      reason: ProvenanceUnknownReason;
+      hint?: string;
+      details: string;
+    };
+
+type ProvenanceResolvedCallback = (
+  inst: ManagedInstallation,
+  homeRoot?: string
+) => Promise<void>;
+
+let _onProvenanceResolved: ProvenanceResolvedCallback | undefined;
+
+export function setProvenanceResolvedCallback(
+  cb: ProvenanceResolvedCallback | undefined
+): void {
+  _onProvenanceResolved = cb;
+}
 
 function normalizeSourceLists(sources: SourceLookupInput): SourceLookupLists {
   if (
@@ -136,10 +180,29 @@ export function resolveInstallationSource(
     return { source: match };
   }
 
+  if (installation.provenance === 'unknown') {
+    const hint = installation.provenanceHint;
+    return {
+      unavailable: hint
+        ? `Provenance unknown for "${installation.name}": ${hint}`
+        : `Provenance unknown for "${installation.name}" — re-link to a source or reinstall.`,
+      ...(hint ? { hint } : {}),
+      provenanceUnknown: true,
+    };
+  }
+
   const sourceId = installation.sourceId;
   if (!sourceId) {
     return {
       unavailable: `No source ID recorded for "${installation.name}".`,
+    };
+  }
+
+  const allMatching = [...globalSources, ...workspaceSources].filter((s) => s.id === sourceId);
+  if (allMatching.length > 1) {
+    return {
+      unavailable: `Multiple registered sources match id "${sourceId}" for "${installation.name}" — provenance unknown; re-link to a source or reinstall.`,
+      provenanceUnknown: true,
     };
   }
 
@@ -200,10 +263,20 @@ function findDeterministicIdShapeMatch(
   //      `<sourceId>:plugins/<plugin>/agents/<name>.md:<name>` -> `<sourceId>:<plugin>:agent:<name>`
   //      `<sourceId>:plugins/<plugin>/commands/<name>.md:<name>` -> `<sourceId>:<plugin>:command:<name>`
   //      `<sourceId>:plugins/<plugin>/(.)mcp.json:<name>:<name>` -> `<sourceId>:<plugin>:mcp:<name>`
-  const skillPathMatch = rest.match(/^(?:plugins\/)?([^/:]+)\/skills\/([^/:]+):\2$/);
+  const skillPathMatch = rest.match(/^(?:(?:plugins\/)?([^/:]+)\/)?skills\/([^/:]+):\2$/);
   if (skillPathMatch && installation.kind === 'skill' && skillPathMatch[2] === installation.name) {
     const [, pluginName, skillName] = skillPathMatch;
-    candidateIds.add(`${source.id}:${pluginName}:skill:${skillName}`);
+    if (pluginName) {
+      candidateIds.add(`${source.id}:${pluginName}:skill:${skillName}`);
+    }
+    candidateIds.add(`${source.id}:${skillName}:${skillName}`);
+    candidateIds.add(`${source.id}:skills/${skillName}:${skillName}`);
+  }
+
+  const skillBareMatch = rest.match(/^([^/:]+):\1$/);
+  if (skillBareMatch && installation.kind === 'skill' && skillBareMatch[1] === installation.name) {
+    const skillName = skillBareMatch[1];
+    candidateIds.add(`${source.id}:skills/${skillName}:${skillName}`);
   }
 
   const agentPathMatch = rest.match(/^(?:(?:plugins\/)?([^/:]+)\/)?(?:agents?\/)?([^/:]+?)(?:\.agent)?\.md:([^/:]+)$/);
@@ -215,6 +288,7 @@ function findDeterministicIdShapeMatch(
       candidateIds.add(`${source.id}:agents/${agentName}.md:${agentName}`);
       candidateIds.add(`${source.id}:${agentName}.md:${agentName}`);
     }
+    candidateIds.add(`${source.id}:${agentName}:${agentName}`);
   }
 
   const agentBareMatch = rest.match(/^([^/:]+):\1$/);
@@ -234,6 +308,7 @@ function findDeterministicIdShapeMatch(
       candidateIds.add(`${source.id}:command/${cmdName}.md:${cmdName}`);
       candidateIds.add(`${source.id}:${cmdName}.md:${cmdName}`);
     }
+    candidateIds.add(`${source.id}:${cmdName}:${cmdName}`);
   }
 
   const cmdBareMatch = rest.match(/^([^/:]+):\1$/);
@@ -272,12 +347,18 @@ function findDeterministicIdShapeMatch(
     if (installation.kind === 'skill') {
       candidateIds.add(`${source.id}:plugins/${pluginName}/skills/${artName}:${artName}`);
       candidateIds.add(`${source.id}:${pluginName}/skills/${artName}:${artName}`);
+      candidateIds.add(`${source.id}:skills/${artName}:${artName}`);
+      candidateIds.add(`${source.id}:${artName}:${artName}`);
     } else if (installation.kind === 'agent') {
       candidateIds.add(`${source.id}:plugins/${pluginName}/agents/${artName}.md:${artName}`);
       candidateIds.add(`${source.id}:${pluginName}/agents/${artName}.md:${artName}`);
+      candidateIds.add(`${source.id}:agents/${artName}.md:${artName}`);
+      candidateIds.add(`${source.id}:${artName}:${artName}`);
     } else if (installation.kind === 'command') {
       candidateIds.add(`${source.id}:plugins/${pluginName}/commands/${artName}.md:${artName}`);
       candidateIds.add(`${source.id}:${pluginName}/commands/${artName}.md:${artName}`);
+      candidateIds.add(`${source.id}:commands/${artName}.md:${artName}`);
+      candidateIds.add(`${source.id}:${artName}:${artName}`);
     } else if (installation.kind === 'mcp-server') {
       candidateIds.add(`${source.id}:plugins/${pluginName}/mcp.json:${artName}:${artName}`);
       candidateIds.add(`${source.id}:plugins/${pluginName}/.mcp.json:${artName}:${artName}`);
@@ -601,6 +682,22 @@ export async function checkForUpstreamUpdate(
     return localReport;
   }
 
+  if (installation.provenance === 'unknown') {
+    const hint = installation.provenanceHint;
+    const details = hint
+      ? `Provenance unknown for "${installation.name}" — ${hint}`
+      : `Provenance unknown for "${installation.name}" — re-link to a source or reinstall.`;
+    return {
+      installation,
+      status: 'provenance-unknown',
+      hasLocalPatch: localReport.hasLocalPatch,
+      diskHash: localReport.diskHash,
+      reason: details,
+      details,
+      ...(hint ? { hint } : {}),
+    };
+  }
+
   let resolution: SourceResolution | undefined;
   let resolutionError: unknown | undefined;
 
@@ -854,6 +951,231 @@ export async function checkForUpstreamUpdate(
   };
 }
 
+function computeCanonicalHash(kind: Artifact['kind'], translated: unknown): string {
+  switch (kind) {
+    case 'skill':
+      return canonicalSkillHash(translated as CanonicalSkill);
+    case 'agent':
+      return canonicalAgentHash(translated as CanonicalAgent);
+    case 'command':
+      return canonicalCommandHash(translated as CanonicalCommand);
+    case 'mcp-server':
+      return canonicalMcpServerHash(translated as CanonicalMcpServer);
+    case 'hook':
+      return canonicalHookHash(translated as CanonicalHook);
+    case 'rule':
+      return canonicalRuleHash(translated as CanonicalRule);
+  }
+}
+
+/**
+ * Evaluates candidate sources for a legacy installation that lacks `installation.source`.
+ * Adopts a candidate ONLY if it is the ONLY one whose current artifact (exact `artifactId`,
+ * deterministic 49.3 id-shape conversion, or unambiguous `kind + name`) hashes to
+ * `installation.contentHash` at a reachable commit (cached clone HEAD or source HEAD;
+ * for git local folders, committed HEAD).
+ */
+export async function evaluateProvenanceCandidates(
+  installation: ManagedInstallation,
+  allSources: Source[],
+  options?: {
+    homeRoot?: string;
+    cacheDir?: string;
+    offline?: boolean;
+    preResolved?: Map<string, { resolution?: SourceResolution; error?: Error }>;
+    hashCache?: Map<string, string>;
+  }
+): Promise<ProvenanceEvaluationResult> {
+  if (!installation.sourceId) {
+    return {
+      outcome: 'unknown',
+      reason: 'no-source-id',
+      details: `No sourceId recorded for "${installation.name}" — re-link to a source or reinstall.`,
+    };
+  }
+
+  if (!installation.contentHash) {
+    return {
+      outcome: 'unknown',
+      reason: 'no-content-hash',
+      details: `No contentHash recorded for "${installation.name}" — re-link to a source or reinstall.`,
+    };
+  }
+
+  const candidates = allSources.filter((s) => s.id === installation.sourceId);
+  if (candidates.length === 0) {
+    return {
+      outcome: 'unknown',
+      reason: 'source-not-in-manifest',
+      details: `Source "${installation.sourceId}" is not registered in global or workspace manifest — re-link to a source or reinstall.`,
+    };
+  }
+
+  const preResolved =
+    options?.preResolved ?? new Map<string, { resolution?: SourceResolution; error?: Error }>();
+  const hashCache = options?.hashCache ?? new Map<string, string>();
+
+  let needsFetch = false;
+  let artifactFoundCount = 0;
+  const matchingCandidates: ProvenanceCandidateMatch[] = [];
+
+  for (const candidate of candidates) {
+    const effectiveCandidate: Source =
+      candidate.type === 'local-folder'
+        ? { ...candidate, readWorkingTree: false }
+        : candidate;
+    const key = sourceResolutionKey(effectiveCandidate);
+    const origKey = sourceResolutionKey(candidate);
+
+    let resEntry = preResolved.get(key) ?? preResolved.get(origKey);
+    if (!resEntry) {
+      try {
+        const resolver = getSourceResolver(effectiveCandidate.type);
+        const resolution = await resolver.resolve(effectiveCandidate, {
+          homeRoot: options?.homeRoot,
+          cacheDir: options?.cacheDir,
+          offline: options?.offline,
+        });
+        resEntry = { resolution };
+      } catch (err: unknown) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        resEntry = { error };
+      }
+      preResolved.set(key, resEntry);
+    }
+
+    if (resEntry.error || !resEntry.resolution) {
+      needsFetch = true;
+      continue;
+    }
+
+    const matched = matchInstallationArtifact(
+      installation,
+      effectiveCandidate,
+      resEntry.resolution
+    );
+    if (!matched.matched) {
+      continue;
+    }
+
+    artifactFoundCount++;
+
+    const hashKey = `${key}::${matched.pkg.id}::${matched.artifact.id}::${installation.assistant}`;
+    let sourceHash = hashCache.get(hashKey);
+    if (sourceHash === undefined) {
+      try {
+        const { translated } = await resolveAndTranslate(
+          effectiveCandidate,
+          matched.pkg,
+          matched.artifact,
+          installation.assistant,
+          {
+            homeRoot: options?.homeRoot,
+            cacheDir: options?.cacheDir,
+          }
+        );
+        sourceHash = computeCanonicalHash(matched.artifact.kind, translated);
+        hashCache.set(hashKey, sourceHash);
+      } catch {
+        needsFetch = true;
+        continue;
+      }
+    }
+
+    if (sourceHash === installation.contentHash) {
+      matchingCandidates.push({
+        source: candidate,
+        pkg: matched.pkg,
+        artifact: matched.artifact,
+        sourceHash,
+        revision: matched.pkg.version,
+      });
+    }
+  }
+
+  if (needsFetch) {
+    return {
+      outcome: 'unknown',
+      reason: 'needs-fetch',
+      hint: 'check sources to resolve',
+      details: `Source "${installation.sourceId}" needs a fetch to verify provenance — check sources to resolve.`,
+    };
+  }
+
+  if (matchingCandidates.length === 1) {
+    return {
+      outcome: 'adopted',
+      match: matchingCandidates[0],
+    };
+  }
+
+  if (matchingCandidates.length > 1) {
+    return {
+      outcome: 'unknown',
+      reason: 'ambiguous-multiple-matches',
+      details: `Multiple registered sources with id "${installation.sourceId}" match "${installation.name}" — re-link to a source or reinstall.`,
+    };
+  }
+
+  if (artifactFoundCount === 0) {
+    return {
+      outcome: 'unknown',
+      reason: 'artifact-not-in-source',
+      details: `Artifact "${installation.artifactId ?? installation.name}" not found in source "${installation.sourceId}" — re-link to a source or reinstall.`,
+    };
+  }
+
+  const reason: ProvenanceUnknownReason =
+    candidates.length > 1 ? 'ambiguous-sources-hash-mismatch' : 'hash-mismatch';
+  return {
+    outcome: 'unknown',
+    reason,
+    details: `Installed content hash of "${installation.name}" does not match current HEAD of source "${installation.sourceId}" — re-link to a source or reinstall.`,
+  };
+}
+
+/**
+ * Applies a `ProvenanceEvaluationResult` to a `ManagedInstallation` in place.
+ * Returns `true` if the installation record was modified.
+ */
+export function applyProvenanceEvaluation(
+  inst: ManagedInstallation,
+  evalResult: ProvenanceEvaluationResult,
+  homeRoot?: string
+): boolean {
+  if (evalResult.outcome === 'adopted') {
+    const { source, pkg, artifact, revision } = evalResult.match;
+    inst.source = toInstallationSourceIdentity(source, homeRoot);
+    inst.sourceId = source.id;
+    inst.packageId = pkg.id;
+    inst.artifactId = artifact.id;
+    if (revision?.commit) {
+      inst.sourceRevision = {
+        commit: revision.commit,
+        ...(revision.requestedRef ? { requestedRef: revision.requestedRef } : {}),
+      };
+    }
+    inst.sourceContentHash = inst.contentHash;
+    delete inst.provenance;
+    delete inst.provenanceReason;
+    delete inst.provenanceHint;
+    return true;
+  }
+
+  const changed =
+    inst.provenance !== 'unknown' ||
+    inst.provenanceReason !== evalResult.reason ||
+    inst.provenanceHint !== evalResult.hint;
+  inst.provenance = 'unknown';
+  inst.provenanceReason = evalResult.reason;
+  if (evalResult.hint) {
+    inst.provenanceHint = evalResult.hint;
+  } else {
+    delete inst.provenanceHint;
+  }
+  return changed;
+}
+
 /**
  * Checks drift for all given installations against the provided sources.
  * Resolves each source ONCE per run (with concurrency 1 per source, and sources running
@@ -882,6 +1204,8 @@ export async function checkDriftForAll(
 
   const concurrency = opts?.concurrency ?? 4;
   const resolutions = opts?.resolutions ?? new Map<string, { resolution?: SourceResolution; error?: Error }>();
+  const { globalSources, workspaceSources } = normalizeSourceLists(sources);
+  const allSources = [...globalSources, ...workspaceSources];
 
   // 1. Resolve the source for each installation and identify unique sources needed
   const instResolutions = new Map<ManagedInstallation, ResolvedInstallationSource>();
@@ -898,13 +1222,27 @@ export async function checkDriftForAll(
       if (!neededSources.has(key)) {
         neededSources.set(key, resolvedSrc.source);
       }
+    } else if (resolvedSrc.provenanceUnknown && inst.sourceId) {
+      for (const cand of allSources.filter((s) => s.id === inst.sourceId)) {
+        const key = sourceResolutionKey(cand);
+        if (!neededSources.has(key)) {
+          neededSources.set(key, cand);
+        }
+      }
     }
+  }
+
+  // Count how many neededSources share each source.id
+  const idCounts = new Map<string, number>();
+  for (const src of neededSources.values()) {
+    idCounts.set(src.id, (idCounts.get(src.id) ?? 0) + 1);
   }
 
   // 2. Resolve each source once, with concurrency up to 4
   const sourcesToResolve: Array<{ key: string; src: Source }> = [];
   for (const [key, src] of neededSources.entries()) {
-    if (!resolutions.has(key) && !resolutions.has(src.id)) {
+    const canReuseById = (idCounts.get(src.id) ?? 0) === 1 && resolutions.has(src.id);
+    if (!resolutions.has(key) && !canReuseById) {
       sourcesToResolve.push({ key, src });
     }
   }
@@ -922,11 +1260,15 @@ export async function checkDriftForAll(
             cacheDir: opts?.resolverOpts?.cacheDir,
           });
           resolutions.set(key, { resolution });
-          resolutions.set(src.id, { resolution });
+          if ((idCounts.get(src.id) ?? 0) === 1) {
+            resolutions.set(src.id, { resolution });
+          }
         } catch (err: unknown) {
           const error = err instanceof Error ? err : new Error(String(err));
           resolutions.set(key, { error });
-          resolutions.set(src.id, { error });
+          if ((idCounts.get(src.id) ?? 0) === 1) {
+            resolutions.set(src.id, { error });
+          }
         }
       }
     }
@@ -934,13 +1276,34 @@ export async function checkDriftForAll(
 
   await Promise.all(workers);
 
+  const hashCache = new Map<string, string>();
+
   // 3. Check drift for each installation
   const reports = await Promise.all(
     installations.map(async (inst) => {
       const resolvedSrc = instResolutions.get(inst);
       if (!resolvedSrc) {
-        return analyzeLocalDrift(inst, homeRoot);
+        const localReport = await analyzeLocalDrift(inst, homeRoot);
+        if (localReport.status === 'missing-on-disk') {
+          return localReport;
+        }
+        if (inst.provenance === 'unknown') {
+          const details = inst.provenanceHint
+            ? `Provenance unknown for "${inst.name}" — ${inst.provenanceHint}`
+            : `Provenance unknown for "${inst.name}" — re-link to a source or reinstall.`;
+          return {
+            installation: inst,
+            status: 'provenance-unknown' as const,
+            hasLocalPatch: localReport.hasLocalPatch,
+            diskHash: localReport.diskHash,
+            reason: details,
+            details,
+            ...(inst.provenanceHint ? { hint: inst.provenanceHint } : {}),
+          };
+        }
+        return localReport;
       }
+
       if ('unavailable' in resolvedSrc) {
         const localReport = await analyzeLocalDrift(inst, homeRoot);
         if (localReport.status === 'missing-on-disk') {
@@ -959,6 +1322,45 @@ export async function checkDriftForAll(
             ...(resolvedSrc.hint ? { hint: resolvedSrc.hint } : {}),
           };
         }
+
+        if (resolvedSrc.provenanceUnknown) {
+          const evalResult = await evaluateProvenanceCandidates(inst, allSources, {
+            homeRoot,
+            cacheDir: opts?.resolverOpts?.cacheDir,
+            offline: false,
+            preResolved: resolutions,
+            hashCache,
+          });
+          applyProvenanceEvaluation(inst, evalResult, homeRoot);
+          if (evalResult.outcome === 'adopted') {
+            if (_onProvenanceResolved) {
+              try {
+                await _onProvenanceResolved(inst, homeRoot);
+              } catch {
+                // ignore persistence error during drift check
+              }
+            }
+            const winnerSrc = evalResult.match.source;
+            const winnerKey = sourceResolutionKey(winnerSrc);
+            const resEntry = resolutions.get(winnerKey) ?? resolutions.get(winnerSrc.id);
+            return checkForUpstreamUpdate(inst, winnerSrc, homeRoot, {
+              resolution: resEntry?.resolution,
+              resolutionError: resEntry?.error,
+              resolverOpts: opts?.resolverOpts,
+            });
+          }
+
+          return {
+            installation: inst,
+            status: 'provenance-unknown' as const,
+            hasLocalPatch: localReport.hasLocalPatch,
+            diskHash: localReport.diskHash,
+            reason: evalResult.details,
+            details: evalResult.details,
+            ...(evalResult.hint ? { hint: evalResult.hint } : {}),
+          };
+        }
+
         return localReport;
       }
 

@@ -13,6 +13,8 @@ import {
   planUpdateAll,
   applyUpdateAll,
   setHeld,
+  relinkInstallation,
+  reinstallInstallation,
   type UpdateFilter,
   type UpdateItemOutcome,
 } from '../engine/update';
@@ -315,6 +317,12 @@ export class InstalledTreeDataProvider {
         } else if (report.status === 'missing-on-disk') {
           desc = `${inst.kind} [managed, missing on disk]`;
           iconName = 'error';
+        } else if (report.status === 'provenance-unknown') {
+          desc = `${inst.kind} [managed, provenance unknown]`;
+          iconName = 'question';
+        } else if (report.status === 'source-unavailable') {
+          desc = `${inst.kind} [managed, source unavailable]`;
+          iconName = 'question';
         }
       }
 
@@ -621,6 +629,149 @@ export class InstalledTreeDataProvider {
       await this.checkDrift();
     } else {
       vscode.window.showErrorMessage(`Update failed: ${outcome.reason}`);
+    }
+  }
+
+  async doRelinkInstallation(
+    itemOrInst: InstalledInstallationItem | ManagedInstallation | undefined
+  ): Promise<void> {
+    const inst =
+      itemOrInst instanceof InstalledInstallationItem ? itemOrInst.installation : itemOrInst;
+    if (!inst) {
+      vscode.window.showWarningMessage('Please select a managed item to re-link.');
+      return;
+    }
+
+    const globalSources: Source[] = [];
+    const workspaceSources: Source[] = [];
+    const projectRoot = inst.projectPath ?? (await getWorkspaceRoot());
+
+    try {
+      const gManifest = await readManifest('global', undefined, this.homeRoot);
+      globalSources.push(...gManifest.sources.map((d) => fromDesiredSource(d, undefined, this.homeRoot)));
+    } catch {
+      // ignore
+    }
+    if (projectRoot) {
+      try {
+        const pManifest = await readManifest('project', projectRoot, this.homeRoot);
+        workspaceSources.push(
+          ...pManifest.sources.map((d) => fromDesiredSource(d, projectRoot, this.homeRoot))
+        );
+      } catch {
+        // ignore
+      }
+    }
+
+    const allSources = [...globalSources, ...workspaceSources];
+    if (allSources.length === 0) {
+      vscode.window.showWarningMessage('No registered sources available to re-link to.');
+      return;
+    }
+
+    const pickItems = allSources.map((s) => ({
+      label: `${s.scope === 'project' ? 'workspace' : 'global'}:${s.id}`,
+      description: `${s.name ?? s.id} (${s.type})`,
+      detail: s.type === 'local-folder' ? s.localPath : s.url,
+      source: s,
+    }));
+
+    const picked = await vscode.window.showQuickPick(pickItems, {
+      placeHolder: `Select the source to link "${inst.name}" to`,
+    });
+    if (!picked) {
+      return;
+    }
+
+    const res = await relinkInstallation(inst, picked.source, {
+      homeRoot: this.homeRoot,
+      projectRoot,
+      write: true,
+    });
+    vscode.window.showInformationMessage(
+      `Re-linked "${inst.name}" to ${res.newSource.scope}:${res.newSource.id}.`
+    );
+    await this.checkDrift();
+  }
+
+  async doReinstallInstallation(
+    itemOrInst: InstalledInstallationItem | ManagedInstallation | undefined
+  ): Promise<void> {
+    const inst =
+      itemOrInst instanceof InstalledInstallationItem ? itemOrInst.installation : itemOrInst;
+    if (!inst) {
+      vscode.window.showWarningMessage('Please select a managed item to reinstall.');
+      return;
+    }
+
+    const globalSources: Source[] = [];
+    const workspaceSources: Source[] = [];
+    const projectRoot = inst.projectPath ?? (await getWorkspaceRoot());
+
+    try {
+      const gManifest = await readManifest('global', undefined, this.homeRoot);
+      globalSources.push(...gManifest.sources.map((d) => fromDesiredSource(d, undefined, this.homeRoot)));
+    } catch {
+      // ignore
+    }
+    if (projectRoot) {
+      try {
+        const pManifest = await readManifest('project', projectRoot, this.homeRoot);
+        workspaceSources.push(
+          ...pManifest.sources.map((d) => fromDesiredSource(d, projectRoot, this.homeRoot))
+        );
+      } catch {
+        // ignore
+      }
+    }
+
+    let source: Source | undefined;
+    const resolvedSrc = resolveInstallationSource(inst, { globalSources, workspaceSources });
+    if ('source' in resolvedSrc) {
+      source = resolvedSrc.source;
+    } else {
+      const allSources = [...globalSources, ...workspaceSources];
+      const candidates = inst.sourceId
+        ? allSources.filter((s) => s.id === inst.sourceId)
+        : allSources;
+      const pickPool = candidates.length > 0 ? candidates : allSources;
+      if (pickPool.length === 0) {
+        vscode.window.showErrorMessage(`No registered sources available to reinstall "${inst.name}".`);
+        return;
+      }
+      const pickItems = pickPool.map((s) => ({
+        label: `${s.scope === 'project' ? 'workspace' : 'global'}:${s.id}`,
+        description: `${s.name ?? s.id} (${s.type})`,
+        detail: s.type === 'local-folder' ? s.localPath : s.url,
+        source: s,
+      }));
+      const picked = await vscode.window.showQuickPick(pickItems, {
+        placeHolder: `Select the source to reinstall "${inst.name}" from`,
+      });
+      if (!picked) {
+        return;
+      }
+      source = picked.source;
+    }
+
+    const confirm = await vscode.window.showInformationMessage(
+      `Reinstall ${inst.kind} "${inst.name}" from source "${source.id}"?`,
+      { modal: true },
+      'Reinstall'
+    );
+    if (confirm !== 'Reinstall') {
+      return;
+    }
+
+    const outcome = await reinstallInstallation(inst, source, {
+      homeRoot: this.homeRoot,
+      projectRoot,
+    });
+    if (outcome.status === 'applied') {
+      vscode.window.showInformationMessage(`Successfully reinstalled "${inst.name}".`);
+      await this.checkDrift();
+    } else {
+      vscode.window.showErrorMessage(`Reinstall failed: ${outcome.reason}`);
     }
   }
 

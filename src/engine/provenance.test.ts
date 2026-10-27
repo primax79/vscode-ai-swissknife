@@ -17,6 +17,7 @@ import {
   writeManifest,
   readState,
   writeState,
+  statePath,
   toDesiredSource,
   fromDesiredSource,
   SCHEMA_VERSION,
@@ -28,8 +29,13 @@ import * as planModule from './plan';
 import { applyInstall } from './apply';
 import { checkForUpstreamUpdate, checkDriftForAll, resolveInstallationSource } from './drift';
 import { computePendingCounts } from './pendingCounts';
-import { planUpdate } from './update';
-import { runUpdates } from '../cli/commands';
+import {
+  planUpdate,
+  planUpdateAll,
+  relinkInstallation,
+  reinstallInstallation,
+} from './update';
+import { runUpdates, runRelink } from '../cli/commands';
 
 // File-wide HOME sandbox so no code path reads or writes the real ~/.ai-swissknife
 const realHome = process.env.HOME;
@@ -999,7 +1005,6 @@ describe('provenance & update detection — spec §6 acceptance cases', () => {
   // that source's current content differs from `contentHash`.
   it(
     '8. old state.json record (bare sourceId, no provenance object) -> migrated when uniquely matched or marked provenance-unknown, never a false update-available',
-    { todo: 'fixed by 49.6' },
     async () => {
       const sharedId = 'legacy-source';
 
@@ -1107,6 +1112,193 @@ describe('provenance & update detection — spec §6 acceptance cases', () => {
         'provenance-unknown',
         'Ambiguous legacy installation that cannot be uniquely attributed must be marked provenance-unknown'
       );
+    }
+  );
+
+  it(
+    '8b. state.json migration: adopts unique matching candidate, creates state.json.bak-<timestamp> once, resolves offline needs-fetch on next drift check, and supports relink + reinstall',
+    async () => {
+      const sharedId = 'legacy-source';
+
+      // Global local-folder source (v2)
+      const globalFolder = path.join(testHomeDir, 'legacy-global-b');
+      initGitRepo(globalFolder);
+      writeSkillFile(globalFolder, 'skills/legacy-skill', 'legacy-skill', 'Global version', '# Global content v2');
+      const globalCommit = commitAll(globalFolder, 'Global commit v2');
+      const globalSource: Source = {
+        id: sharedId,
+        type: 'local-folder',
+        scope: 'global',
+        localPath: globalFolder,
+      };
+      await writeManifest(
+        'global',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          sources: [toDesiredSource(globalSource, undefined, testHomeDir)],
+          desiredInstallations: [],
+        },
+        undefined,
+        testHomeDir
+      );
+
+      // Install from globalSource so contentHash matches globalSource at globalCommit
+      const { installation: rawInstalled } = await resolveAndInstallSkill({
+        source: globalSource,
+        skillName: 'legacy-skill',
+        targetScope: 'project',
+      });
+
+      // Workspace local-folder source with same id but different content (v3)
+      const wsFolder = path.join(testWorkspaceDir, 'legacy-ws-b');
+      writeSkillFile(wsFolder, 'skills/legacy-skill', 'legacy-skill', 'WS version', '# WS content v3');
+      const wsSource: Source = {
+        id: sharedId,
+        type: 'local-folder',
+        scope: 'project',
+        projectPath: testWorkspaceDir,
+        localPath: wsFolder,
+      };
+      await writeManifest(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          sources: [toDesiredSource(wsSource, testWorkspaceDir, testHomeDir)],
+          desiredInstallations: [],
+        },
+        testWorkspaceDir,
+        testHomeDir
+      );
+
+      // Write legacy installation without `source`, `sourceRevision`, `sourceContentHash`
+      const legacyInstallation: ManagedInstallation = {
+        assistant: rawInstalled.assistant,
+        scope: rawInstalled.scope,
+        projectPath: rawInstalled.projectPath,
+        kind: rawInstalled.kind,
+        name: rawInstalled.name,
+        path: rawInstalled.path,
+        sourceId: sharedId,
+        artifactId: `${sharedId}:skills/legacy-skill:legacy-skill`,
+        installedAt: '2026-09-01T00:00:00.000Z',
+        contentHash: rawInstalled.contentHash,
+      };
+      await writeState(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          installations: [legacyInstallation],
+        },
+        testWorkspaceDir,
+        testHomeDir
+      );
+
+      // 1. Load state -> uniquely adopts globalSource (only candidate matching contentHash), creates backup once
+      const loaded1 = await readState('project', testWorkspaceDir, testHomeDir);
+      const migratedInst = loaded1.installations[0];
+      assert.ok(migratedInst.source, 'Unique matching candidate should be adopted');
+      assert.strictEqual(migratedInst.source?.scope, 'global');
+      assert.strictEqual(migratedInst.source?.id, sharedId);
+      assert.strictEqual(migratedInst.sourceRevision?.commit, globalCommit);
+      assert.strictEqual(migratedInst.sourceContentHash, rawInstalled.contentHash);
+      assert.strictEqual(migratedInst.provenance, undefined);
+
+      const pStateFile = statePath('project', testWorkspaceDir, testHomeDir);
+      const stateDir = path.dirname(pStateFile);
+      const bakFiles1 = fs.readdirSync(stateDir).filter((f) => f.startsWith('state.json.bak-'));
+      assert.strictEqual(bakFiles1.length, 1, 'Should create exactly one state.json.bak-<timestamp> backup');
+
+      // Second readState should not create a second backup
+      await readState('project', testWorkspaceDir, testHomeDir);
+      const bakFiles2 = fs.readdirSync(stateDir).filter((f) => f.startsWith('state.json.bak-'));
+      assert.deepStrictEqual(bakFiles2, bakFiles1, 'Backup must be created only once');
+
+      // 2. Test offline needs-fetch behavior: uncached git candidate marks provenance-unknown with hint "check sources to resolve", then resolves on explicit checkDriftForAll
+      const uncachedGitId = 'uncached-git-src';
+      const remoteRepoDir = path.join(testWorkspaceDir, 'remotes', 'uncached-git');
+      initGitRepo(remoteRepoDir);
+      writeSkillFile(remoteRepoDir, 'skills/legacy-skill', 'legacy-skill', 'Global version', '# Global content v2');
+      const gitCommit = commitAll(remoteRepoDir, 'Matching git commit');
+      const uncachedGitSource: Source = {
+        id: uncachedGitId,
+        type: 'git-custom',
+        scope: 'project',
+        projectPath: testWorkspaceDir,
+        url: remoteRepoDir,
+      };
+      await writeManifest(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          sources: [toDesiredSource(uncachedGitSource, testWorkspaceDir, testHomeDir)],
+          desiredInstallations: [],
+        },
+        testWorkspaceDir,
+        testHomeDir
+      );
+      await writeState(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          installations: [
+            {
+              ...legacyInstallation,
+              sourceId: uncachedGitId,
+              artifactId: `${uncachedGitId}:skills/legacy-skill:legacy-skill`,
+            },
+          ],
+        },
+        testWorkspaceDir,
+        testHomeDir
+      );
+
+      // Load without cache -> offline, does NOT fetch, marks provenance: 'unknown' with hint "check sources to resolve"
+      const offlineLoaded = await readState('project', testWorkspaceDir, testHomeDir);
+      const offlineInst = offlineLoaded.installations[0];
+      assert.strictEqual(offlineInst.source, undefined);
+      assert.strictEqual(offlineInst.provenance, 'unknown');
+      assert.strictEqual(offlineInst.provenanceHint, 'check sources to resolve');
+
+      // Next explicit drift check fetches and resolves provenance!
+      const driftAfterFetch = await checkDriftForAll([offlineInst], [uncachedGitSource], testHomeDir);
+      assert.strictEqual(driftAfterFetch[0].status, 'up-to-date');
+      const resolvedOfflineInst = driftAfterFetch[0].installation;
+      assert.strictEqual(resolvedOfflineInst.provenance, undefined);
+      assert.strictEqual(resolvedOfflineInst.source?.id, uncachedGitId);
+      assert.strictEqual(resolvedOfflineInst.source?.scope, 'workspace');
+      assert.strictEqual(resolvedOfflineInst.sourceRevision?.commit, gitCommit);
+
+      // 3. Test CLI relink (plan and --write) and engine reinstallInstallation
+      const cliPlan = await runRelink('legacy-skill', {
+        home: testHomeDir,
+        workspace: testWorkspaceDir,
+        source: `global:${sharedId}`,
+        write: false,
+      });
+      assert.strictEqual(cliPlan.mode, 'plan');
+      assert.strictEqual(cliPlan.newSource.scope, 'global');
+      assert.strictEqual(cliPlan.newSource.id, sharedId);
+
+      const cliApplied = await runRelink('legacy-skill', {
+        home: testHomeDir,
+        workspace: testWorkspaceDir,
+        source: `global:${sharedId}`,
+        write: true,
+      });
+      assert.strictEqual(cliApplied.mode, 'applied');
+      const stateAfterRelink = await readState('project', testWorkspaceDir, testHomeDir);
+      assert.strictEqual(stateAfterRelink.installations[0].source?.scope, 'global');
+      assert.strictEqual(stateAfterRelink.installations[0].source?.id, sharedId);
+
+      // Reinstall from wsSource (v3)
+      const reinstallRes = await reinstallInstallation(
+        stateAfterRelink.installations[0],
+        wsSource,
+        { homeRoot: testHomeDir, projectRoot: testWorkspaceDir }
+      );
+      assert.strictEqual(reinstallRes.status, 'applied');
+      assert.strictEqual(reinstallRes.installation.source?.scope, 'workspace');
+      assert.strictEqual(reinstallRes.installation.provenance, undefined);
     }
   );
 });

@@ -316,6 +316,14 @@ export function activate(context: vscode.ExtensionContext) {
     vscode.commands.registerCommand('aiSwissknife.releaseItem', (item?: InstalledInstallationItem) =>
       installedProvider.releaseItem(item)
     ),
+    vscode.commands.registerCommand('aiSwissknife.relinkItem', async (item?: InstalledInstallationItem) => {
+      await installedProvider.doRelinkInstallation(item);
+      updateStatusBar().catch(() => {});
+    }),
+    vscode.commands.registerCommand('aiSwissknife.reinstallItem', async (item?: InstalledInstallationItem) => {
+      await installedProvider.doReinstallInstallation(item);
+      updateStatusBar().catch(() => {});
+    }),
     vscode.commands.registerCommand('aiSwissknife.promoteItem', (item?: ObservedArtifactItem) =>
       installedProvider.promoteItem(item)
     ),
