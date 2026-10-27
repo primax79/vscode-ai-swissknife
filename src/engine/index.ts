@@ -51,4 +51,10 @@ export * from './claudeCli';
 export * from './fileTree';
 export * from './uninstall';
 export * from './sourceManifest';
+export {
+  describeRevisionGap,
+  type RevisionGap,
+  type RevisionGapReason,
+  type DescribeRevisionGapOptions,
+} from './revisionGap';
 
