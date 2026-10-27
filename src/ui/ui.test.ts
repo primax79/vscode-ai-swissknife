@@ -245,7 +245,7 @@ import {
 import { SourcesTreeDataProvider, ScopeGroupItem, SourceItem, promptScope } from './sourcesView';
 import { AvailableTreeDataProvider, AvailableFolderItem, AvailableArtifactItem, buildHierarchy, AvailableSourceGroupItem, DiagnosticTreeItem } from './availableView';
 import { ArtifactFileItem } from './artifactFileTree';
-import { InstalledTreeDataProvider, ScopeGroupItem as InstalledScopeGroupItem, InstalledInstallationItem, KindGroupItem } from './installedView';
+import { InstalledTreeDataProvider, ScopeGroupItem as InstalledScopeGroupItem, InstalledInstallationItem, KindGroupItem, getIdentityKey } from './installedView';
 import { getAssistantIconPath } from './assistantIcons';
 import { setupFileWatchers } from './watchers';
 import { DashboardPanel, computeItemOrigin, getScopeLabel, buildInstalledTree } from './dashboard';
@@ -5009,6 +5009,213 @@ describe('UI TreeDataProviders', () => {
       const wTrash = await listTrash('project', testTempDir, testHomeDir);
       assert.strictEqual(gTrash.length, 0);
       assert.strictEqual(wTrash.length, 0);
+    });
+  });
+
+  describe('Hold an item out of Update all (47.3)', () => {
+    it('package.json check: context-menu entries per state and commands registered', async () => {
+      const packageJson = JSON.parse(
+        fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf-8')
+      );
+      const commands = packageJson.contributes.commands;
+      const holdCmd = commands.find((c: any) => c.command === 'aiSwissknife.holdItem');
+      const releaseCmd = commands.find((c: any) => c.command === 'aiSwissknife.releaseItem');
+
+      assert.ok(holdCmd, 'aiSwissknife.holdItem must be declared in package.json');
+      assert.strictEqual(holdCmd.title, 'Hold');
+      assert.strictEqual(holdCmd.icon, '$(pin)');
+
+      assert.ok(releaseCmd, 'aiSwissknife.releaseItem must be declared in package.json');
+      assert.strictEqual(releaseCmd.title, 'Release');
+      assert.strictEqual(releaseCmd.icon, '$(pinned)');
+
+      const itemMenus = packageJson.contributes.menus['view/item/context'];
+      const holdMenu = itemMenus.find((m: any) => m.command === 'aiSwissknife.holdItem');
+      const releaseMenu = itemMenus.find((m: any) => m.command === 'aiSwissknife.releaseItem');
+
+      assert.ok(holdMenu, 'view/item/context menu must include aiSwissknife.holdItem');
+      assert.ok(releaseMenu, 'view/item/context menu must include aiSwissknife.releaseItem');
+
+      assert.ok(holdMenu.when.includes('aiSwissknife') && holdMenu.when.includes('installed'));
+      assert.ok(holdMenu.when.includes('installedInstallation'));
+      assert.ok(holdMenu.when.includes(':held'), 'holdItem when clause must inspect :held context value');
+
+      assert.ok(releaseMenu.when.includes('aiSwissknife') && releaseMenu.when.includes('installed'));
+      assert.ok(releaseMenu.when.includes('installedInstallation'));
+      assert.ok(releaseMenu.when.includes(':held'), 'releaseItem when clause must inspect :held context value');
+
+      // Extension registration check
+      const fakeContext = { subscriptions: [], extensionUri: { fsPath: '/test/ext' }, workspaceState: { get: () => undefined, update: async () => {} } } as any;
+      mockRegisteredCommands.clear();
+      extensionModule.activate(fakeContext);
+
+      assert.ok(mockRegisteredCommands.has('aiSwissknife.holdItem'));
+      assert.ok(mockRegisteredCommands.has('aiSwissknife.releaseItem'));
+    });
+
+    it('pin marker: sidebar description suffix held, tooltip, and Dashboard child row pin glyph', async () => {
+      const provider = new InstalledTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+      const instUnheld: ManagedInstallation = {
+        assistant: 'claude-code',
+        scope: 'project',
+        projectPath: testTempDir,
+        kind: 'skill',
+        name: 'unheld-skill',
+        path: path.join(testTempDir, 'unheld-skill'),
+        installedAt: new Date().toISOString(),
+      };
+      const instHeld: ManagedInstallation = {
+        assistant: 'claude-code',
+        scope: 'project',
+        projectPath: testTempDir,
+        kind: 'skill',
+        name: 'held-skill',
+        path: path.join(testTempDir, 'held-skill'),
+        installedAt: new Date().toISOString(),
+        held: true,
+      };
+
+      // Sidebar tests
+      const treeItemUnheld = provider.getTreeItem(new InstalledInstallationItem(instUnheld));
+      assert.ok(!treeItemUnheld.description?.toString().includes('held'), 'unheld item description must not have held suffix');
+      assert.ok(!treeItemUnheld.contextValue?.includes(':held'), 'unheld contextValue must not have :held');
+      assert.ok(!treeItemUnheld.tooltip?.toString().includes('Held: skipped by Update all'));
+
+      const treeItemHeld = provider.getTreeItem(new InstalledInstallationItem(instHeld));
+      assert.ok(treeItemHeld.description?.toString().includes('held'), 'held item description must contain held suffix');
+      assert.ok(treeItemHeld.description?.toString().endsWith('held'), 'held item description must end with held suffix');
+      assert.ok(treeItemHeld.contextValue?.includes(':held'), 'held contextValue must have :held');
+      assert.ok(treeItemHeld.tooltip?.toString().includes('Held: skipped by Update all'), 'held item tooltip must contain Held: skipped by Update all');
+
+      // Dashboard child row tests
+      const tree = buildInstalledTree([instUnheld, instHeld], []);
+      const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any, {} as any, {} as any, {} as any, () => {});
+      const rowsHtml = panel.renderInstalledTree(tree, undefined, new Set([getIdentityKey(instHeld)]));
+
+      assert.ok(rowsHtml.includes('📌'), 'Dashboard child row must render pin glyph for held items');
+      assert.ok(rowsHtml.includes('title="Held: skipped by Update all"'), 'Dashboard child row must show tooltip Held: skipped by Update all');
+      assert.ok(rowsHtml.includes('data-held="true"'), 'Dashboard child row must mark data-held');
+      panel.dispose();
+    });
+
+    it('summary text includes the held count in modal and final message', async () => {
+      const provider = new InstalledTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+      const instUp: ManagedInstallation = {
+        assistant: 'claude-code',
+        scope: 'project',
+        projectPath: testTempDir,
+        kind: 'skill',
+        name: 'item-update',
+        sourceId: 'src1',
+        path: path.join(testTempDir, 'item-update'),
+        installedAt: new Date().toISOString(),
+      };
+      const instHeld: ManagedInstallation = {
+        assistant: 'claude-code',
+        scope: 'project',
+        projectPath: testTempDir,
+        kind: 'skill',
+        name: 'item-held',
+        sourceId: 'src1',
+        path: path.join(testTempDir, 'item-held'),
+        installedAt: new Date().toISOString(),
+        held: true,
+      };
+
+      await writeState('project', { schemaVersion: SCHEMA_VERSION, installations: [instUp, instHeld] }, testTempDir);
+      await writeManifest('project', { schemaVersion: SCHEMA_VERSION, sources: [{ id: 'src1', name: 'Src 1', type: 'local-folder', localPath: testTempDir, scope: 'project' }], desiredInstallations: [] }, testTempDir);
+
+      const origCheckDriftForAll = driftModule.checkDriftForAll;
+      (driftModule as any).checkDriftForAll = async () => [];
+
+      const origPlanUpdateAll = updateModule.planUpdateAll;
+      (updateModule as any).planUpdateAll = async () => ({
+        toUpdate: [{ installation: instUp, source: { id: 'src1' }, prepared: {} }],
+        skippedModified: [],
+        cannotUpdate: [],
+        upToDate: [],
+        held: [{ installation: instHeld, reason: 'Held by user' }],
+        buckets: { toUpdate: [], skippedModified: [], cannotUpdate: [], upToDate: [], held: [] },
+        counts: { toUpdate: 1, skippedModified: 0, cannotUpdate: 0, upToDate: 0, held: 1, total: 2 },
+      });
+
+      const origApplyUpdateAll = updateModule.applyUpdateAll;
+      (updateModule as any).applyUpdateAll = async () => [
+        { installation: instUp, status: 'applied' }
+      ];
+
+      mockShowInformationMessageCalls = [];
+      mockCustomShowInformationMessage = async (msg: string) => {
+        if (msg.includes('update(s) will be applied')) return 'Update 1';
+        return undefined;
+      };
+
+      try {
+        await provider.doUpdateAll();
+        assert.ok(mockShowInformationMessageCalls.length >= 2);
+
+        // Check modal summary
+        const modalMsg = mockShowInformationMessageCalls[0].msg;
+        assert.ok(modalMsg.includes('1 item(s) are held and will be skipped'), 'modal summary must list held items');
+
+        // Check final summary
+        const finalMsg = mockShowInformationMessageCalls[1].msg;
+        assert.ok(finalMsg.includes('1 held'), 'final summary text must include the held count');
+        assert.ok(finalMsg.includes('Updated 1, skipped 0, 1 held, failed 0'));
+      } finally {
+        (driftModule as any).checkDriftForAll = origCheckDriftForAll;
+        (updateModule as any).planUpdateAll = origPlanUpdateAll;
+        (updateModule as any).applyUpdateAll = origApplyUpdateAll;
+        mockCustomShowInformationMessage = undefined;
+      }
+    });
+
+    it('explicit single update still works and shows a one-line note "This item is held"', async () => {
+      const provider = new InstalledTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+      const inst: ManagedInstallation = {
+        assistant: 'claude-code',
+        scope: 'project',
+        projectPath: testTempDir,
+        kind: 'skill',
+        name: 'held-single-item',
+        sourceId: 'src1',
+        path: path.join(testTempDir, 'held-single-item'),
+        installedAt: new Date().toISOString(),
+        contentHash: 'hash',
+        held: true,
+      };
+
+      await writeState('project', { schemaVersion: SCHEMA_VERSION, installations: [inst] }, testTempDir);
+      await writeManifest('project', { schemaVersion: SCHEMA_VERSION, sources: [{ id: 'src1', name: 'Src 1', type: 'local-folder', localPath: testTempDir, scope: 'project' }], desiredInstallations: [] }, testTempDir);
+
+      const origPlanUpdate = updateModule.planUpdate;
+      (updateModule as any).planUpdate = async () => ({ supported: true, plan: { reason: '' } });
+
+      let applyCalled = false;
+      const applyModule = await import('../engine/apply');
+      const origApply = applyModule.applyInstall;
+      (applyModule as any).applyInstall = async () => {
+        applyCalled = true;
+        return { status: 'applied', installation: inst };
+      };
+
+      const origAnalyze = driftModule.analyzeLocalDrift;
+      (driftModule as any).analyzeLocalDrift = async () => ({ status: 'update-available' });
+
+      mockShowInformationMessageCalls = [];
+      mockShowInformationMessageResult = 'Update';
+
+      try {
+        await provider.doUpdateInstallation(inst);
+        assert.ok(mockShowInformationMessageCalls.length >= 1);
+        const confirmMsg = mockShowInformationMessageCalls[0].msg;
+        assert.ok(confirmMsg.includes('This item is held.'), 'must show one-line note "This item is held."');
+        assert.strictEqual(applyCalled, true, 'explicit single update still works when confirmed');
+      } finally {
+        (updateModule as any).planUpdate = origPlanUpdate;
+        (applyModule as any).applyInstall = origApply;
+        (driftModule as any).analyzeLocalDrift = origAnalyze;
+      }
     });
   });
 });

@@ -147,6 +147,7 @@ export class DashboardPanel {
   private _htmlInitialized: boolean = false;
 
   private _sourceFilter?: { id: string; scope: Scope };
+  private _heldKeys: Set<string> = new Set<string>();
 
   private escapeHtml(unsafe: string): string {
     return (unsafe || '')
@@ -414,6 +415,42 @@ export class DashboardPanel {
             }
             break;
           }
+          case 'toggleHoldItem': {
+            if (message.key) {
+              const inst = await this.resolveManagedInstallationByKey(message.key);
+              if (inst) {
+                await this._provider.toggleHeldInstallation(inst);
+                this._refreshCallback();
+                await this.update();
+                await this.handleRequestDetail(message.key);
+              }
+            }
+            break;
+          }
+          case 'holdItem': {
+            if (message.key) {
+              const inst = await this.resolveManagedInstallationByKey(message.key);
+              if (inst) {
+                await this._provider.setInstallationHeld(inst, true);
+                this._refreshCallback();
+                await this.update();
+                await this.handleRequestDetail(message.key);
+              }
+            }
+            break;
+          }
+          case 'releaseItem': {
+            if (message.key) {
+              const inst = await this.resolveManagedInstallationByKey(message.key);
+              if (inst) {
+                await this._provider.setInstallationHeld(inst, false);
+                this._refreshCallback();
+                await this.update();
+                await this.handleRequestDetail(message.key);
+              }
+            }
+            break;
+          }
           case 'updateAll': {
             await this._provider.doUpdateAll(message.filter);
             this._refreshCallback();
@@ -652,6 +689,7 @@ export class DashboardPanel {
         status: report ? report.status : 'up-to-date',
         hasLocalPatch: report?.hasLocalPatch,
         details: report?.details,
+        held: Boolean(inst.held),
         assistantIconUri
       });
       return;
@@ -766,8 +804,9 @@ export class DashboardPanel {
         </button>`;
       }).join('\n');
 
+      this._heldKeys = new Set(allManaged.filter((m) => m.held).map((m) => getIdentityKey(m)));
       const tree = buildInstalledTree(allManaged, allObserved);
-      const rowsHtml = this.renderInstalledTree(tree);
+      const rowsHtml = this.renderInstalledTree(tree, undefined, this._heldKeys);
 
       this._panel.webview.postMessage({
         command: 'inventoryData',
@@ -1297,11 +1336,22 @@ export class DashboardPanel {
 
   public renderInstalledTree(
     tree: InstalledObject[],
-    driftByKey?: Map<string, PlaceState | string> | Record<string, PlaceState | string>
+    driftByKey?: Map<string, PlaceState | string> | Record<string, PlaceState | string>,
+    heldByKey?: Set<string> | Map<string, boolean> | Record<string, boolean>
   ): string {
     if (!tree || tree.length === 0) {
       return '<tr><td colspan="4" style="text-align:center; opacity:0.6;">No items found.</td></tr>';
     }
+
+    const checkHeld = (key: string): boolean => {
+      if (heldByKey) {
+        if (heldByKey instanceof Set) return heldByKey.has(key);
+        if (heldByKey instanceof Map) return Boolean(heldByKey.get(key));
+        return Boolean((heldByKey as Record<string, boolean>)[key]);
+      }
+      if (this._heldKeys) return this._heldKeys.has(key);
+      return false;
+    };
 
     const lookupState = (key: string): PlaceState | undefined => {
       if (!driftByKey) return undefined;
@@ -1348,6 +1398,7 @@ export class DashboardPanel {
       const worstBadgeText = this.getWorstStatusLabel(worstState);
 
       const childRowsHtml = placesWithState.map((place) => {
+        const childIsHeld = checkHeld(place.key);
         const asstIconSrc = this.getAssistantIconSrc(place.assistant);
         const scopeSvg = getScopeIconSvg(place.scope);
         const scopeLabel = getScopeLabel(place.scope);
@@ -1365,6 +1416,7 @@ export class DashboardPanel {
             <button class="btn btn-sm btn-secondary preview-btn" title="Preview" style="${isMissing ? 'display: none;' : 'display: inline-block;'}" onclick="event.stopPropagation(); vscode.postMessage({ command: 'previewInstalledArtifact', key: ${this.jsStringLiteral(place.key)} })">👁</button>
             <button class="btn btn-sm btn-secondary diff-btn" title="Diff" style="${hasDiff ? 'display: inline-block;' : 'display: none;'}" onclick="event.stopPropagation(); vscode.postMessage({ command: 'diffInstalledArtifact', key: ${this.jsStringLiteral(place.key)} })">⇄</button>
             <button class="btn btn-sm btn-primary update-btn" title="Update to latest" style="${hasUpdate ? 'display: inline-block;' : 'display: none;'}" onclick="event.stopPropagation(); vscode.postMessage({ command: 'updateItem', key: ${this.jsStringLiteral(place.key)} })">⟳</button>
+            <button class="btn btn-sm btn-secondary hold-btn" title="${childIsHeld ? 'Release' : 'Hold'}" onclick="event.stopPropagation(); vscode.postMessage({ command: 'toggleHoldItem', key: ${this.jsStringLiteral(place.key)} })">📌</button>
             <button class="btn btn-sm btn-secondary btn-destructive remove-btn" title="Remove from registry" style="${isMissing ? 'display: inline-block;' : 'display: none;'}" onclick="event.stopPropagation(); vscode.postMessage({ command: 'uninstallItem', key: ${this.jsStringLiteral(place.key)} })">🗑</button>
           `;
         } else {
@@ -1380,7 +1432,7 @@ export class DashboardPanel {
         const sourceIdAttr = effectiveSourceId ? ` data-source-id="${this.escapeHtml(effectiveSourceId)}"` : '';
 
         return `
-          <tr class="item-row sub-row"
+          <tr class="item-row sub-row"${childIsHeld ? ' data-held="true"' : ''}
             data-key="${this.escapeHtml(place.key)}"
             data-name="${this.escapeHtml(obj.name)}"
             data-kind="${this.escapeHtml(obj.kind)}"
@@ -1397,7 +1449,7 @@ export class DashboardPanel {
               <span title="${this.escapeHtml(scopeLabel)}">${scopeSvg}</span>
             </td>
             <td data-drift-key="${this.escapeHtml(place.key)}" data-status="${this.escapeHtml(place.state)}" style="width: 35%;">
-              <span class="badge ${childBadgeClass}">${this.escapeHtml(childBadgeText)}</span>
+              <span class="badge ${childBadgeClass}">${this.escapeHtml(childBadgeText)}</span>${childIsHeld ? ' <span class="pin-glyph" title="Held: skipped by Update all">📌</span>' : ''}
             </td>
             <td style="text-align: right; width: 20%;">
               ${actionsHtml}
@@ -1666,8 +1718,9 @@ export class DashboardPanel {
       }
     }
 
+    this._heldKeys = new Set(managed.filter((m) => m.held).map((m) => getIdentityKey(m)));
     const tree = buildInstalledTree(managed, observed, { statusByKey: driftByKey });
-    const rowsHtml = this.renderInstalledTree(tree, driftByKey);
+    const rowsHtml = this.renderInstalledTree(tree, driftByKey, this._heldKeys);
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -2513,6 +2566,12 @@ export class DashboardPanel {
       }
     }
 
+    function detailToggleHoldItem() {
+      if (selectedItemKey) {
+        vscode.postMessage({ command: 'toggleHoldItem', key: selectedItemKey });
+      }
+    }
+
     function diffItem() {
       detailDiffItem();
     }
@@ -3258,6 +3317,11 @@ export class DashboardPanel {
             secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Copy to..." onclick="detailCopyItem()"><span class="btn-icon">⧉</span> Copy</button>');
             if (msg.item && ['skill', 'agent', 'command', 'mcp-server'].includes(msg.item.kind)) {
               secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Move to..." onclick="detailMoveItem()"><span class="btn-icon">⇥</span> Move</button>');
+            }
+            if (msg.held) {
+              secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Release" onclick="detailToggleHoldItem()"><span class="btn-icon">📌</span> Release</button>');
+            } else {
+              secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Hold" onclick="detailToggleHoldItem()"><span class="btn-icon">📌</span> Hold</button>');
             }
             secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Edit" onclick="detailEditItem()"><span class="btn-icon">✎</span> Edit</button>');
             destructiveActions.push('<button class="btn btn-sm btn-secondary btn-destructive" title="Uninstall" onclick="detailUninstallItem()"><span class="btn-icon">🗑</span> Uninstall</button>');
