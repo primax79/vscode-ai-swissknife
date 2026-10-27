@@ -1,18 +1,18 @@
-# Initiative 28 — Sidebar Navigation Unification — Summary
+# Iniziativa 28 — Unificazione della navigazione nella sidebar — Riepilogo
 
-> **Closed on:** 2026-10-27 (registry tidy; verifier ai-coding-tools-c1)  
-> **Initiative:** Initiative 28 — Sidebar Navigation Unification  
-> **Status:** ✅ Done and merged into main
+> **Closed on:** 2026-10-27 (riordino del registro; verificatore ai-coding-tools-c1)  
+> **Initiative:** Iniziativa 28 — Unificazione della navigazione nella sidebar  
+> **Status:** ✅ Completata e integrata in main
 
-Summary written at closure from the plan and the git history; the per-task specs in this folder hold the detail.
+Riepilogo scritto alla chiusura a partire dal piano e dalla cronologia git; le specifiche per singolo task in questa cartella contengono i dettagli.
 
-## What was built
+## Cosa è stato realizzato
 
-- **28.1 Merge Sources + Available into one tree** — merged 979e456 2026-09-08. Unify `SourcesTreeDataProvider` and `AvailableTreeDataProvider` into a single sidebar tree so expanding a source shows its catalog content directly without select-to-filter coupling.
-- **28.2 Installed kind-grouping** — merged 979e456 2026-09-08. Add an intermediate per-kind grouping level (`KindGroupItem`) under each assistant/scope group in `InstalledTreeDataProvider`.
+- **28.1 Unire Sources + Available in un unico albero** — integrato 979e456 2026-09-08. Unificare `SourcesTreeDataProvider` e `AvailableTreeDataProvider` in un singolo albero nella sidebar in modo che l'espansione di una sorgente mostri direttamente il contenuto del suo catalogo senza accoppiamento selezione-filtro.
+- **28.2 Raggruppamento per tipo in Installed** — integrato 979e456 2026-09-08. Aggiungere un livello intermedio di raggruppamento per tipo (`KindGroupItem`) sotto ciascun gruppo assistente/scope in `InstalledTreeDataProvider`.
 
 ## Verification
 
-- Every task's work is merged into `main` (evidence: the commits named above, from `git log --grep '<id>'`).
-- `npm test` on `main` at 5e85109 (2026-10-27): 577 tests, 576 pass, 0 fail, 1 opt-in skip (`AISK_REAL_KILO=1`).
-- `ai-orch tasks validate --tasks-dir tasks`: 0 errors.
+- Il lavoro di ogni task è integrato in `main` (evidenza: i commit indicati sopra, da `git log --grep '<id>'`).
+- `npm test` su `main` a 5e85109 (2026-10-27): 577 test, 576 superati, 0 falliti, 1 saltato opzionale (`AISK_REAL_KILO=1`).
+- `ai-orch tasks validate --tasks-dir tasks`: 0 errori.

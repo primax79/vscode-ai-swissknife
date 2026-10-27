@@ -1,20 +1,20 @@
-# 31 — Dashboard: provider action-layer decoupling — Summary
+# 31 — Dashboard: disaccoppiamento del livello di azione dei provider — Riepilogo
 
-> **Closed on:** 2026-10-27 (registry tidy; verifier ai-coding-tools-c1)  
-> **Initiative:** 31 — Dashboard: provider action-layer decoupling  
-> **Status:** ✅ Done and merged into main
+> **Closed on:** 2026-10-27 (riordino del registro; verificatore ai-coding-tools-c1)  
+> **Initiative:** 31 — Dashboard: disaccoppiamento del livello di azione dei provider  
+> **Status:** ✅ Completata e integrata in main
 
-Summary written at closure from the plan and the git history; the per-task specs in this folder hold the detail.
+Riepilogo scritto alla chiusura a partire dal piano e dalla cronologia git; le specifiche per singolo task in questa cartella contengono i dettagli.
 
-## What was built
+## Cosa è stato realizzato
 
-- **31.1 `doUpdateInstallation`/`doUninstallItem`** — merged e7be2b1 2026-09-08. Extract plain-`ManagedInstallation`-taking public methods `doUpdateInstallation` and `doUninstallItem` on `InstalledTreeDataProvider` so webview messages can call them.
-- **31.2 Decouple `availableView.ts` install methods** — merged bc1b26d 2026-09-08. Give `installFolder`, `installSourceGroup`, and `installArtifact` plain-identifier entry points on `AvailableTreeDataProvider` and make `installBatch` public.
-- **31.3 Identifier-based recommend/unrecommend** — merged 69cf6bf 2026-09-08. Extract identifier-based recommend and unrecommend handlers into `src/ui/recommendations.ts` so they do not depend on `TreeItem` `instanceof` checks.
-- **31.4 Stable item identity + regression verification** — merged f4bc36d 2026-09-08. Introduce a `{assistant, scope, kind, name}` composite identity key with server-side re-resolution and verify full sidebar action parity.
+- **31.1 `doUpdateInstallation`/`doUninstallItem`** — integrato e7be2b1 2026-09-08. Estrarre i metodi pubblici che accettano un semplice `ManagedInstallation`, `doUpdateInstallation` e `doUninstallItem`, su `InstalledTreeDataProvider` così che i messaggi della webview possano invocarli.
+- **31.2 Disaccoppiare i metodi di installazione di `availableView.ts`** — integrato bc1b26d 2026-09-08. Fornire a `installFolder`, `installSourceGroup` e `installArtifact` punti di ingresso basati su identificatori semplici su `AvailableTreeDataProvider` e rendere pubblico `installBatch`.
+- **31.3 Gestori recommend/unrecommend basati su identificatori** — integrato 69cf6bf 2026-09-08. Estrarre i gestori recommend e unrecommend basati su identificatori in `src/ui/recommendations.ts` affinché non dipendano da verifiche su `TreeItem` tramite `instanceof`.
+- **31.4 Identità stabile degli elementi + verifica di non regressione** — integrato f4bc36d 2026-09-08. Introdurre una chiave di identità composita `{assistant, scope, kind, name}` con nuova risoluzione lato server e verificare la piena parità delle azioni della sidebar.
 
 ## Verification
 
-- Every task's work is merged into `main` (evidence: the commits named above, from `git log --grep '<id>'`).
-- `npm test` on `main` at 5e85109 (2026-10-27): 577 tests, 576 pass, 0 fail, 1 opt-in skip (`AISK_REAL_KILO=1`).
-- `ai-orch tasks validate --tasks-dir tasks`: 0 errors.
+- Il lavoro di ogni task è integrato in `main` (evidenza: i commit indicati sopra, da `git log --grep '<id>'`).
+- `npm test` su `main` a 5e85109 (2026-10-27): 577 test, 576 superati, 0 falliti, 1 saltato opzionale (`AISK_REAL_KILO=1`).
+- `ai-orch tasks validate --tasks-dir tasks`: 0 errori.

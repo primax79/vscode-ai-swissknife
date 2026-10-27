@@ -1,21 +1,21 @@
-# 35 — Dashboard: hands-on testing fixes — Summary
+# 35 — Dashboard: correzioni dai test pratici — Riepilogo
 
-> **Closed on:** 2026-10-27 (registry tidy; verifier ai-coding-tools-c1)  
-> **Initiative:** 35 — Dashboard: hands-on testing fixes  
-> **Status:** ✅ Done and merged into main
+> **Closed on:** 2026-10-27 (riordino del registro; verificatore ai-coding-tools-c1)  
+> **Initiative:** 35 — Dashboard: correzioni dai test pratici  
+> **Status:** ✅ Completata e integrata in main
 
-Summary written at closure from the plan and the git history; the per-task specs in this folder hold the detail.
+Riepilogo scritto alla chiusura a partire dal piano e dalla cronologia git; le specifiche per singolo task in questa cartella contengono i dettagli.
 
-## What was built
+## Cosa è stato realizzato
 
-- **35.1 Instant loading shell** — merged 4a46e04 2026-09-09. Synchronously render an instant loading shell with theme styles and a spinner when the Dashboard opens so it never flashes a blank screen while data loads.
-- **35.2 Overview tab content** — merged 366aeb2 2026-09-09. Replace the Overview tab placeholder with an at-a-glance landing view showing summary stat chips and items needing attention.
-- **35.3 Installed matrix view** — merged 7f3b8b9 2026-09-09. Replace the Installed flat table with an expandable per-artifact comparison matrix with sub-rows per assistant, quick actions (Preview, Diff, Update), and column sorting.
-- **35.4 Catalog rows as a real table** — merged 1afb012 2026-09-09. Convert Sources & Catalog artifact and folder rows from free-wrapping flex layouts to a fixed-column CSS grid table.
-- **35.5 Icon-only buttons across the Dashboard** — merged e656d24 2026-09-09. Replace text labels with compact Unicode icon buttons and tooltips across all Dashboard sections where text is not indispensable.
+- **35.1 Guscio di caricamento istantaneo** — integrato 4a46e04 2026-09-09. Renderizzare in modo sincrono un guscio di caricamento istantaneo con gli stili del tema e uno spinner all'apertura della Dashboard, così che non mostri mai una schermata vuota durante il caricamento dei dati.
+- **35.2 Contenuto del tab Overview** — integrato 366aeb2 2026-09-09. Sostituire il segnaposto del tab Overview con una vista iniziale a colpo d'occhio che mostra chip statistici di riepilogo e gli elementi che richiedono attenzione.
+- **35.3 Vista a matrice per Installed** — integrato 7f3b8b9 2026-09-09. Sostituire la tabella piatta di Installed con una matrice di confronto espandibile per artefatto dotata di sotto-righe per assistente, azioni rapide (Preview, Diff, Update) e ordinamento per colonna.
+- **35.4 Righe del catalogo come vera tabella** — integrato 1afb012 2026-09-09. Convertire le righe di artefatti e cartelle di Sources & Catalog da layout flex a ritorno a capo libero a una tabella CSS Grid a colonne fisse.
+- **35.5 Pulsanti con sola icona in tutta la Dashboard** — integrato e656d24 2026-09-09. Sostituire le etichette di testo con pulsanti compatti a icona Unicode e tooltip in tutte le sezioni della Dashboard dove il testo non è indispensabile.
 
 ## Verification
 
-- Every task's work is merged into `main` (evidence: the commits named above, from `git log --grep '<id>'`).
-- `npm test` on `main` at 5e85109 (2026-10-27): 577 tests, 576 pass, 0 fail, 1 opt-in skip (`AISK_REAL_KILO=1`).
-- `ai-orch tasks validate --tasks-dir tasks`: 0 errors.
+- Il lavoro di ogni task è integrato in `main` (evidenza: i commit indicati sopra, da `git log --grep '<id>'`).
+- `npm test` su `main` a 5e85109 (2026-10-27): 577 test, 576 superati, 0 falliti, 1 saltato opzionale (`AISK_REAL_KILO=1`).
+- `ai-orch tasks validate --tasks-dir tasks`: 0 errori.

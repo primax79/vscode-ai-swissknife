@@ -1,19 +1,19 @@
-# 32 — Dashboard: structural skeleton — Summary
+# 32 — Dashboard: scheletro strutturale — Riepilogo
 
-> **Closed on:** 2026-10-27 (registry tidy; verifier ai-coding-tools-c1)  
-> **Initiative:** 32 — Dashboard: structural skeleton  
-> **Status:** ✅ Done and merged into main
+> **Closed on:** 2026-10-27 (riordino del registro; verificatore ai-coding-tools-c1)  
+> **Initiative:** 32 — Dashboard: scheletro strutturale  
+> **Status:** ✅ Completata e integrata in main
 
-Summary written at closure from the plan and the git history; the per-task specs in this folder hold the detail.
+Riepilogo scritto alla chiusura a partire dal piano e dalla cronologia git; le specifiche per singolo task in questa cartella contengono i dettagli.
 
-## What was built
+## Cosa è stato realizzato
 
-- **32.1 Provider wiring** — merged 57b1aac 2026-09-08. Pass `SourcesTreeDataProvider`, `AvailableTreeDataProvider`, and a cross-refresh callback into `DashboardPanel` and update `extension.ts` call sites.
-- **32.2 Section navigation shell + New Artifact entry point** — merged 01614ea 2026-09-08. Add top-level section tabs (Overview, Installed, Sources & Catalog, Recommendations) and `+ New Artifact` entry point, splitting `getHtml()` into per-section templates.
-- **32.3 Incremental update model** — merged b5316d8 2026-09-08. Replace wholesale `webview.html` reassignment on refresh with a single initial shell render and incremental `postMessage`-driven DOM updates.
+- **32.1 Cablaggio dei provider** — integrato 57b1aac 2026-09-08. Passare `SourcesTreeDataProvider`, `AvailableTreeDataProvider` e una callback di refresh incrociato a `DashboardPanel` e aggiornare i punti di chiamata in `extension.ts`.
+- **32.2 Guscio di navigazione a sezioni + punto di accesso New Artifact** — integrato 01614ea 2026-09-08. Aggiungere i tab di sezione di primo livello (Overview, Installed, Sources & Catalog, Recommendations) e il punto di accesso `+ New Artifact`, suddividendo `getHtml()` in template per singola sezione.
+- **32.3 Modello di aggiornamento incrementale** — integrato b5316d8 2026-09-08. Sostituire la riassegnazione integrale di `webview.html` al refresh con un singolo rendering iniziale del guscio e aggiornamenti incrementali del DOM guidati da `postMessage`.
 
 ## Verification
 
-- Every task's work is merged into `main` (evidence: the commits named above, from `git log --grep '<id>'`).
-- `npm test` on `main` at 5e85109 (2026-10-27): 577 tests, 576 pass, 0 fail, 1 opt-in skip (`AISK_REAL_KILO=1`).
-- `ai-orch tasks validate --tasks-dir tasks`: 0 errors.
+- Il lavoro di ogni task è integrato in `main` (evidenza: i commit indicati sopra, da `git log --grep '<id>'`).
+- `npm test` su `main` a 5e85109 (2026-10-27): 577 test, 576 superati, 0 falliti, 1 saltato opzionale (`AISK_REAL_KILO=1`).
+- `ai-orch tasks validate --tasks-dir tasks`: 0 errori.
