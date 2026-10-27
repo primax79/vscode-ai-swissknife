@@ -21,9 +21,11 @@ import {
   planUpdate,
   planUpdateAll,
   applyUpdateAll,
+  setHeld,
   type DriftReport,
   type PreparedInstall,
 } from './update';
+import { readState } from '../domain/registry';
 
 // File-wide HOME sandbox to ensure no tests touch ~/.ai-swissknife or real assistant config
 const realHome = process.env.HOME;
@@ -563,6 +565,123 @@ describe('update engine — planUpdate, planUpdateAll, applyUpdateAll', () => {
       assert.strictEqual(plan.toUpdate.length, 0);
       assert.strictEqual(plan.cannotUpdate.length, 1);
       assert.ok(plan.cannotUpdate[0].reason.includes('missing on disk') || plan.cannotUpdate[0].reason.includes('not found'));
+    });
+  });
+
+  describe('hold item out of update all (47.3)', () => {
+    it('held outdated item never in toUpdate (also with includeModified) and present in held', async () => {
+      const source = await createLocalSource('src-hold', [
+        { name: 'skill-hold', kind: 'skill', content: 'Initial version' },
+      ]);
+      const inst = await installItem(source, 'skill-hold', 'skill');
+
+      // Update source content so upstream update becomes available
+      const skillFile = path.join(testTempDir, 'sources', 'src-hold', 'skill-hold', 'SKILL.md');
+      await fs.promises.writeFile(
+        skillFile,
+        '---\nname: skill-hold\ndescription: updated skill\n---\nUpstream updated content',
+        'utf-8'
+      );
+
+      // Verify it would update when not held
+      const planBefore = await planUpdateAll({
+        installations: [inst],
+        sources: [source],
+        homeRoot: testHomeDir,
+        projectRoot: testTempDir,
+      });
+      assert.strictEqual(planBefore.toUpdate.length, 1);
+      assert.strictEqual(planBefore.held.length, 0);
+
+      // Now hold the item
+      inst.held = true;
+
+      // Plan without includeModified
+      const planHeld = await planUpdateAll({
+        installations: [inst],
+        sources: [source],
+        homeRoot: testHomeDir,
+        projectRoot: testTempDir,
+      });
+      assert.strictEqual(planHeld.toUpdate.length, 0, 'held item must never be in toUpdate');
+      assert.strictEqual(planHeld.held.length, 1, 'held item must be in held bucket');
+      assert.strictEqual(planHeld.buckets.held.length, 1);
+      assert.strictEqual(planHeld.counts.held, 1);
+      assert.strictEqual(planHeld.held[0].installation.name, 'skill-hold');
+
+      // Plan with includeModified
+      const planHeldIncludeMod = await planUpdateAll({
+        installations: [inst],
+        sources: [source],
+        includeModified: true,
+        homeRoot: testHomeDir,
+        projectRoot: testTempDir,
+      });
+      assert.strictEqual(planHeldIncludeMod.toUpdate.length, 0, 'held item must never be in toUpdate even with includeModified');
+      assert.strictEqual(planHeldIncludeMod.held.length, 1);
+      assert.strictEqual(planHeldIncludeMod.counts.held, 1);
+    });
+
+    it('toggle persists across a state reload', async () => {
+      const source = await createLocalSource('src-toggle', [
+        { name: 'skill-toggle', kind: 'skill', content: 'Toggle skill content' },
+      ]);
+      const inst = await installItem(source, 'skill-toggle', 'skill');
+
+      // Ensure initial state has no held or false
+      let state = await readState('project', testTempDir, testHomeDir);
+      let found = state.installations.find((i) => i.name === 'skill-toggle');
+      assert.ok(found);
+      assert.strictEqual(Boolean(found.held), false);
+
+      // Set held = true
+      await setHeld(inst, true, { homeRoot: testHomeDir, projectRoot: testTempDir });
+      assert.strictEqual(inst.held, true);
+
+      // Reload state from disk and verify
+      state = await readState('project', testTempDir, testHomeDir);
+      found = state.installations.find((i) => i.name === 'skill-toggle');
+      assert.ok(found);
+      assert.strictEqual(found.held, true);
+
+      // Set held = false
+      await setHeld(inst, false, { homeRoot: testHomeDir, projectRoot: testTempDir });
+      assert.strictEqual(inst.held, false);
+
+      // Reload state from disk and verify
+      state = await readState('project', testTempDir, testHomeDir);
+      found = state.installations.find((i) => i.name === 'skill-toggle');
+      assert.ok(found);
+      assert.strictEqual(found.held, false);
+    });
+
+    it('missing field behaves as not held', async () => {
+      const source = await createLocalSource('src-missing-held', [
+        { name: 'skill-missing-held', kind: 'skill', content: 'Missing held v1' },
+      ]);
+      const inst = await installItem(source, 'skill-missing-held', 'skill');
+
+      // Ensure held field is undefined / omitted
+      delete inst.held;
+
+      // Update source
+      const skillFile = path.join(testTempDir, 'sources', 'src-missing-held', 'skill-missing-held', 'SKILL.md');
+      await fs.promises.writeFile(
+        skillFile,
+        '---\nname: skill-missing-held\ndescription: updated\n---\nMissing held v2',
+        'utf-8'
+      );
+
+      const plan = await planUpdateAll({
+        installations: [inst],
+        sources: [source],
+        homeRoot: testHomeDir,
+        projectRoot: testTempDir,
+      });
+
+      assert.strictEqual(plan.toUpdate.length, 1);
+      assert.strictEqual(plan.held.length, 0);
+      assert.strictEqual(plan.counts.held, 0);
     });
   });
 });

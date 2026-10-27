@@ -245,7 +245,7 @@ import {
 import { SourcesTreeDataProvider, ScopeGroupItem, SourceItem, promptScope } from './sourcesView';
 import { AvailableTreeDataProvider, AvailableFolderItem, AvailableArtifactItem, buildHierarchy, AvailableSourceGroupItem, DiagnosticTreeItem } from './availableView';
 import { ArtifactFileItem } from './artifactFileTree';
-import { InstalledTreeDataProvider, ScopeGroupItem as InstalledScopeGroupItem, InstalledInstallationItem, KindGroupItem } from './installedView';
+import { InstalledTreeDataProvider, ScopeGroupItem as InstalledScopeGroupItem, InstalledInstallationItem, KindGroupItem, getIdentityKey } from './installedView';
 import { getAssistantIconPath } from './assistantIcons';
 import { setupFileWatchers } from './watchers';
 import { DashboardPanel, computeItemOrigin, getScopeLabel, buildInstalledTree } from './dashboard';
@@ -3460,6 +3460,440 @@ describe('UI TreeDataProviders', () => {
 
       panel.dispose();
     });
+
+    it('Expand all and Collapse all buttons are present in rendered toolbar with tooltips (40.3)', () => {
+      const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any, {} as any, {} as any, {} as any, () => {});
+      assert.ok(panel);
+      const html = panel.getHtml([], [], [], []);
+      assert.ok(html.includes('id="expandAllBtn"'), 'Must render expandAllBtn');
+      assert.ok(html.includes('id="collapseAllBtn"'), 'Must render collapseAllBtn');
+      assert.ok(html.includes('title="Expand all"'), 'Must have "Expand all" tooltip');
+      assert.ok(html.includes('title="Collapse all"'), 'Must have "Collapse all" tooltip');
+      assert.ok(html.includes('onclick="expandAll()"'), 'expandAllBtn must have onclick="expandAll()"');
+      assert.ok(html.includes('onclick="collapseAll()"'), 'collapseAllBtn must have onclick="collapseAll()"');
+      panel.dispose();
+    });
+
+    it('expand-all opens every visible parent and not filtered-out ones, and collapse-all closes them (40.3)', () => {
+      const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any, {} as any, {} as any, {} as any, () => {});
+      assert.ok(panel);
+      const html = panel.getHtml([], [], [], []);
+      const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
+      assert.ok(scriptMatch);
+
+      // Create two groups: groupA (visible), groupB (filtered out / display: none)
+      const subrowsA = { style: { display: 'none' } };
+      const caretA = { style: { transform: 'rotate(0deg)' } };
+      const parentRowA = {
+        getAttribute: (k: string) => k === 'data-kind' ? 'skill' : k === 'data-name' ? 'skill-a' : null,
+        querySelector: (sel: string) => sel === '.folder-icon' ? caretA : null,
+      };
+      const groupA: any = {
+        style: { display: '' },
+        getAttribute: (k: string) => k === 'data-kind' ? 'skill' : k === 'data-name' ? 'skill-a' : null,
+        querySelector: (sel: string) => {
+          if (sel === '.folder-icon') return caretA;
+          if (sel.includes('subrows')) return subrowsA;
+          if (sel === '.parent-row') return parentRowA;
+          return null;
+        },
+      };
+
+      const subrowsB = { style: { display: 'none' } };
+      const caretB = { style: { transform: 'rotate(0deg)' } };
+      const parentRowB = {
+        getAttribute: (k: string) => k === 'data-kind' ? 'agent' : k === 'data-name' ? 'agent-b' : null,
+        querySelector: (sel: string) => sel === '.folder-icon' ? caretB : null,
+      };
+      const groupB: any = {
+        style: { display: 'none' },
+        getAttribute: (k: string) => k === 'data-kind' ? 'agent' : k === 'data-name' ? 'agent-b' : null,
+        querySelector: (sel: string) => {
+          if (sel === '.folder-icon') return caretB;
+          if (sel.includes('subrows')) return subrowsB;
+          if (sel === '.parent-row') return parentRowB;
+          return null;
+        },
+      };
+
+      const elements: Record<string, any> = {
+        managedDataJson: { textContent: '[]' },
+        observedDataJson: { textContent: '[]' },
+        sourceFilterJson: { textContent: 'null' },
+        unifiedTable: { innerHTML: '' },
+      };
+
+      let storedState: any = undefined;
+      const mockDocument = {
+        getElementById: (id: string) => elements[id] || { style: {}, textContent: '', innerHTML: '' },
+        querySelectorAll: (sel: string) => {
+          if (sel === '.matrix-group') return [groupA, groupB];
+          return [];
+        },
+        querySelector: () => null,
+      };
+
+      const sandbox: any = {
+        window: { addEventListener: () => {} },
+        document: mockDocument,
+        acquireVsCodeApi: () => ({
+          postMessage: () => {},
+          getState: () => storedState,
+          setState: (s: any) => { storedState = s; },
+        }),
+        console,
+        JSON,
+        Array,
+        Set,
+        Object,
+      };
+
+      vm.createContext(sandbox);
+      vm.runInContext(scriptMatch[1], sandbox);
+
+      // Call expandAll()
+      sandbox.expandAll();
+
+      // Group A (visible) must be opened and caret rotated
+      assert.strictEqual(subrowsA.style.display, '', 'Visible parent A must be opened by expandAll');
+      assert.strictEqual(caretA.style.transform, 'rotate(90deg)', 'Visible parent A caret must be rotated to 90deg');
+
+      // Group B (filtered-out) must NOT be opened
+      assert.strictEqual(subrowsB.style.display, 'none', 'Filtered-out parent B must remain collapsed');
+      assert.strictEqual(caretB.style.transform, 'rotate(0deg)', 'Filtered-out parent B caret must remain at 0deg');
+
+      // Webview state must contain groupA identity ('skill|skill-a') and NOT groupB ('agent|agent-b')
+      assert.ok(storedState && Array.isArray(storedState.expandedParents));
+      assert.ok(storedState.expandedParents.includes('skill|skill-a'), 'Stored state must contain visible parent A');
+      assert.strictEqual(storedState.expandedParents.includes('agent|agent-b'), false, 'Stored state must not contain filtered-out parent B');
+
+      // Call collapseAll()
+      sandbox.collapseAll();
+
+      // Group A must now be collapsed
+      assert.strictEqual(subrowsA.style.display, 'none', 'Parent A must be closed by collapseAll');
+      assert.strictEqual(caretA.style.transform, 'rotate(0deg)', 'Parent A caret must be restored to 0deg');
+
+      // Group A identity must be removed from webview state
+      assert.strictEqual(storedState.expandedParents.includes('skill|skill-a'), false, 'Stored state must not contain parent A after collapseAll');
+
+      panel.dispose();
+    });
+
+    it('persists expanded parent state across inventoryData refresh and leaves new objects collapsed (40.3)', () => {
+      const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any, {} as any, {} as any, {} as any, () => {});
+      assert.ok(panel);
+      const html = panel.getHtml([], [], [], []);
+      const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
+      assert.ok(scriptMatch);
+
+      let messageListener: ((event: any) => void) | undefined;
+      let storedState: any = undefined;
+
+      const subrows1 = { style: { display: 'none' } };
+      const caret1 = { style: { transform: 'rotate(0deg)' } };
+      const group1: any = {
+        style: { display: '' },
+        innerText: 'existing-skill',
+        getAttribute: (k: string) => k === 'data-kind' ? 'skill' : k === 'data-name' ? 'existing-skill' : null,
+        querySelector: (sel: string) => {
+          if (sel === '.folder-icon') return caret1;
+          if (sel.includes('subrows')) return subrows1;
+          return null;
+        },
+        querySelectorAll: () => [],
+      };
+
+      let currentGroups = [group1];
+
+      const elements: Record<string, any> = {
+        managedDataJson: { textContent: '[]' },
+        observedDataJson: { textContent: '[]' },
+        sourceFilterJson: { textContent: 'null' },
+        unifiedTable: { innerHTML: '' },
+        searchBox: { value: '' },
+        breadcrumb: { style: { display: '' } },
+        'breadcrumb-chips': { innerHTML: '' },
+        'stat-managed': { textContent: '' },
+        'stat-updates-available': { textContent: '' },
+        'stat-modified-locally': { textContent: '' },
+        'stat-unmanaged': { textContent: '' },
+        'stat-unmanaged-lbl': { textContent: '' },
+        updateAllBtn: { title: '', disabled: false },
+      };
+
+      const mockDocument = {
+        getElementById: (id: string) => elements[id] || { style: {}, textContent: '', innerHTML: '' },
+        querySelectorAll: (sel: string) => {
+          if (sel === '.matrix-group') return currentGroups;
+          return [];
+        },
+        querySelector: () => null,
+      };
+
+      const sandbox: any = {
+        window: {
+          addEventListener: (event: string, handler: any) => {
+            if (event === 'message') messageListener = handler;
+          },
+        },
+        document: mockDocument,
+        acquireVsCodeApi: () => ({
+          postMessage: () => {},
+          getState: () => storedState,
+          setState: (s: any) => { storedState = s; },
+        }),
+        console,
+        JSON,
+        Array,
+        Set,
+        Object,
+      };
+
+      vm.createContext(sandbox);
+      vm.runInContext(scriptMatch[1], sandbox);
+
+      // Expand group1 using expandAll
+      sandbox.expandAll();
+      assert.strictEqual(subrows1.style.display, '');
+      assert.ok(storedState.expandedParents.includes('skill|existing-skill'));
+
+      // Now simulate inventoryData arriving:
+      // A new group2 ('agent|new-agent') arrives alongside group1 ('skill|existing-skill')
+      const subrows1AfterRefresh = { style: { display: 'none' } };
+      const caret1AfterRefresh = { style: { transform: 'rotate(0deg)' } };
+      const group1AfterRefresh: any = {
+        style: { display: '' },
+        innerText: 'existing-skill',
+        getAttribute: (k: string) => k === 'data-kind' ? 'skill' : k === 'data-name' ? 'existing-skill' : null,
+        querySelector: (sel: string) => {
+          if (sel === '.folder-icon') return caret1AfterRefresh;
+          if (sel.includes('subrows')) return subrows1AfterRefresh;
+          return null;
+        },
+        querySelectorAll: () => [],
+      };
+
+      const subrows2New = { style: { display: 'none' } };
+      const caret2New = { style: { transform: 'rotate(0deg)' } };
+      const group2New: any = {
+        style: { display: '' },
+        innerText: 'new-agent',
+        getAttribute: (k: string) => k === 'data-kind' ? 'agent' : k === 'data-name' ? 'new-agent' : null,
+        querySelector: (sel: string) => {
+          if (sel === '.folder-icon') return caret2New;
+          if (sel.includes('subrows')) return subrows2New;
+          return null;
+        },
+        querySelectorAll: () => [],
+      };
+
+      currentGroups = [group1AfterRefresh, group2New];
+
+      assert.ok(messageListener);
+      messageListener({
+        data: {
+          command: 'inventoryData',
+          managedData: [],
+          observedData: [],
+          rowsHtml: '<div>simulated rows</div>',
+          totalInstalled: 2,
+          totalUnmanaged: 0,
+          identicalCount: 0,
+        },
+      });
+
+      // Group 1 (existing, previously expanded) must still be expanded
+      assert.strictEqual(subrows1AfterRefresh.style.display, '', 'Previously expanded parent must remain expanded across inventoryData refresh');
+      assert.strictEqual(caret1AfterRefresh.style.transform, 'rotate(90deg)');
+
+      // Group 2 (new parent) must start collapsed
+      assert.strictEqual(subrows2New.style.display, 'none', 'New parent must start collapsed');
+      assert.strictEqual(caret2New.style.transform, 'rotate(0deg)');
+
+      panel.dispose();
+    });
+
+    it('stored identity survives a reordering of parents because identity is kind|name not index (40.3)', () => {
+      const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any, {} as any, {} as any, {} as any, () => {});
+      assert.ok(panel);
+      const html = panel.getHtml([], [], [], []);
+      const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
+      assert.ok(scriptMatch);
+
+      // Pre-seed state with 'skill|target-skill'
+      let storedState: any = { expandedParents: ['skill|target-skill'] };
+
+      // In the new inventory, 'agent|alpha-agent' comes first (index 0)
+      // and 'skill|target-skill' comes second (index 1)
+      const subrowsAlpha = { style: { display: 'none' } };
+      const caretAlpha = { style: { transform: 'rotate(0deg)' } };
+      const groupAlpha: any = {
+        style: { display: '' },
+        innerText: 'alpha-agent',
+        getAttribute: (k: string) => k === 'data-kind' ? 'agent' : k === 'data-name' ? 'alpha-agent' : null,
+        querySelector: (sel: string) => {
+          if (sel === '.folder-icon') return caretAlpha;
+          if (sel.includes('subrows')) return subrowsAlpha;
+          return null;
+        },
+        querySelectorAll: () => [],
+      };
+
+      const subrowsTarget = { style: { display: 'none' } };
+      const caretTarget = { style: { transform: 'rotate(0deg)' } };
+      const groupTarget: any = {
+        style: { display: '' },
+        innerText: 'target-skill',
+        getAttribute: (k: string) => k === 'data-kind' ? 'skill' : k === 'data-name' ? 'target-skill' : null,
+        querySelector: (sel: string) => {
+          if (sel === '.folder-icon') return caretTarget;
+          if (sel.includes('subrows')) return subrowsTarget;
+          return null;
+        },
+        querySelectorAll: () => [],
+      };
+
+      const elements: Record<string, any> = {
+        managedDataJson: { textContent: '[]' },
+        observedDataJson: { textContent: '[]' },
+        sourceFilterJson: { textContent: 'null' },
+        unifiedTable: { innerHTML: '' },
+        searchBox: { value: '' },
+        breadcrumb: { style: { display: '' } },
+        'breadcrumb-chips': { innerHTML: '' },
+        'stat-managed': { textContent: '' },
+        'stat-updates-available': { textContent: '' },
+        'stat-modified-locally': { textContent: '' },
+        'stat-unmanaged': { textContent: '' },
+        'stat-unmanaged-lbl': { textContent: '' },
+        updateAllBtn: { title: '', disabled: false },
+      };
+
+      const mockDocument = {
+        getElementById: (id: string) => elements[id] || { style: {}, textContent: '', innerHTML: '' },
+        querySelectorAll: (sel: string) => {
+          if (sel === '.matrix-group') return [groupAlpha, groupTarget];
+          return [];
+        },
+        querySelector: () => null,
+      };
+
+      const sandbox: any = {
+        window: {
+          addEventListener: () => {},
+        },
+        document: mockDocument,
+        acquireVsCodeApi: () => ({
+          postMessage: () => {},
+          getState: () => storedState,
+          setState: (s: any) => { storedState = s; },
+        }),
+        console,
+        JSON,
+        Array,
+        Set,
+        Object,
+      };
+
+      vm.createContext(sandbox);
+      vm.runInContext(scriptMatch[1], sandbox);
+
+      // On initial script run with pre-seeded state:
+      // groupTarget (at index 1) matches 'skill|target-skill' -> expanded
+      // groupAlpha (at index 0) -> collapsed
+      assert.strictEqual(subrowsTarget.style.display, '', 'Target skill must be expanded based on kind|name identity despite order');
+      assert.strictEqual(caretTarget.style.transform, 'rotate(90deg)');
+      assert.strictEqual(subrowsAlpha.style.display, 'none', 'Alpha agent must remain collapsed');
+      assert.strictEqual(caretAlpha.style.transform, 'rotate(0deg)');
+
+      // Now test toggling single parent updates state
+      const rowAlpha = {
+        getAttribute: (k: string) => k === 'data-kind' ? 'agent' : k === 'data-name' ? 'alpha-agent' : null,
+        querySelector: (sel: string) => sel === '.folder-icon' ? caretAlpha : null,
+      };
+      elements['subrows-alpha'] = subrowsAlpha;
+      sandbox.toggleFolder('subrows-alpha', rowAlpha);
+
+      assert.strictEqual(subrowsAlpha.style.display, '', 'Toggling alpha agent must open it');
+      assert.ok(storedState.expandedParents.includes('agent|alpha-agent'), 'Stored state must now include agent|alpha-agent');
+      assert.ok(storedState.expandedParents.includes('skill|target-skill'), 'Stored state must still include skill|target-skill');
+
+      // Toggle it again to close it
+      sandbox.toggleFolder('subrows-alpha', rowAlpha);
+      assert.strictEqual(subrowsAlpha.style.display, 'none', 'Toggling alpha agent again must close it');
+      assert.strictEqual(storedState.expandedParents.includes('agent|alpha-agent'), false, 'Stored state must remove agent|alpha-agent');
+
+      panel.dispose();
+    });
+
+    it('handles state unavailability safely without throwing errors (40.3)', () => {
+      const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any, {} as any, {} as any, {} as any, () => {});
+      assert.ok(panel);
+      const html = panel.getHtml([], [], [], []);
+      const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>/);
+      assert.ok(scriptMatch);
+
+      const subrows = { style: { display: 'none' } };
+      const caret = { style: { transform: 'rotate(0deg)' } };
+      const group: any = {
+        style: { display: '' },
+        getAttribute: (k: string) => k === 'data-kind' ? 'skill' : k === 'data-name' ? 'test-skill' : null,
+        querySelector: (sel: string) => {
+          if (sel === '.folder-icon') return caret;
+          if (sel.includes('subrows')) return subrows;
+          return null;
+        },
+      };
+
+      const elements: Record<string, any> = {
+        managedDataJson: { textContent: '[]' },
+        observedDataJson: { textContent: '[]' },
+        sourceFilterJson: { textContent: 'null' },
+        unifiedTable: { innerHTML: '' },
+      };
+
+      const mockDocument = {
+        getElementById: (id: string) => elements[id] || { style: {}, textContent: '', innerHTML: '' },
+        querySelectorAll: (sel: string) => sel === '.matrix-group' ? [group] : [],
+        querySelector: () => null,
+      };
+
+      // acquireVsCodeApi with throwing getState / setState
+      const sandbox: any = {
+        window: { addEventListener: () => {} },
+        document: mockDocument,
+        acquireVsCodeApi: () => ({
+          postMessage: () => {},
+          getState: () => { throw new Error('State disabled in this context'); },
+          setState: () => { throw new Error('State disabled in this context'); },
+        }),
+        console,
+        JSON,
+        Array,
+        Set,
+        Object,
+      };
+
+      vm.createContext(sandbox);
+      // Must not throw during init
+      assert.doesNotThrow(() => {
+        vm.runInContext(scriptMatch[1], sandbox);
+      });
+
+      // Must not throw during expandAll / collapseAll
+      assert.doesNotThrow(() => {
+        sandbox.expandAll();
+      });
+      assert.strictEqual(subrows.style.display, '');
+
+      assert.doesNotThrow(() => {
+        sandbox.collapseAll();
+      });
+      assert.strictEqual(subrows.style.display, 'none');
+
+      panel.dispose();
+    });
   });
 
   describe('FormEditorPanel', () => {
@@ -4575,6 +5009,213 @@ describe('UI TreeDataProviders', () => {
       const wTrash = await listTrash('project', testTempDir, testHomeDir);
       assert.strictEqual(gTrash.length, 0);
       assert.strictEqual(wTrash.length, 0);
+    });
+  });
+
+  describe('Hold an item out of Update all (47.3)', () => {
+    it('package.json check: context-menu entries per state and commands registered', async () => {
+      const packageJson = JSON.parse(
+        fs.readFileSync(path.join(__dirname, '..', '..', 'package.json'), 'utf-8')
+      );
+      const commands = packageJson.contributes.commands;
+      const holdCmd = commands.find((c: any) => c.command === 'aiSwissknife.holdItem');
+      const releaseCmd = commands.find((c: any) => c.command === 'aiSwissknife.releaseItem');
+
+      assert.ok(holdCmd, 'aiSwissknife.holdItem must be declared in package.json');
+      assert.strictEqual(holdCmd.title, 'Hold');
+      assert.strictEqual(holdCmd.icon, '$(pin)');
+
+      assert.ok(releaseCmd, 'aiSwissknife.releaseItem must be declared in package.json');
+      assert.strictEqual(releaseCmd.title, 'Release');
+      assert.strictEqual(releaseCmd.icon, '$(pinned)');
+
+      const itemMenus = packageJson.contributes.menus['view/item/context'];
+      const holdMenu = itemMenus.find((m: any) => m.command === 'aiSwissknife.holdItem');
+      const releaseMenu = itemMenus.find((m: any) => m.command === 'aiSwissknife.releaseItem');
+
+      assert.ok(holdMenu, 'view/item/context menu must include aiSwissknife.holdItem');
+      assert.ok(releaseMenu, 'view/item/context menu must include aiSwissknife.releaseItem');
+
+      assert.ok(holdMenu.when.includes('aiSwissknife') && holdMenu.when.includes('installed'));
+      assert.ok(holdMenu.when.includes('installedInstallation'));
+      assert.ok(holdMenu.when.includes(':held'), 'holdItem when clause must inspect :held context value');
+
+      assert.ok(releaseMenu.when.includes('aiSwissknife') && releaseMenu.when.includes('installed'));
+      assert.ok(releaseMenu.when.includes('installedInstallation'));
+      assert.ok(releaseMenu.when.includes(':held'), 'releaseItem when clause must inspect :held context value');
+
+      // Extension registration check
+      const fakeContext = { subscriptions: [], extensionUri: { fsPath: '/test/ext' }, workspaceState: { get: () => undefined, update: async () => {} } } as any;
+      mockRegisteredCommands.clear();
+      extensionModule.activate(fakeContext);
+
+      assert.ok(mockRegisteredCommands.has('aiSwissknife.holdItem'));
+      assert.ok(mockRegisteredCommands.has('aiSwissknife.releaseItem'));
+    });
+
+    it('pin marker: sidebar description suffix held, tooltip, and Dashboard child row pin glyph', async () => {
+      const provider = new InstalledTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+      const instUnheld: ManagedInstallation = {
+        assistant: 'claude-code',
+        scope: 'project',
+        projectPath: testTempDir,
+        kind: 'skill',
+        name: 'unheld-skill',
+        path: path.join(testTempDir, 'unheld-skill'),
+        installedAt: new Date().toISOString(),
+      };
+      const instHeld: ManagedInstallation = {
+        assistant: 'claude-code',
+        scope: 'project',
+        projectPath: testTempDir,
+        kind: 'skill',
+        name: 'held-skill',
+        path: path.join(testTempDir, 'held-skill'),
+        installedAt: new Date().toISOString(),
+        held: true,
+      };
+
+      // Sidebar tests
+      const treeItemUnheld = provider.getTreeItem(new InstalledInstallationItem(instUnheld));
+      assert.ok(!treeItemUnheld.description?.toString().includes('held'), 'unheld item description must not have held suffix');
+      assert.ok(!treeItemUnheld.contextValue?.includes(':held'), 'unheld contextValue must not have :held');
+      assert.ok(!treeItemUnheld.tooltip?.toString().includes('Held: skipped by Update all'));
+
+      const treeItemHeld = provider.getTreeItem(new InstalledInstallationItem(instHeld));
+      assert.ok(treeItemHeld.description?.toString().includes('held'), 'held item description must contain held suffix');
+      assert.ok(treeItemHeld.description?.toString().endsWith('held'), 'held item description must end with held suffix');
+      assert.ok(treeItemHeld.contextValue?.includes(':held'), 'held contextValue must have :held');
+      assert.ok(treeItemHeld.tooltip?.toString().includes('Held: skipped by Update all'), 'held item tooltip must contain Held: skipped by Update all');
+
+      // Dashboard child row tests
+      const tree = buildInstalledTree([instUnheld, instHeld], []);
+      const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any, {} as any, {} as any, {} as any, () => {});
+      const rowsHtml = panel.renderInstalledTree(tree, undefined, new Set([getIdentityKey(instHeld)]));
+
+      assert.ok(rowsHtml.includes('📌'), 'Dashboard child row must render pin glyph for held items');
+      assert.ok(rowsHtml.includes('title="Held: skipped by Update all"'), 'Dashboard child row must show tooltip Held: skipped by Update all');
+      assert.ok(rowsHtml.includes('data-held="true"'), 'Dashboard child row must mark data-held');
+      panel.dispose();
+    });
+
+    it('summary text includes the held count in modal and final message', async () => {
+      const provider = new InstalledTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+      const instUp: ManagedInstallation = {
+        assistant: 'claude-code',
+        scope: 'project',
+        projectPath: testTempDir,
+        kind: 'skill',
+        name: 'item-update',
+        sourceId: 'src1',
+        path: path.join(testTempDir, 'item-update'),
+        installedAt: new Date().toISOString(),
+      };
+      const instHeld: ManagedInstallation = {
+        assistant: 'claude-code',
+        scope: 'project',
+        projectPath: testTempDir,
+        kind: 'skill',
+        name: 'item-held',
+        sourceId: 'src1',
+        path: path.join(testTempDir, 'item-held'),
+        installedAt: new Date().toISOString(),
+        held: true,
+      };
+
+      await writeState('project', { schemaVersion: SCHEMA_VERSION, installations: [instUp, instHeld] }, testTempDir);
+      await writeManifest('project', { schemaVersion: SCHEMA_VERSION, sources: [{ id: 'src1', name: 'Src 1', type: 'local-folder', localPath: testTempDir, scope: 'project' }], desiredInstallations: [] }, testTempDir);
+
+      const origCheckDriftForAll = driftModule.checkDriftForAll;
+      (driftModule as any).checkDriftForAll = async () => [];
+
+      const origPlanUpdateAll = updateModule.planUpdateAll;
+      (updateModule as any).planUpdateAll = async () => ({
+        toUpdate: [{ installation: instUp, source: { id: 'src1' }, prepared: {} }],
+        skippedModified: [],
+        cannotUpdate: [],
+        upToDate: [],
+        held: [{ installation: instHeld, reason: 'Held by user' }],
+        buckets: { toUpdate: [], skippedModified: [], cannotUpdate: [], upToDate: [], held: [] },
+        counts: { toUpdate: 1, skippedModified: 0, cannotUpdate: 0, upToDate: 0, held: 1, total: 2 },
+      });
+
+      const origApplyUpdateAll = updateModule.applyUpdateAll;
+      (updateModule as any).applyUpdateAll = async () => [
+        { installation: instUp, status: 'applied' }
+      ];
+
+      mockShowInformationMessageCalls = [];
+      mockCustomShowInformationMessage = async (msg: string) => {
+        if (msg.includes('update(s) will be applied')) return 'Update 1';
+        return undefined;
+      };
+
+      try {
+        await provider.doUpdateAll();
+        assert.ok(mockShowInformationMessageCalls.length >= 2);
+
+        // Check modal summary
+        const modalMsg = mockShowInformationMessageCalls[0].msg;
+        assert.ok(modalMsg.includes('1 item(s) are held and will be skipped'), 'modal summary must list held items');
+
+        // Check final summary
+        const finalMsg = mockShowInformationMessageCalls[1].msg;
+        assert.ok(finalMsg.includes('1 held'), 'final summary text must include the held count');
+        assert.ok(finalMsg.includes('Updated 1, skipped 0, 1 held, failed 0'));
+      } finally {
+        (driftModule as any).checkDriftForAll = origCheckDriftForAll;
+        (updateModule as any).planUpdateAll = origPlanUpdateAll;
+        (updateModule as any).applyUpdateAll = origApplyUpdateAll;
+        mockCustomShowInformationMessage = undefined;
+      }
+    });
+
+    it('explicit single update still works and shows a one-line note "This item is held"', async () => {
+      const provider = new InstalledTreeDataProvider({ fsPath: '/test/ext' } as any, testHomeDir);
+      const inst: ManagedInstallation = {
+        assistant: 'claude-code',
+        scope: 'project',
+        projectPath: testTempDir,
+        kind: 'skill',
+        name: 'held-single-item',
+        sourceId: 'src1',
+        path: path.join(testTempDir, 'held-single-item'),
+        installedAt: new Date().toISOString(),
+        contentHash: 'hash',
+        held: true,
+      };
+
+      await writeState('project', { schemaVersion: SCHEMA_VERSION, installations: [inst] }, testTempDir);
+      await writeManifest('project', { schemaVersion: SCHEMA_VERSION, sources: [{ id: 'src1', name: 'Src 1', type: 'local-folder', localPath: testTempDir, scope: 'project' }], desiredInstallations: [] }, testTempDir);
+
+      const origPlanUpdate = updateModule.planUpdate;
+      (updateModule as any).planUpdate = async () => ({ supported: true, plan: { reason: '' } });
+
+      let applyCalled = false;
+      const applyModule = await import('../engine/apply');
+      const origApply = applyModule.applyInstall;
+      (applyModule as any).applyInstall = async () => {
+        applyCalled = true;
+        return { status: 'applied', installation: inst };
+      };
+
+      const origAnalyze = driftModule.analyzeLocalDrift;
+      (driftModule as any).analyzeLocalDrift = async () => ({ status: 'update-available' });
+
+      mockShowInformationMessageCalls = [];
+      mockShowInformationMessageResult = 'Update';
+
+      try {
+        await provider.doUpdateInstallation(inst);
+        assert.ok(mockShowInformationMessageCalls.length >= 1);
+        const confirmMsg = mockShowInformationMessageCalls[0].msg;
+        assert.ok(confirmMsg.includes('This item is held.'), 'must show one-line note "This item is held."');
+        assert.strictEqual(applyCalled, true, 'explicit single update still works when confirmed');
+      } finally {
+        (updateModule as any).planUpdate = origPlanUpdate;
+        (applyModule as any).applyInstall = origApply;
+        (driftModule as any).analyzeLocalDrift = origAnalyze;
+      }
     });
   });
 });

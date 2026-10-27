@@ -51,4 +51,5 @@ export * from './claudeCli';
 export * from './fileTree';
 export * from './uninstall';
 export * from './sourceManifest';
+export * from './missingPlaces';
 

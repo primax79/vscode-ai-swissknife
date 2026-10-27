@@ -147,6 +147,7 @@ export class DashboardPanel {
   private _htmlInitialized: boolean = false;
 
   private _sourceFilter?: { id: string; scope: Scope };
+  private _heldKeys: Set<string> = new Set<string>();
 
   private escapeHtml(unsafe: string): string {
     return (unsafe || '')
@@ -414,6 +415,42 @@ export class DashboardPanel {
             }
             break;
           }
+          case 'toggleHoldItem': {
+            if (message.key) {
+              const inst = await this.resolveManagedInstallationByKey(message.key);
+              if (inst) {
+                await this._provider.toggleHeldInstallation(inst);
+                this._refreshCallback();
+                await this.update();
+                await this.handleRequestDetail(message.key);
+              }
+            }
+            break;
+          }
+          case 'holdItem': {
+            if (message.key) {
+              const inst = await this.resolveManagedInstallationByKey(message.key);
+              if (inst) {
+                await this._provider.setInstallationHeld(inst, true);
+                this._refreshCallback();
+                await this.update();
+                await this.handleRequestDetail(message.key);
+              }
+            }
+            break;
+          }
+          case 'releaseItem': {
+            if (message.key) {
+              const inst = await this.resolveManagedInstallationByKey(message.key);
+              if (inst) {
+                await this._provider.setInstallationHeld(inst, false);
+                this._refreshCallback();
+                await this.update();
+                await this.handleRequestDetail(message.key);
+              }
+            }
+            break;
+          }
           case 'updateAll': {
             await this._provider.doUpdateAll(message.filter);
             this._refreshCallback();
@@ -652,6 +689,7 @@ export class DashboardPanel {
         status: report ? report.status : 'up-to-date',
         hasLocalPatch: report?.hasLocalPatch,
         details: report?.details,
+        held: Boolean(inst.held),
         assistantIconUri
       });
       return;
@@ -766,8 +804,9 @@ export class DashboardPanel {
         </button>`;
       }).join('\n');
 
+      this._heldKeys = new Set(allManaged.filter((m) => m.held).map((m) => getIdentityKey(m)));
       const tree = buildInstalledTree(allManaged, allObserved);
-      const rowsHtml = this.renderInstalledTree(tree);
+      const rowsHtml = this.renderInstalledTree(tree, undefined, this._heldKeys);
 
       this._panel.webview.postMessage({
         command: 'inventoryData',
@@ -1297,11 +1336,22 @@ export class DashboardPanel {
 
   public renderInstalledTree(
     tree: InstalledObject[],
-    driftByKey?: Map<string, PlaceState | string> | Record<string, PlaceState | string>
+    driftByKey?: Map<string, PlaceState | string> | Record<string, PlaceState | string>,
+    heldByKey?: Set<string> | Map<string, boolean> | Record<string, boolean>
   ): string {
     if (!tree || tree.length === 0) {
       return '<tr><td colspan="4" style="text-align:center; opacity:0.6;">No items found.</td></tr>';
     }
+
+    const checkHeld = (key: string): boolean => {
+      if (heldByKey) {
+        if (heldByKey instanceof Set) return heldByKey.has(key);
+        if (heldByKey instanceof Map) return Boolean(heldByKey.get(key));
+        return Boolean((heldByKey as Record<string, boolean>)[key]);
+      }
+      if (this._heldKeys) return this._heldKeys.has(key);
+      return false;
+    };
 
     const lookupState = (key: string): PlaceState | undefined => {
       if (!driftByKey) return undefined;
@@ -1348,6 +1398,7 @@ export class DashboardPanel {
       const worstBadgeText = this.getWorstStatusLabel(worstState);
 
       const childRowsHtml = placesWithState.map((place) => {
+        const childIsHeld = checkHeld(place.key);
         const asstIconSrc = this.getAssistantIconSrc(place.assistant);
         const scopeSvg = getScopeIconSvg(place.scope);
         const scopeLabel = getScopeLabel(place.scope);
@@ -1365,6 +1416,7 @@ export class DashboardPanel {
             <button class="btn btn-sm btn-secondary preview-btn" title="Preview" style="${isMissing ? 'display: none;' : 'display: inline-block;'}" onclick="event.stopPropagation(); vscode.postMessage({ command: 'previewInstalledArtifact', key: ${this.jsStringLiteral(place.key)} })">👁</button>
             <button class="btn btn-sm btn-secondary diff-btn" title="Diff" style="${hasDiff ? 'display: inline-block;' : 'display: none;'}" onclick="event.stopPropagation(); vscode.postMessage({ command: 'diffInstalledArtifact', key: ${this.jsStringLiteral(place.key)} })">⇄</button>
             <button class="btn btn-sm btn-primary update-btn" title="Update to latest" style="${hasUpdate ? 'display: inline-block;' : 'display: none;'}" onclick="event.stopPropagation(); vscode.postMessage({ command: 'updateItem', key: ${this.jsStringLiteral(place.key)} })">⟳</button>
+            <button class="btn btn-sm btn-secondary hold-btn" title="${childIsHeld ? 'Release' : 'Hold'}" onclick="event.stopPropagation(); vscode.postMessage({ command: 'toggleHoldItem', key: ${this.jsStringLiteral(place.key)} })">📌</button>
             <button class="btn btn-sm btn-secondary btn-destructive remove-btn" title="Remove from registry" style="${isMissing ? 'display: inline-block;' : 'display: none;'}" onclick="event.stopPropagation(); vscode.postMessage({ command: 'uninstallItem', key: ${this.jsStringLiteral(place.key)} })">🗑</button>
           `;
         } else {
@@ -1380,7 +1432,7 @@ export class DashboardPanel {
         const sourceIdAttr = effectiveSourceId ? ` data-source-id="${this.escapeHtml(effectiveSourceId)}"` : '';
 
         return `
-          <tr class="item-row sub-row"
+          <tr class="item-row sub-row"${childIsHeld ? ' data-held="true"' : ''}
             data-key="${this.escapeHtml(place.key)}"
             data-name="${this.escapeHtml(obj.name)}"
             data-kind="${this.escapeHtml(obj.kind)}"
@@ -1397,7 +1449,7 @@ export class DashboardPanel {
               <span title="${this.escapeHtml(scopeLabel)}">${scopeSvg}</span>
             </td>
             <td data-drift-key="${this.escapeHtml(place.key)}" data-status="${this.escapeHtml(place.state)}" style="width: 35%;">
-              <span class="badge ${childBadgeClass}">${this.escapeHtml(childBadgeText)}</span>
+              <span class="badge ${childBadgeClass}">${this.escapeHtml(childBadgeText)}</span>${childIsHeld ? ' <span class="pin-glyph" title="Held: skipped by Update all">📌</span>' : ''}
             </td>
             <td style="text-align: right; width: 20%;">
               ${actionsHtml}
@@ -1412,6 +1464,7 @@ export class DashboardPanel {
         <tbody class="matrix-group item-row-group"
           data-kind="${this.escapeHtml(obj.kind)}"
           data-name="${this.escapeHtml(obj.name.toLowerCase())}"
+          data-identity="${this.escapeHtml(obj.kind + '|' + obj.name)}"
           data-worst-status="${this.escapeHtml(worstState)}"
           data-assistants="${this.escapeHtml(assistantsList)}"
           data-scopes="${this.escapeHtml(scopesList)}"
@@ -1421,6 +1474,8 @@ export class DashboardPanel {
             onclick="toggleFolder('${subrowsId}', this)"
             data-kind="${this.escapeHtml(obj.kind)}"
             data-name="${this.escapeHtml(obj.name.toLowerCase())}"
+            data-identity="${this.escapeHtml(obj.kind + '|' + obj.name)}"
+            data-subrows-id="${subrowsId}"
             data-worst-status="${this.escapeHtml(worstState)}"
             data-assistants="${this.escapeHtml(assistantsList)}"
             data-scopes="${this.escapeHtml(scopesList)}"
@@ -1440,7 +1495,7 @@ export class DashboardPanel {
               <span class="badge ${worstBadgeClass} worst-badge" title="${placesWithState.length} place${placesWithState.length === 1 ? '' : 's'}">${this.escapeHtml(worstBadgeText)}</span>
             </td>
           </tr>
-          <tr id="${subrowsId}" style="display: none;">
+          <tr id="${subrowsId}" class="subrows-row" style="display: none;">
             <td colspan="4" style="padding: 0; border: none;">
               <table style="margin: 0; background: rgba(0,0,0,0.1); width: 100%;">
                 <tbody>
@@ -1559,6 +1614,8 @@ export class DashboardPanel {
       </div>
       <button class="btn btn-sm btn-secondary" id="toggleFiltersBtn" title="Collapse / Expand Filters" onclick="toggleFiltersBar()">⚙ Filters ▾</button>
       <div class="filter-actions">
+        <button class="btn btn-sm btn-secondary expand-all-btn" id="expandAllBtn" title="Expand all" onclick="expandAll()"><svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="vertical-align: middle;" aria-hidden="true"><path d="M7.976 5.928l4.357-4.357.62.618L8.284 6.857h-.618L2.998 2.19l.618-.62 4.36 4.358zM7.976 12.928l4.357-4.357.62.618L8.284 13.857h-.618L2.998 9.19l.618-.62 4.36 4.358z"/></svg></button>
+        <button class="btn btn-sm btn-secondary collapse-all-btn" id="collapseAllBtn" title="Collapse all" onclick="collapseAll()"><svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="vertical-align: middle;" aria-hidden="true"><path d="M7.976 10.072l4.357 4.357.62-.618L8.284 9.143h-.618L2.998 13.81l.618.62 4.36-4.358zM7.976 3.072l4.357 4.357.62-.618L8.284 2.143h-.618L2.998 6.81l.618.62 4.36-4.358z"/></svg></button>
         <button class="btn btn-sm btn-primary update-all-btn" id="updateAllBtn" title="Update all (${updatesAvailable})" ${updatesAvailable === 0 ? 'disabled' : ''} onclick="triggerUpdateAll()">⟳</button>
       </div>
     </div>
@@ -1661,8 +1718,9 @@ export class DashboardPanel {
       }
     }
 
+    this._heldKeys = new Set(managed.filter((m) => m.held).map((m) => getIdentityKey(m)));
     const tree = buildInstalledTree(managed, observed, { statusByKey: driftByKey });
-    const rowsHtml = this.renderInstalledTree(tree, driftByKey);
+    const rowsHtml = this.renderInstalledTree(tree, driftByKey, this._heldKeys);
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -1776,6 +1834,11 @@ export class DashboardPanel {
       gap: 8px;
       align-items: center;
       margin-bottom: 16px;
+    }
+    .filter-actions {
+      display: inline-flex;
+      gap: 4px;
+      align-items: center;
     }
     .filter-group {
       display: inline-flex;
@@ -2181,18 +2244,179 @@ export class DashboardPanel {
       }
     }
 
-    function toggleFolder(folderId, rowEl) {
-      const folderDiv = document.getElementById(folderId);
-      const caret = rowEl ? rowEl.querySelector('.folder-icon') : null;
-      if (!folderDiv) return;
-      if (folderDiv.style.display === 'none') {
-        folderDiv.style.display = '';
-        if (caret) caret.style.transform = 'rotate(90deg)';
-      } else {
-        folderDiv.style.display = 'none';
-        if (caret) caret.style.transform = 'rotate(0deg)';
+    function loadExpandedState() {
+      try {
+        if (typeof vscode !== 'undefined' && vscode && typeof vscode.getState === 'function') {
+          const state = vscode.getState();
+          if (state && Array.isArray(state.expandedParents)) {
+            return new Set(state.expandedParents);
+          }
+        }
+      } catch (e) {
+        // state may be unavailable
+      }
+      return new Set();
+    }
+
+    function saveExpandedState(set) {
+      try {
+        if (typeof vscode !== 'undefined' && vscode && typeof vscode.setState === 'function') {
+          let state = {};
+          try {
+            if (typeof vscode.getState === 'function') {
+              state = vscode.getState() || {};
+            }
+          } catch (e) {
+            state = {};
+          }
+          if (typeof state !== 'object' || state === null) {
+            state = {};
+          }
+          state = Object.assign({}, state, { expandedParents: Array.from(set) });
+          vscode.setState(state);
+        }
+      } catch (e) {
+        // state may be unavailable
       }
     }
+
+    let expandedParents = loadExpandedState();
+
+    function getParentIdentity(el) {
+      if (!el) return '';
+      let target = el;
+      if (typeof el.closest === 'function') {
+        target = el.closest('.matrix-group') || el.closest('.parent-row') || el;
+      }
+      if (target.getAttribute && target.getAttribute('data-identity')) {
+        return target.getAttribute('data-identity');
+      }
+      const kind = (target.getAttribute && target.getAttribute('data-kind')) || '';
+      const name = (target.getAttribute && target.getAttribute('data-name')) || '';
+      if (!kind && !name) return '';
+      return kind + '|' + name;
+    }
+
+    function getSubrowsEl(group) {
+      if (!group) return null;
+      if (group.subrowsEl) return group.subrowsEl;
+      if (typeof group.querySelector === 'function') {
+        const byClass = group.querySelector('.subrows-row');
+        if (byClass) return byClass;
+        const byAttr = group.querySelector('tr[id^="subrows-"]') || group.querySelector('[id^="subrows-"]');
+        if (byAttr) return byAttr;
+      }
+      const parentRow = group.querySelector ? (group.querySelector('.parent-row') || group.querySelector('tr')) : null;
+      const subrowsId = parentRow && parentRow.getAttribute ? parentRow.getAttribute('data-subrows-id') : null;
+      if (subrowsId && typeof document.getElementById === 'function') {
+        const el = document.getElementById(subrowsId);
+        if (el) return el;
+      }
+      if (group.children && group.children.length > 1) {
+        return group.children[1];
+      }
+      return null;
+    }
+
+    function getCaretEl(group) {
+      if (!group) return null;
+      if (group.caretEl) return group.caretEl;
+      if (typeof group.querySelector === 'function') {
+        const caret = group.querySelector('.folder-icon');
+        if (caret) return caret;
+      }
+      const parentRow = group.querySelector ? group.querySelector('.parent-row') : null;
+      if (parentRow && typeof parentRow.querySelector === 'function') {
+        return parentRow.querySelector('.folder-icon');
+      }
+      return null;
+    }
+
+    function applyExpandedState() {
+      const groups = document.querySelectorAll('.matrix-group');
+      if (!groups || typeof groups.forEach !== 'function') return;
+      groups.forEach(group => {
+        const identity = getParentIdentity(group);
+        const subrows = getSubrowsEl(group);
+        const caret = getCaretEl(group);
+        if (!subrows) return;
+        if (identity && expandedParents.has(identity)) {
+          subrows.style.display = '';
+          if (caret && caret.style) caret.style.transform = 'rotate(90deg)';
+        } else {
+          subrows.style.display = 'none';
+          if (caret && caret.style) caret.style.transform = 'rotate(0deg)';
+        }
+      });
+    }
+
+    function expandAll() {
+      const groups = document.querySelectorAll('.matrix-group');
+      if (!groups || typeof groups.forEach !== 'function') return;
+      groups.forEach(group => {
+        if (group.style && group.style.display === 'none') {
+          return;
+        }
+        const subrows = getSubrowsEl(group);
+        const caret = getCaretEl(group);
+        if (subrows) {
+          subrows.style.display = '';
+          if (caret && caret.style) caret.style.transform = 'rotate(90deg)';
+          const identity = getParentIdentity(group);
+          if (identity) {
+            expandedParents.add(identity);
+          }
+        }
+      });
+      saveExpandedState(expandedParents);
+    }
+
+    function collapseAll() {
+      const groups = document.querySelectorAll('.matrix-group');
+      if (!groups || typeof groups.forEach !== 'function') return;
+      groups.forEach(group => {
+        if (group.style && group.style.display === 'none') {
+          return;
+        }
+        const subrows = getSubrowsEl(group);
+        const caret = getCaretEl(group);
+        if (subrows) {
+          subrows.style.display = 'none';
+          if (caret && caret.style) caret.style.transform = 'rotate(0deg)';
+          const identity = getParentIdentity(group);
+          if (identity) {
+            expandedParents.delete(identity);
+          }
+        }
+      });
+      saveExpandedState(expandedParents);
+    }
+
+    function toggleFolder(folderId, rowEl) {
+      const folderDiv = document.getElementById(folderId);
+      const caret = rowEl ? (rowEl.querySelector ? rowEl.querySelector('.folder-icon') : null) : (folderDiv && folderDiv.parentElement && folderDiv.parentElement.querySelector ? folderDiv.parentElement.querySelector('.folder-icon') : null);
+      if (!folderDiv) return;
+      const isCollapsed = folderDiv.style.display === 'none';
+      if (isCollapsed) {
+        folderDiv.style.display = '';
+        if (caret && caret.style) caret.style.transform = 'rotate(90deg)';
+      } else {
+        folderDiv.style.display = 'none';
+        if (caret && caret.style) caret.style.transform = 'rotate(0deg)';
+      }
+      const parentEl = rowEl || (folderDiv.closest ? folderDiv.closest('.matrix-group') : (folderDiv.parentElement && folderDiv.parentElement.querySelector ? folderDiv.parentElement.querySelector('.parent-row') : null));
+      const identity = getParentIdentity(parentEl);
+      if (identity) {
+        if (isCollapsed) {
+          expandedParents.add(identity);
+        } else {
+          expandedParents.delete(identity);
+        }
+        saveExpandedState(expandedParents);
+      }
+    }
+
+    applyExpandedState();
 
     let managedData = JSON.parse(document.getElementById('managedDataJson').textContent);
     let observedData = JSON.parse(document.getElementById('observedDataJson').textContent);
@@ -2339,6 +2563,12 @@ export class DashboardPanel {
         vscode.postMessage({ command: 'diffInstalledArtifact', key: selectedItemKey });
       } else if (detailItemData) {
         vscode.postMessage({ command: 'diffItem', item: detailItemData });
+      }
+    }
+
+    function detailToggleHoldItem() {
+      if (selectedItemKey) {
+        vscode.postMessage({ command: 'toggleHoldItem', key: selectedItemKey });
       }
     }
 
@@ -2775,6 +3005,7 @@ export class DashboardPanel {
             }
           }
         }
+        applyExpandedState();
         const manStat = document.getElementById('stat-managed');
         if (manStat) manStat.textContent = msg.totalInstalled;
         const unmanStat = document.getElementById('stat-unmanaged');
@@ -3086,6 +3317,11 @@ export class DashboardPanel {
             secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Copy to..." onclick="detailCopyItem()"><span class="btn-icon">⧉</span> Copy</button>');
             if (msg.item && ['skill', 'agent', 'command', 'mcp-server'].includes(msg.item.kind)) {
               secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Move to..." onclick="detailMoveItem()"><span class="btn-icon">⇥</span> Move</button>');
+            }
+            if (msg.held) {
+              secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Release" onclick="detailToggleHoldItem()"><span class="btn-icon">📌</span> Release</button>');
+            } else {
+              secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Hold" onclick="detailToggleHoldItem()"><span class="btn-icon">📌</span> Hold</button>');
             }
             secondaryActions.push('<button class="btn btn-sm btn-secondary" title="Edit" onclick="detailEditItem()"><span class="btn-icon">✎</span> Edit</button>');
             destructiveActions.push('<button class="btn btn-sm btn-secondary btn-destructive" title="Uninstall" onclick="detailUninstallItem()"><span class="btn-icon">🗑</span> Uninstall</button>');
