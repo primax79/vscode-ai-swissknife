@@ -1,19 +1,19 @@
-# 34 — Dashboard: Recommendations + Installed action parity — Summary
+# 34 — Dashboard: sezione Recommendations + parità delle azioni di Installed — Riepilogo
 
-> **Closed on:** 2026-10-27 (registry tidy; verifier ai-coding-tools-c1)  
-> **Initiative:** 34 — Dashboard: Recommendations + Installed action parity  
-> **Status:** ✅ Done and merged into main
+> **Closed on:** 2026-10-27 (riordino del registro; verificatore ai-coding-tools-c1)  
+> **Initiative:** 34 — Dashboard: sezione Recommendations + parità delle azioni di Installed  
+> **Status:** ✅ Completata e integrata in main
 
-Summary written at closure from the plan and the git history; the per-task specs in this folder hold the detail.
+Riepilogo scritto alla chiusura a partire dal piano e dalla cronologia git; le specifiche per singolo task in questa cartella contengono i dettagli.
 
-## What was built
+## Cosa è stato realizzato
 
-- **34.1 Recommendations section** — merged 0ab3fc1 2026-09-08. Surface `resolveRecommendations` `pending` and `broken` buckets in the Dashboard Recommendations tab with install-one, install-all, and unrecommend actions.
-- **34.2 Uninstall + Update-to-latest in detail panel** — merged 7e94ce1 2026-09-08. Extend the Installed detail panel with Uninstall and Update-to-latest actions using server-side re-resolution by stable composite identity key.
-- **34.3 Cross-refresh wiring** — merged d546732 2026-09-09. Audit and ensure every Dashboard-triggered state mutation refreshes the status bar and sidebar tree providers.
+- **34.1 Sezione Recommendations** — integrato 0ab3fc1 2026-09-08. Esporre per `resolveRecommendations` i bucket `pending` e `broken` nel tab Recommendations della Dashboard con le azioni installa singolo, installa tutti e rimuovi suggerimento.
+- **34.2 Uninstall + Update-to-latest nel pannello di dettaglio** — integrato 7e94ce1 2026-09-08. Estendere il pannello di dettaglio di Installed con le azioni Uninstall e Update-to-latest usando la nuova risoluzione lato server tramite chiave di identità composita stabile.
+- **34.3 Cablaggio del refresh incrociato** — integrato d546732 2026-09-09. Verificare e garantire che ogni mutazione di stato attivata dalla Dashboard aggiorni la barra di stato e i tree provider della sidebar.
 
 ## Verification
 
-- Every task's work is merged into `main` (evidence: the commits named above, from `git log --grep '<id>'`).
-- `npm test` on `main` at 5e85109 (2026-10-27): 577 tests, 576 pass, 0 fail, 1 opt-in skip (`AISK_REAL_KILO=1`).
-- `ai-orch tasks validate --tasks-dir tasks`: 0 errors.
+- Il lavoro di ogni task è integrato in `main` (evidenza: i commit indicati sopra, da `git log --grep '<id>'`).
+- `npm test` su `main` a 5e85109 (2026-10-27): 577 test, 576 superati, 0 falliti, 1 saltato opzionale (`AISK_REAL_KILO=1`).
+- `ai-orch tasks validate --tasks-dir tasks`: 0 errori.

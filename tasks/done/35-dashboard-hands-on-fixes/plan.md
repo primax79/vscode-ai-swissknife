@@ -1,87 +1,87 @@
-# 35 — Dashboard: hands-on testing fixes — Implementation plan
+# 35 — Dashboard: correzioni dai test pratici — Piano di implementazione
 
-> Driven directly by user feedback after hands-on `.vsix` testing of Phase 9
-> (initiatives 31-34), same pattern as Phase 7 revisiting Phase 6. No
-> separate spec file — narrow, well-grounded UI fixes, documented here
-> directly per `tasks/AGENTS.md`'s "packaged inline... for small/medium
-> initiatives" option.
+> Guidata direttamente dal feedback dell'utente dopo i test pratici sul `.vsix` della Fase 9
+> (iniziative 31-34), secondo lo stesso pattern con cui la Fase 7 ha rivisitato la Fase 6. Nessun
+> file di specifica separato — correzioni UI mirate e ben ancorate al codice, documentate qui
+> direttamente secondo l'opzione "pacchettizzate inline... per iniziative piccole/medie"
+> di `tasks/AGENTS.md`.
 
-**Depends on:** 31-34 (all merged).
+**Depends on:** 31-34 (tutte integrate).
 
-## Feedback (verbatim, translated)
+## Feedback (testuale, tradotto)
 
-1. Opening the Dashboard shows a black screen until the first data fetch
-   completes — needs an instant empty-table-with-loader shell instead.
-2. The Overview tab is empty (`getOverviewHtml()` is a literal placeholder,
+1. L'apertura della Dashboard mostra una schermata nera finché non termina il primo recupero
+   dei dati — serve invece un guscio istantaneo con tabella vuota e indicatore di caricamento.
+2. Il tab Overview è vuoto (`getOverviewHtml()` è un segnaposto letterale,
    `src/ui/dashboard.ts:636-640`).
-3. The Installed tab's flat table is visually poor.
-4. Missing: a per-tool comparison view (skills/agents/etc.) showing, for
-   each artifact, which assistants/frameworks have it installed — to
-   compare environments.
-5. Missing diff and preview quick-actions (currently diff only reachable
-   through the detail panel's conditional `#diffSection`,
-   `src/ui/dashboard.ts:939-940`; no preview at all for already-installed
-   items).
-6. Missing an Update quick-action in the table row itself (only `Edit`
-   exists per row, `:530,1011`; Update/Uninstall are detail-panel-only
-   since Initiative 34.2).
-7. No column sorting (kind/name/scope/status) in the Installed view.
-8. (Screenshot) The Sources & Catalog artifact rows are ragged/misaligned
-   — free-wrapping flex layout, not a real table.
-9. Use icons instead of text labels on Dashboard buttons throughout,
-   unless text is genuinely indispensable.
+3. La tabella piatta del tab Installed è visivamente scadente.
+4. Manca una vista di confronto per strumento (skill/agent/ecc.) che mostri, per
+   ciascun artefatto, quali assistenti/framework lo hanno installato — per
+   confrontare gli ambienti.
+5. Mancano le azioni rapide di diff e anteprima (attualmente il diff è raggiungibile solo
+   tramite la sezione condizionale `#diffSection` del pannello di dettaglio,
+   `src/ui/dashboard.ts:939-940`; non c'è alcuna anteprima per gli elementi già
+   installati).
+6. Manca un'azione rapida Update nella riga stessa della tabella (esiste solo `Edit`
+   per riga, `:530,1011`; Update/Uninstall sono solo nel pannello di dettaglio
+   dall'Iniziativa 34.2).
+7. Nessun ordinamento per colonna (tipo/nome/scope/stato) nella vista Installed.
+8. (Screenshot) Le righe degli artefatti in Sources & Catalog sono disordinate/disallineate
+   — layout flex con ritorno a capo libero, non una vera tabella.
+9. Usare icone al posto delle etichette di testo sui pulsanti di tutta la Dashboard,
+   a meno che il testo non sia effettivamente indispensabile.
 
-**User decision (asked directly, not assumed):** items 3+4 collapse into
-one redesign — the per-tool comparison matrix **replaces** the flat table
-as the Installed section's primary view, not an added toggle. Clicking a
-row still opens the existing detail panel (origin, diff, cross-framework,
-Copy/Move/Edit/Uninstall/Update) — no functionality is lost, only
-reorganized for cross-environment comparison. Follow-up clarification:
-statuses can differ per assistant for the same artifact, so each
-artifact needs a sub-row per assistant, not a single collapsed cell.
+**Decisione dell'utente (chiesta direttamente, non presunta):** i punti 3+4 convergono in
+un'unica riprogettazione — la matrice di confronto per strumento **sostituisce** la tabella
+piatta come vista principale della sezione Installed, senza essere un selettore aggiuntivo. Il clic su una
+riga continua ad aprire il pannello di dettaglio esistente (origine, diff, cross-framework,
+Copy/Move/Edit/Uninstall/Update) — nessuna funzionalità viene persa, ma solo
+riorganizzata per il confronto tra ambienti. Chiarimento successivo:
+gli stati possono differire per assistente sullo stesso artefatto, quindi ciascun
+artefatto richiede una sotto-riga per assistente e non una singola cella compressa.
 
-Tasks (each = one commit):
+Task (ciascuno = un commit):
 
 ## Tasks
 
-## Task order and gating
+## Ordine dei task e dipendenze
 
-- **35.1, 35.2, 35.4 are independent of each other and of 35.3**
-  (different sections/methods) — dispatch in parallel.
-- **35.3 is the large one** — dispatch after 35.1/35.2/35.4 land, to
-  avoid concurrent worktrees all touching `dashboard.ts`'s shared shell/
-  CSS at once (same file-overlap caution used throughout Phase 9).
-- **35.5 is strictly last** — depends on all four others being merged,
-  since it sweeps the final button set they produce.
+- **35.1, 35.2, 35.4 sono indipendenti tra loro e da 35.3**
+  (sezioni/metodi diversi) — avviabili in parallelo.
+- **35.3 è il task più corposo** — avviarlo dopo l'integrazione di 35.1/35.2/35.4, per
+  evitare che worktree concorrenti tocchino contemporaneamente il guscio condiviso e il CSS di `dashboard.ts`
+  (stessa cautela sulla sovrapposizione dei file adottata in tutta la Fase 9).
+- **35.5 è rigorosamente l'ultimo** — dipende dall'integrazione di tutti gli altri quattro,
+  poiché passa in rassegna il set finale di pulsanti da essi prodotto.
 
-**Delegation note:** same pattern as Phase 9 — `kilo_implement` with
-`isolation='worktree'`, `google/gemini-3.1-pro-preview-customtools`, real
-diff review before merge, full gate (`typecheck && lint && test && build`,
-zero warnings) before and after merge.
+**Nota sulla delega:** stesso pattern della Fase 9 — `kilo_implement` con
+`isolation='worktree'`, `google/gemini-3.1-pro-preview-customtools`, revisione reale
+del diff prima del merge, gate completo (`typecheck && lint && test && build`,
+zero avvisi) prima e dopo il merge.
 
-## Closed
+## Chiusi
 
-### 35.1 - Instant loading shell
+### 35.1 - Guscio di caricamento istantaneo
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Instant loading shell · **Size:** S · **Depends on:** 31, 32, 33, 34 · **Spec:** [35.1-instant-loading-shell.md](35.1-instant-loading-shell.md)
-- **Goal:** Synchronously render an instant loading shell with theme styles and a spinner when the Dashboard opens so it never flashes a blank screen while data loads.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Guscio di caricamento istantaneo · **Size:** S · **Depends on:** 31, 32, 33, 34 · **Spec:** [35.1-instant-loading-shell.md](35.1-instant-loading-shell.md)
+- **Goal:** Renderizzare in modo sincrono un guscio di caricamento istantaneo con gli stili del tema e uno spinner all'apertura della Dashboard, così che non mostri mai una schermata vuota durante il caricamento dei dati.
 
-### 35.2 - Overview tab content
+### 35.2 - Contenuto del tab Overview
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Overview tab content · **Size:** S · **Depends on:** 31, 32, 33, 34 · **Spec:** [35.2-overview-content.md](35.2-overview-content.md)
-- **Goal:** Replace the Overview tab placeholder with an at-a-glance landing view showing summary stat chips and items needing attention.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Contenuto del tab Overview · **Size:** S · **Depends on:** 31, 32, 33, 34 · **Spec:** [35.2-overview-content.md](35.2-overview-content.md)
+- **Goal:** Sostituire il segnaposto del tab Overview con una vista iniziale a colpo d'occhio che mostra chip statistici di riepilogo e gli elementi che richiedono attenzione.
 
-### 35.3 - Installed matrix view
+### 35.3 - Vista a matrice per Installed
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Installed matrix view · **Size:** L · **Depends on:** 35.1, 35.2, 35.4 · **Spec:** [35.3-installed-matrix-view.md](35.3-installed-matrix-view.md)
-- **Goal:** Replace the Installed flat table with an expandable per-artifact comparison matrix with sub-rows per assistant, quick actions (Preview, Diff, Update), and column sorting.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Vista a matrice di Installed · **Size:** L · **Depends on:** 35.1, 35.2, 35.4 · **Spec:** [35.3-installed-matrix-view.md](35.3-installed-matrix-view.md)
+- **Goal:** Sostituire la tabella piatta di Installed con una matrice di confronto espandibile per artefatto dotata di sotto-righe per assistente, azioni rapide (Preview, Diff, Update) e ordinamento per colonna.
 
-### 35.4 - Catalog rows as a real table
+### 35.4 - Righe del catalogo come vera tabella
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Catalog grid table · **Size:** S · **Depends on:** 31, 32, 33, 34 · **Spec:** [35.4-catalog-as-table.md](35.4-catalog-as-table.md)
-- **Goal:** Convert Sources & Catalog artifact and folder rows from free-wrapping flex layouts to a fixed-column CSS grid table.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Tabella a griglia del catalogo · **Size:** S · **Depends on:** 31, 32, 33, 34 · **Spec:** [35.4-catalog-as-table.md](35.4-catalog-as-table.md)
+- **Goal:** Convertire le righe di artefatti e cartelle di Sources & Catalog da layout flex a ritorno a capo libero a una tabella CSS Grid a colonne fisse.
 
-### 35.5 - Icon-only buttons across the Dashboard
+### 35.5 - Pulsanti con sola icona in tutta la Dashboard
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Icon-only dashboard buttons · **Size:** S · **Depends on:** 35.1, 35.2, 35.3, 35.4 · **Spec:** [35.5-icon-only-buttons.md](35.5-icon-only-buttons.md)
-- **Goal:** Replace text labels with compact Unicode icon buttons and tooltips across all Dashboard sections where text is not indispensable.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Pulsanti Dashboard con sola icona · **Size:** S · **Depends on:** 35.1, 35.2, 35.3, 35.4 · **Spec:** [35.5-icon-only-buttons.md](35.5-icon-only-buttons.md)
+- **Goal:** Sostituire le etichette di testo con pulsanti compatti a icona Unicode e tooltip in tutte le sezioni della Dashboard dove il testo non è indispensabile.
