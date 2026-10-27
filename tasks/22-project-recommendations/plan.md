@@ -8,13 +8,34 @@
 
 Tasks (each = one commit):
 
-1. **[22.1 — Recommend/unrecommend commands + tree decoration](22.1-recommend-commands.md)**: write/remove a `DesiredInstallation` from the project manifest via context-menu actions on Available and Installed items (prompting for an assistant when recommending from Available, since `AvailableArtifactItem` doesn't carry one), with a distinct "Recommended" decoration and dual-view refresh.
-2. **[22.2 — Recommendation resolution engine](22.2-resolution-engine.md)**: pure `src/engine/` function diffing `desiredInstallations` against `state.json` and a map of per-source resolution *attempts* into `satisfied` / `pending` / `broken` (three distinct broken reasons), with unit tests and fixtures — no VS Code API.
-3. **[22.3 — "Install Recommended" command + Available-view "Recommended" filter](22.3-install-recommended.md)**: always-available command that resolves sources on demand, runs 22.2, previews, and installs via a small shared install-runner (not `installBatch`, which prompts once for a whole-batch assistant/scope) — plus the "Recommended" grouping in the Available view.
-4. **[22.4 — Workspace-open detection + notification](22.4-open-prompt.md)**: wire a **local-only** (no network) unsatisfied-count check into `extension.ts` activation (non-blocking, explicit `.catch()`), with `Install All` / `Review` / `Don't ask again for this workspace` actions reusing 22.3's resolve-and-install path and Recommended filter, and `workspaceState`-backed dismissal.
-5. **[22.5 — Git hygiene for the shared manifest](22.5-gitignore-hygiene.md)**: centralized inside `writeManifest` itself — append-if-missing `.gitignore` entry for the project `state.json` path on every project-scope manifest write, non-destructive, skipped if no `.gitignore` exists. Independent of 22.1-22.4.
+## Tasks
 
-**Task order and gating:**
+### 22.1 - Recommend/unrecommend commands + tree decoration
+
+- **Status:** `delivered` (merged 66952f8 2026-09-07; commit 903c814) · **Short:** Recommend and unrecommend commands · **Size:** S · **Depends on:** 02, 07 · **Spec:** [22.1-recommend-commands.md](22.1-recommend-commands.md)
+- **Goal:** Add context-menu actions on Available and Installed items to write or remove `DesiredInstallation` entries in the project manifest with a Recommended decoration and dual-view refresh.
+
+### 22.2 - Recommendation resolution engine
+
+- **Status:** `delivered` (merged 716cdbc 2026-09-07; commit d170427) · **Short:** Recommendation resolution engine · **Size:** M · **Depends on:** 02, 06 · **Spec:** [22.2-resolution-engine.md](22.2-resolution-engine.md)
+- **Goal:** Implement pure `resolveRecommendations` in `src/engine/recommendations.ts` classifying `desiredInstallations` against `state.json` and source resolution attempts into `satisfied`, `pending`, and `broken`.
+
+### 22.3 - "Install Recommended" command + Available-view "Recommended" filter
+
+- **Status:** `delivered` (merged 0b01b26 2026-09-07; commit 2b45d66) · **Short:** Install Recommended and tree group · **Size:** M · **Depends on:** 22.2 · **Spec:** [22.3-install-recommended.md](22.3-install-recommended.md)
+- **Goal:** Add the `aiSwissknife.installRecommended` command and the `Recommended` grouping in `AvailableTreeDataProvider` using per-entry target assistant/scope installation.
+
+### 22.4 - Workspace-open detection + notification
+
+- **Status:** `delivered` (merged 1612940 2026-09-07; commit 4252ad6) · **Short:** Workspace-open recommendation prompt · **Size:** S · **Depends on:** 22.2, 22.3 · **Spec:** [22.4-open-prompt.md](22.4-open-prompt.md)
+- **Goal:** Wire a local-only unsatisfied-recommendations check on activation offering `Install All`, `Review`, and `Don't ask again for this workspace`.
+
+### 22.5 - Git hygiene for the shared manifest
+
+- **Status:** `delivered` (merged 8ff9218 2026-09-07; commit fde6da7) · **Short:** Project state.json gitignore hygiene · **Size:** XS · **Depends on:** 02 · **Spec:** [22.5-gitignore-hygiene.md](22.5-gitignore-hygiene.md)
+- **Goal:** Ensure `writeManifest` at project scope non-destructively appends the project `state.json` path to an existing `.gitignore`.
+
+## Task order and gating
 
 - **22.2 gates 22.3 and 22.4** — both call into the same resolution
   function, so it must be implemented and tested first.

@@ -4,6 +4,19 @@
 
 Tasks (each = one commit):
 
-1. **[13.1 — Drift analyzer engine](13.1-drift-analyzer.md)**: implement `analyzeDrift(installation: ManagedInstallation, homeRoot?: string): Promise<DriftReport>` in `src/engine/drift.ts` checking disk existence and computing live disk hash vs `installation.contentHash`.
-2. **[13.2 — Upstream update checker](13.2-update-checker.md)**: implement `checkForUpdates(installation: ManagedInstallation, sources: Source[]): Promise<DriftReport>` resolving latest source revision and content hash to detect `update-available` or `modified-and-update-available`.
-3. **[13.3 — UI status indicators & update action](13.3-drift-ui.md)**: render drift status badges/icons in Installed view and provide `AI Swissknife: Update Item` and `AI Swissknife: Check Drift` commands.
+## Tasks
+
+### 13.1 - Drift analyzer engine
+
+- **Status:** `delivered` (merged bc771a8 2026-08-19; commit ee2c1e7) · **Short:** Local drift analyzer engine · **Size:** M · **Depends on:** 12 · **Spec:** [13.1-drift-analyzer.md](13.1-drift-analyzer.md)
+- **Goal:** Implement `analyzeLocalDrift` in `src/engine/drift.ts` checking disk existence and comparing live disk canonical content hash against `installation.contentHash`.
+
+### 13.2 - Upstream update checker
+
+- **Status:** `delivered` (merged bc771a8 2026-08-19; commit ee2c1e7) · **Short:** Upstream update checker · **Size:** M · **Depends on:** 13.1 · **Spec:** [13.2-update-checker.md](13.2-update-checker.md)
+- **Goal:** Implement `checkForUpstreamUpdate` resolving the latest source revision and content hash to detect `update-available` or `modified-and-update-available`.
+
+### 13.3 - UI status indicators & update action
+
+- **Status:** `delivered` (merged bc771a8 2026-08-19; commit ee2c1e7) · **Short:** Drift UI and update command · **Size:** S · **Depends on:** 13.2 · **Spec:** [13.3-drift-ui.md](13.3-drift-ui.md)
+- **Goal:** Render drift status badges and icons in the Installed view and provide `Update Item` and `Check Drift` commands.

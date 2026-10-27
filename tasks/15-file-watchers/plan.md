@@ -4,5 +4,14 @@
 
 Tasks (each = one commit):
 
-1. **[15.1 — File system watchers with debounced refresh](15.1-file-watchers.md)**: implement `setupFileWatchers` in `src/ui/watchers.ts` with 250ms debouncing over `.claude/`, `.kilo/`, `.github/`, and `.ai-swissknife/`.
-2. **[15.2 — Extension lifecycle wiring](15.2-watcher-lifecycle.md)**: register watchers in `src/extension.ts` ensuring clean disposal on deactivation.
+## Tasks
+
+### 15.1 - File system watchers with debounced refresh
+
+- **Status:** `delivered` (merged aa76dac 2026-08-19; commit 5d156b6) · **Short:** Debounced file system watchers · **Size:** S · **Depends on:** 13 · **Spec:** [15.1-file-watchers.md](15.1-file-watchers.md)
+- **Goal:** Implement `setupFileWatchers` in `src/ui/watchers.ts` with 250ms debounced refresh over `.claude/`, `.kilo/`, `.github/`, and `.ai-swissknife/`.
+
+### 15.2 - Extension lifecycle wiring
+
+- **Status:** `delivered` (merged aa76dac 2026-08-19; commit 5d156b6) · **Short:** Watcher lifecycle wiring · **Size:** XS · **Depends on:** 15.1 · **Spec:** [15.2-watcher-lifecycle.md](15.2-watcher-lifecycle.md)
+- **Goal:** Register file system watchers in `src/extension.ts` ensuring clean disposal on extension deactivation.

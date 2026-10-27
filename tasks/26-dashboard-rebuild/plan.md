@@ -6,12 +6,12 @@
 
 ### 26.1 - Unified table + filter bar + breadcrumb
 
-- **Status:** `delivered` (merged 765f5d7 2026-09-07) · **Short:** Unified table and filters · **Size:** M · **Depends on:** - · **Spec:** [26.1-unified-table-and-filters.md](26.1-unified-table-and-filters.md)
+- **Status:** `delivered` (merged 765f5d7 2026-09-07) · **Short:** Unified table and filters · **Size:** M · **Depends on:** 16 · **Spec:** [26.1-unified-table-and-filters.md](26.1-unified-table-and-filters.md)
 - **Goal:** Replace the Dashboard's two structurally different tables (managed vs. unmanaged) with one unified row model, a single status badge, and an Environment/Scope/Membership/Kind/search filter bar with a removable-chip breadcrumb.
 
 ### 26.2 - Per-item detail panel + value-based action handlers
 
-- **Status:** `delivered` (merged c1c85d7 2026-09-08) · **Short:** Per-item detail panel · **Size:** M · **Depends on:** 26.1 · **Spec:** [26.2-detail-panel.md](26.2-detail-panel.md)
+- **Status:** `delivered` (merged c1c85d7 2026-09-08) · **Short:** Per-item detail panel · **Size:** M · **Depends on:** 26.1, 23, 24, 25 · **Spec:** [26.2-detail-panel.md](26.2-detail-panel.md)
 - **Goal:** Add a request/response webview message protocol so selecting a row opens a detail section showing origin, diff availability, cross-framework presence, and value-based Copy/Move/Promote/Edit action handlers.
 
 ## Task order and gating

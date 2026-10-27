@@ -139,31 +139,31 @@ hands-on testing round.
 <!-- ai-orch:generated initiatives -->
 | Priority | #   | Initiative                                                                                | Status                         | Depends on             | Size |
 | -------- | --- | ----------------------------------------------------------------------------------------- | ------------------------------ | ---------------------- | ---- |
-| 1 | 01 | [Project scaffold](01-project-scaffold/plan.md) | ✅ done | — | S |
-| 2 | 02 | [Domain types + registry store](02-domain-and-registry/plan.md) | ✅ done (02.3 hardening merged) | 01 | S |
-| 3 | 03 | [Claude + Kilo adapters (skill+rule)](03-claude-kilo-adapters/plan.md) | ✅ done (03.4 hardening merged) | 02 | M |
-| 4 | 04 | [Source resolver (git-custom + local-folder)](04-source-resolver/plan.md) | ✅ done (04.3 hardening merged) | 02 | M |
-| 5 | 05 | [Canonical model + translator (skill)](05-translator-skill/plan.md) | ✅ done (05.2 hardening merged) | 03.4 | M |
-| 6 | 06 | [Install engine (pipeline)](06-install-engine/plan.md) | ✅ done (06.1/06.2 merged) | 05, 02.3, 03.4, 04.3 | M |
-| 7 | 07 | [Minimal UI (3 views)](07-minimal-ui/plan.md) | ✅ done (07.1/07.2/07.3 merged) | 06 | M |
-| 8 | 08 | [Agent artifact support](08-agent-support/plan.md) | ✅ done | 07 | M |
-| 9 | 09 | [Command artifact support](09-command-support/plan.md) | ✅ done | 08 | M |
-| 10 | 10 | [MCP-server artifact support](10-mcp-support/plan.md) | ✅ done | 08 | L |
-| 11 | 11 | [Marketplace sources resolver](11-marketplace-sources/plan.md) | ✅ done | 08, 09, 10 | M |
-| 12 | 12 | [GitHub Copilot adapter](12-copilot-adapter/plan.md) | ✅ done | 08, 09, 10 | M |
-| 13 | 13 | [Drift & update detection](13-drift-and-updates/plan.md) | ✅ done | 12 | M |
-| 14 | 14 | [Discovery & promotion](14-discovery-promotion/plan.md) | ✅ done | 13 | M |
-| 15 | 15 | [File watchers for consistency](15-file-watchers/plan.md) | ✅ done | 13 | S |
-| 16 | 16 | [Management dashboard webview](16-dashboard-webview/plan.md) | ✅ done | 13, 14, 15 | L |
-| 17 | 17 | [Form editor webview](17-form-editor/plan.md) | ✅ done | 08, 09, 10, 16 | M |
-| 18 | 18 | [Cross-assistant sync](18-cross-assistant-sync/plan.md) | ✅ done | 06, 13, 14, 16 | M |
-| 19 | 19 | [`hook` kind + active `rule` merge](19-hook-and-rule-merge/plan.md) | ✅ done | 03, 06, 12 | L |
-| 20 | 20 | [`remote-url` & `git-single-item` sources](20-remote-url-and-single-item-sources/plan.md) | ✅ done | 04, 11 | M |
-| 21 | 21 | [Codex CLI & Gemini CLI adapters](21-codex-gemini-adapters/plan.md) | ✅ done | 03, 05, 08, 09, 10, 12 | L |
-| 22 | 22 | [Project-scoped recommended installations](22-project-recommendations/plan.md) | ✅ done | 02, 06, 07 | M |
-| 23 | 23 | [Cross-framework identity lookup + shared content accessor](23-cross-framework-lookup/plan.md) | ✅ done (23.1/23.2/23.3 merged) | 13, 14 | M |
-| 24 | 24 | [Diff-vs-original + preview-before-install](24-diff-and-preview/plan.md) | ✅ done (24.1/24.2 merged) | 23 | M |
-| 25 | 25 | [Move action + Promote disambiguation fix](25-move-and-promote-fix/plan.md) | ✅ done (25.1/25.2/25.3/25.4/25.5 merged) | 14, 18 | M |
+| 1 | 01 | [Project scaffold](01-project-scaffold/plan.md) | in progress (to verify: 01.1–01.3) | — | S |
+| 2 | 02 | [Domain types + registry store](02-domain-and-registry/plan.md) | in progress (to verify: 02.1–02.3) | 01 | S |
+| 3 | 03 | [Claude + Kilo adapters (skill+rule)](03-claude-kilo-adapters/plan.md) | in progress (to verify: 03.1–03.4) | 02 | M |
+| 4 | 04 | [Source resolver (git-custom + local-folder)](04-source-resolver/plan.md) | in progress (to verify: 04.1–04.3) | 02 | M |
+| 5 | 05 | [Canonical model + translator (skill)](05-translator-skill/plan.md) | in progress (to verify: 05.1–05.2) | 03.4 | M |
+| 6 | 06 | [Install engine (pipeline)](06-install-engine/plan.md) | in progress (to verify: 06.1–06.2) | 05, 02.3, 03.4, 04.3 | M |
+| 7 | 07 | [Minimal UI (3 views)](07-minimal-ui/plan.md) | in progress (to verify: 07.1–07.3) | 06 | M |
+| 8 | 08 | [Agent artifact support](08-agent-support/plan.md) | in progress (to verify: 08.1–08.3) | 07 | M |
+| 9 | 09 | [Command artifact support](09-command-support/plan.md) | in progress (to verify: 09.1–09.3) | 08 | M |
+| 10 | 10 | [MCP-server artifact support](10-mcp-support/plan.md) | in progress (to verify: 10.1–10.3) | 08 | L |
+| 11 | 11 | [Marketplace sources resolver](11-marketplace-sources/plan.md) | in progress (to verify: 11.1–11.3) | 08, 09, 10 | M |
+| 12 | 12 | [GitHub Copilot adapter](12-copilot-adapter/plan.md) | in progress (to verify: 12.1–12.3) | 08, 09, 10 | M |
+| 13 | 13 | [Drift & update detection](13-drift-and-updates/plan.md) | in progress (to verify: 13.1–13.3) | 12 | M |
+| 14 | 14 | [Discovery & promotion](14-discovery-promotion/plan.md) | in progress (to verify: 14.1–14.3) | 13 | M |
+| 15 | 15 | [File watchers for consistency](15-file-watchers/plan.md) | in progress (to verify: 15.1–15.2) | 13 | S |
+| 16 | 16 | [Management dashboard webview](16-dashboard-webview/plan.md) | in progress (to verify: 16.1–16.3) | 13, 14, 15 | L |
+| 17 | 17 | [Form editor webview](17-form-editor/plan.md) | in progress (to verify: 17.1–17.3) | 08, 09, 10, 16 | M |
+| 18 | 18 | [Cross-assistant sync](18-cross-assistant-sync/plan.md) | in progress (to verify: 18.1–18.3) | 06, 13, 14, 16 | M |
+| 19 | 19 | [`hook` kind + active `rule` merge](19-hook-and-rule-merge/plan.md) | in progress (to verify: 19.1–19.4) | 03, 06, 12 | L |
+| 20 | 20 | [`remote-url` & `git-single-item` sources](20-remote-url-and-single-item-sources/plan.md) | in progress (to verify: 20.1–20.3) | 04, 11 | M |
+| 21 | 21 | [Codex CLI & Gemini CLI adapters](21-codex-gemini-adapters/plan.md) | in progress (to verify: 21.1–21.4) | 03, 05, 08, 09, 10, 12 | L |
+| 22 | 22 | [Project-scoped recommended installations](22-project-recommendations/plan.md) | in progress (to verify: 22.1–22.5) | 02, 06, 07 | M |
+| 23 | 23 | [Cross-framework identity lookup + shared content accessor](23-cross-framework-lookup/plan.md) | in progress (to verify: 23.1–23.3) | 13, 14 | M |
+| 24 | 24 | [Diff-vs-original + preview-before-install](24-diff-and-preview/plan.md) | in progress (to verify: 24.1–24.2) | 23 | M |
+| 25 | 25 | [Move action + Promote disambiguation fix](25-move-and-promote-fix/plan.md) | in progress (to verify: 25.1–25.5) | 14, 18 | M |
 | 26 | 26 | [Dashboard rebuild: unified table, filters, detail](26-dashboard-rebuild/plan.md) | in progress (to verify: 26.1–26.2) | 16, 23, 24, 25 | L |
 | 27 | 27 | [New Dashboard entry points](27-dashboard-entry-points/plan.md) | in progress (to verify: 27.1–27.2) | 22, 26 | S |
 | 28 | 28 | [Sidebar navigation unification](28-sidebar-unification/plan.md) | in progress (to verify: 28.1–28.2) | 16, 22 | M |

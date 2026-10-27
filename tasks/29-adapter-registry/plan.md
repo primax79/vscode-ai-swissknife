@@ -6,7 +6,7 @@
 
 ### 29.1 - `Adapter` gains `displayName`/`iconId`
 
-- **Status:** `delivered` (merged 4d7d654 2026-09-08) · **Short:** Adapter display and icon fields · **Size:** S · **Depends on:** - · **Spec:** [29.1-adapter-interface-fields.md](29.1-adapter-interface-fields.md)
+- **Status:** `delivered` (merged 4d7d654 2026-09-08) · **Short:** Adapter display and icon fields · **Size:** S · **Depends on:** 03, 12, 21 · **Spec:** [29.1-adapter-interface-fields.md](29.1-adapter-interface-fields.md)
 - **Goal:** Add `displayName` and `iconId` descriptive fields directly onto the `Adapter` interface and its five adapter implementations.
 
 ### 29.2 - `src/adapters/registry.ts`

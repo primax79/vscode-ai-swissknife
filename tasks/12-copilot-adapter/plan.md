@@ -4,6 +4,19 @@
 
 Tasks (each = one commit):
 
-1. **[12.1 — CopilotAdapter implementation](12.1-copilot-adapter.md)**: implement `CopilotAdapter` in `src/adapters/copilot.ts` (`.github/skills/`, `.github/agents/*.agent.md`, `.github/prompts/*.prompt.md`, `.vscode/mcp.json`, `.github/copilot-instructions.md`) and unit tests in `src/adapters/copilot.test.ts`.
-2. **[12.2 — Copilot translation matrices](12.2-copilot-translators.md)**: update `translateSkill`, `translateAgent`, `translateCommand`, `translateMcpServer` to support `github-copilot` as a supported target.
-3. **[12.3 — Engine & UI integration](12.3-copilot-ui.md)**: expose GitHub Copilot in `AI Swissknife` assistant picker and install engine across all artifact kinds.
+## Tasks
+
+### 12.1 - CopilotAdapter implementation
+
+- **Status:** `delivered` (merged e08dfaa 2026-08-19; commit bb33fd2) · **Short:** CopilotAdapter implementation · **Size:** M · **Depends on:** 08, 09, 10 · **Spec:** [12.1-copilot-adapter.md](12.1-copilot-adapter.md)
+- **Goal:** Implement `CopilotAdapter` in `src/adapters/copilot.ts` supporting `.github/skills/`, `.github/agents/*.agent.md`, `.github/prompts/*.prompt.md`, `.vscode/mcp.json`, and `.github/copilot-instructions.md`.
+
+### 12.2 - Copilot translation matrices
+
+- **Status:** `delivered` (merged e08dfaa 2026-08-19; commit bb33fd2) · **Short:** Copilot translation matrices · **Size:** S · **Depends on:** 12.1 · **Spec:** [12.2-copilot-translators.md](12.2-copilot-translators.md)
+- **Goal:** Update `translateSkill`, `translateAgent`, `translateCommand`, and `translateMcpServer` to support `github-copilot` as a supported target.
+
+### 12.3 - Engine & UI integration
+
+- **Status:** `delivered` (merged e08dfaa 2026-08-19; commit bb33fd2) · **Short:** Copilot engine and UI integration · **Size:** S · **Depends on:** 12.2 · **Spec:** [12.3-copilot-ui.md](12.3-copilot-ui.md)
+- **Goal:** Expose GitHub Copilot in the assistant picker and install engine across all artifact kinds.

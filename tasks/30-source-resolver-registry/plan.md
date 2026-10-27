@@ -6,7 +6,7 @@
 
 ### 30.1 - `SourceResolver` interface
 
-- **Status:** `delivered` (merged cbfbb8f 2026-09-08) · **Short:** SourceResolver interface · **Size:** S · **Depends on:** - · **Spec:** [30.1-source-resolver-interface.md](30.1-source-resolver-interface.md)
+- **Status:** `delivered` (merged cbfbb8f 2026-09-08) · **Short:** SourceResolver interface · **Size:** S · **Depends on:** 04, 11, 20 · **Spec:** [30.1-source-resolver-interface.md](30.1-source-resolver-interface.md)
 - **Goal:** Define the shared `SourceResolver` interface (`type`, `displayName`, `iconThemeId`, `resolve`, `resolveArtifactContent`) in `src/sources/types.ts`.
 
 ### 30.2 - Wrap the five resolver modules

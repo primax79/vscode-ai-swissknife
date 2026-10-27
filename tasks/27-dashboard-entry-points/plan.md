@@ -6,7 +6,7 @@
 
 ### 27.1 - Shared pending-count function + status bar item
 
-- **Status:** `delivered` (merged a11e330 2026-09-07) · **Short:** Status bar pending counts · **Size:** S · **Depends on:** - · **Spec:** [27.1-status-bar.md](27.1-status-bar.md)
+- **Status:** `delivered` (merged a11e330 2026-09-07) · **Short:** Status bar pending counts · **Size:** S · **Depends on:** 22 · **Spec:** [27.1-status-bar.md](27.1-status-bar.md)
 - **Goal:** Provide a persistent status bar item as a Dashboard entry point backed by a shared function computing unsatisfied-recommendations and updates-available counts on demand.
 
 ### 27.2 - "Open in Dashboard" per-source action

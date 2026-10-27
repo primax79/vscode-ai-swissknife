@@ -4,10 +4,29 @@
 
 Tasks (each = one commit; hand one file at a time to a delegated agent):
 
-1. [03.1 — Adapter interface](03.1-adapter-interface.md) — done
-2. [03.2 — Claude Code adapter](03.2-claude-adapter.md) — done
-3. [03.3 — Kilo Code adapter](03.3-kilo-adapter.md) — done
-4. [03.4 — Shared skill codec, path validation, directory payload (hardening)](03.4-hardening.md)
+## Tasks
+
+### 03.1 - Adapter interface
+
+- **Status:** `delivered` (merged 6b6c5fe 2026-08-18; commit 391338b) · **Short:** Shared Adapter interface · **Size:** S · **Depends on:** 02.1 · **Spec:** [03.1-adapter-interface.md](03.1-adapter-interface.md)
+- **Goal:** Define the shared `Adapter` contract and canonical in-memory models (`CanonicalSkill`, `CanonicalRule`, `ConversionDiagnostic`) in `src/adapters/types.ts`.
+
+### 03.2 - Claude Code adapter
+
+- **Status:** `delivered` (merged 7904ab6 2026-08-18; commit 00f520c) · **Short:** Claude Code adapter · **Size:** M · **Depends on:** 03.1 · **Spec:** [03.2-claude-adapter.md](03.2-claude-adapter.md)
+- **Goal:** Implement `ClaudeAdapter` in `src/adapters/claude.ts` covering `skill` and `rule` read/write/list at global and project scopes.
+
+### 03.3 - Kilo Code adapter
+
+- **Status:** `delivered` (merged 57d90dd 2026-08-18) · **Short:** Kilo Code adapter · **Size:** M · **Depends on:** 03.1 · **Spec:** [03.3-kilo-adapter.md](03.3-kilo-adapter.md)
+- **Goal:** Implement `KiloAdapter` in `src/adapters/kilo.ts` covering `skill` and `rule` read/write/list at global and project scopes.
+
+### 03.4 - Shared skill codec, path validation, directory payload (hardening)
+
+- **Status:** `delivered` (merged 4ee210d 2026-08-19; commit 886bf31) · **Short:** Shared skill codec hardening · **Size:** M · **Depends on:** 03.2, 03.3 · **Spec:** [03.4-hardening.md](03.4-hardening.md)
+- **Goal:** Create a shared skill codec in `src/adapters/codec.ts` that loads the full skill directory payload (`files` + executable modes), validates safe relative paths, and surfaces malformed skills as structured diagnostics.
+
+## Shared decisions
 
 Shared decisions for this initiative that every task must honour:
 

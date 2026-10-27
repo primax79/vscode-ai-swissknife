@@ -13,7 +13,7 @@ Two independent tasks, each one commit:
 
 ### 28.1 - Merge Sources + Available into one tree
 
-- **Status:** `delivered` (merged 979e456 2026-09-08) · **Short:** Merge Sources and Available · **Size:** M · **Depends on:** -
+- **Status:** `delivered` (merged 979e456 2026-09-08) · **Short:** Merge Sources and Available · **Size:** M · **Depends on:** 16, 22
 - **Goal:** Unify `SourcesTreeDataProvider` and `AvailableTreeDataProvider` into a single sidebar tree so expanding a source shows its catalog content directly without select-to-filter coupling.
 
 **Scope:**
