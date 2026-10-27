@@ -8,12 +8,6 @@ folders read from the live working tree, catalog vs check commit, artifact match
 
 ## Tasks
 
-### 49.3 - Exact artifact match
-
-- **Status:** `delivered` (2026-10-27) · **Short:** Exact artifact match · **Size:** S · **Depends on:** 49.2
-- **Goal:** spec §3.5 in `checkForUpstreamUpdate` and `planUpdate`; name fallback removed, replaced by `source-unavailable` with a same-name hint; case 6 passes.
-- **Result:** Introdotto `matchInstallationArtifact` in `src/engine/drift.ts` (usato da `checkForUpstreamUpdate` e `planUpdate`) che confronta gli artefatti esclusivamente per `artifactId` esatto o conversione deterministica della forma dell'id (stesso `sourceId`, plugin, kind e nome), rimuovendo il fallback `kind && name` e restituendo `source-unavailable` con `reason` `"artifact <id> no longer in source"` e `hint` `"same name found: <its id>"`; ristretto `resolveArtifactContent` in `src/sources/gitMarketplace.ts` al percorso registrato dell'artefatto e alla cartella del proprio plugin; il caso 6 in `src/engine/provenance.test.ts` è verde.
-
 ### 49.4 - Commit provenance for local-folder sources; committed HEAD by default
 
 - **Status:** `open` · **Short:** Local-folder provenance · **Size:** M · **Depends on:** 49.2
@@ -47,3 +41,9 @@ folders read from the live working tree, catalog vs check commit, artifact match
 - **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Source identity · **Size:** L · **Depends on:** 49.1
 - **Goal:** spec §1 `source {id, scope, type, location}` written at install; one engine status function used by Dashboard, sidebar, pendingCounts and CLI (no UI-side merging, no first-id match); git cache keyed by id + location hash; spec §6 cases 1, 2 pass; CLI/UI parity test.
 - **Result:** Aggiunto `source: { id, scope, type, location }` a `ManagedInstallation` (scritto da `planInstall`/`applyInstall` e `promoteObservedArtifact`), introdotta `resolveInstallationSource` usata in `checkDriftForAll`, `DashboardPanel`, `InstalledTreeDataProvider`, `computePendingCounts`, `planUpdateAll` e CLI (`runUpdates`, `runUpdate`, `runItem`), e aggiornata la chiave della cache git in `<sanitized id>-<short hash of location>` con riuso dei clone legacy se l'URL `origin` corrisponde; i test 1a e 2 in `src/engine/provenance.test.ts` (inclusa la parità CLI/Dashboard) sono verdi.
+
+### 49.3 - Exact artifact match
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Exact artifact match · **Size:** S · **Depends on:** 49.2
+- **Goal:** spec §3.5 in `checkForUpstreamUpdate` and `planUpdate`; name fallback removed, replaced by `source-unavailable` with a same-name hint; case 6 passes.
+- **Result:** Introdotto `matchInstallationArtifact` in `src/engine/drift.ts` (usato da `checkForUpstreamUpdate` e `planUpdate`) che confronta gli artefatti esclusivamente per `artifactId` esatto o conversione deterministica della forma dell'id (stesso `sourceId`, plugin, kind e nome), rimuovendo il fallback `kind && name` e restituendo `source-unavailable` con `reason` `"artifact <id> no longer in source"` e `hint` `"same name found: <its id>"`; ristretto `resolveArtifactContent` in `src/sources/gitMarketplace.ts` al percorso registrato dell'artefatto e alla cartella del proprio plugin; il caso 6 in `src/engine/provenance.test.ts` è verde.
