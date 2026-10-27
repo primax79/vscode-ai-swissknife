@@ -187,7 +187,7 @@ hands-on testing round.
 | 46 | 46 | [Accesso CLI a ai-swissknife](done/46-cli-access/plan.md) | done | 37.1, 44.1 | M |
 | 47 | 47 | [Aggiorna tutto (Update all)](done/47-update-all/plan.md) | done | 37.1 | M |
 | 48 | 48 | [Funzionalità per i manutentori nella CLI — solo bozza](48-cli-maintainer-features/plan.md) | in progress (done: 48.1, 48.1b; next: 48.2–48.8) | 46, 47 | L |
-| 49 | 49 | [Install provenance and update detection](49-install-provenance/plan.md) | in progress (done: 49.1–49.3; next: 49.4–49.7) | - | - |
+| 49 | 49 | [Install provenance and update detection](49-install-provenance/plan.md) | in progress (done: 49.1–49.4; next: 49.5–49.7) | - | - |
 <!-- /ai-orch:generated initiatives -->
 
 ## Next up
