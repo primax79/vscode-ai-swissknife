@@ -1,32 +1,32 @@
-# 09 — Command artifact support — Summary
+# 09 — Supporto agli artefatti command — Riepilogo
 
 > **Shipped on:** 2026-08-19  
-> **Initiative:** 09 — Command artifact support  
-> **Status:** ✅ Done and merged into main
+> **Initiative:** 09 — Supporto agli artefatti command  
+> **Status:** ✅ Completato e unito in main
 
 ---
 
-## What was built
+## Cosa è stato realizzato
 
-1. **CanonicalCommand Model & Codecs (09.1)**:
-   - Defined `CanonicalCommand` (`name`, `description`, `agent`, `model`, `subtask`, `body`, `extraFields`) in `src/adapters/types.ts`.
-   - Claude adapter command codec (`parseClaudeCommandMarkdown`, `serializeClaudeCommandMarkdown`, `commandPath`, `readCommand`, `writeCommand`, `listCommands`).
-   - Kilo adapter command codec (`parseKiloCommandMarkdown`, `serializeKiloCommandMarkdown`, `commandPath`, `readCommand`, `writeCommand`, `listCommands`) strictly enforcing Kilo's E77 schema without emitting invalid keys in frontmatter.
+1. **Modello CanonicalCommand e Codec (09.1)**:
+   - Definito `CanonicalCommand` (`name`, `description`, `agent`, `model`, `subtask`, `body`, `extraFields`) in `src/adapters/types.ts`.
+   - Codec dei command nell'adapter Claude (`parseClaudeCommandMarkdown`, `serializeClaudeCommandMarkdown`, `commandPath`, `readCommand`, `writeCommand`, `listCommands`).
+   - Codec dei command nell'adapter Kilo (`parseKiloCommandMarkdown`, `serializeKiloCommandMarkdown`, `commandPath`, `readCommand`, `writeCommand`, `listCommands`) applicando rigorosamente lo schema E77 di Kilo senza emettere chiavi non valide nel frontmatter.
 
-2. **Command Translator & Install Engine (09.2)**:
-   - `translateCommand` translating between Claude and Kilo commands losslessly.
-   - `canonicalCommandHash` calculating deterministic sha256 hashes.
-   - `planInstall` and `applyInstall` support for `kind: 'command'` with atomic swap, backup, rollback, and state persistence.
+2. **Traduttore dei command e motore di installazione (09.2)**:
+   - `translateCommand` che traduce senza perdita i command tra Claude e Kilo.
+   - `canonicalCommandHash` che calcola hash sha256 deterministici.
+   - Supporto in `planInstall` e `applyInstall` per `kind: 'command'` con scambio atomico, backup, rollback e persistenza dello stato.
 
-3. **Command Discovery & UI Integration (09.3)**:
+3. **Discovery dei command e integrazione nella UI (09.3)**:
    - `findCommandFiles` in `src/sources/detect.ts`.
-   - Discovery of command packages in `localFolder` and `gitCustom` resolvers.
-   - Distinct terminal icon (`terminal`) for commands in Available and Installed tree views.
-   - Single and batch installation of commands end-to-end.
+   - Discovery dei pacchetti command nei resolver `localFolder` e `gitCustom`.
+   - Icona terminale distinta (`terminal`) per i command nelle viste ad albero Available e Installed.
+   - Installazione singola e in batch dei command end-to-end.
 
 ## Verification
 
-- Lint (`npm run lint`): 0 errors, 0 warnings.
-- Typecheck (`npm run typecheck`): Clean.
-- Test suite (`npm test`): 96 tests passing out of 96.
-- Build (`npm run build`): Generated bundle `dist/extension.js`.
+- Lint (`npm run lint`): 0 errori, 0 avvisi.
+- Typecheck (`npm run typecheck`): Pulito.
+- Suite di test (`npm test`): 96 test superati su 96.
+- Build (`npm run build`): Generato il bundle `dist/extension.js`.

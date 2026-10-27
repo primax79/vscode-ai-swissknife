@@ -1,68 +1,70 @@
-# 03 — Claude + Kilo adapters (skill+rule) — Implementation plan
+# 03 — Adapter Claude + Kilo (skill+rule) — Piano di implementazione
 
-> **Derived from spec:** [../specs/foundations.md](../../specs/foundations.md)
+> **Derivato dalla specifica:** [../specs/foundations.md](../../specs/foundations.md)
 
-Tasks (each = one commit; hand one file at a time to a delegated agent):
+Task (ciascuno = un commit; passare un file alla volta a un agente delegato):
 
 ## Tasks
 
-## Shared decisions
+## Decisioni condivise
 
-Shared decisions for this initiative that every task must honour:
+Decisioni condivise per questa iniziativa che ogni task deve rispettare:
 
-- Only `skill` and `rule` adapters are implemented, while only `skill` is
-  exercised by the Phase-1 resolver/install/UI pipeline — an adapter method for
-  `agent`/`command`/`mcp-server`/`hook` should not exist yet (not even as
-  a stub that throws "not implemented"); add the interface surface for
-  those kinds only when a later initiative actually implements them, so
-  the interface never lies about what's supported.
-- Every adapter method takes an explicit `scope: 'global' | 'project'`
-  and, when `scope === 'project'`, a `projectRoot: string` — never infer
-  the workspace root internally (that's a VSCode-API concern for the UI
-  initiative to resolve and pass in, per `CONTEXT.md`'s pure-Node
-  constraint already established for the registry store).
-- Real, verified paths to use (don't re-derive from the spec's prose —
-  these are the exact literals):
-  - Claude `skill`: project `<projectRoot>/.claude/skills/<name>/SKILL.md`,
-    global `~/.claude/skills/<name>/SKILL.md` — confirmed real examples
-    exist on this machine at `~/.claude/skills/*/`.
-  - Claude `rule`: project `<projectRoot>/CLAUDE.md`, global
+- Vengono implementati solo gli adapter per `skill` e `rule`, mentre solo
+  `skill` viene esercitato dalla pipeline resolver/installazione/UI della Fase 1
+  — un metodo dell'adapter per `agent`/`command`/`mcp-server`/`hook` non deve
+  ancora esistere (nemmeno come stub che solleva "not implemented"); aggiungere
+  la superficie dell'interfaccia per quei tipi solo quando un'iniziativa
+  successiva li implementa effettivamente, così che l'interfaccia non menta mai
+  su ciò che è supportato.
+- Ogni metodo dell'adapter accetta uno `scope: 'global' | 'project'` esplicito
+  e, quando `scope === 'project'`, un `projectRoot: string` — non dedurre mai
+  internamente la radice del workspace (quella è una responsabilità legata alle
+  API di VSCode che spetta all'iniziativa della UI risolvere e passare in input,
+  secondo il vincolo puro-Node di `CONTEXT.md` già stabilito per lo store del
+  registro).
+- Percorsi reali e verificati da utilizzare (non ricalcolarli dalla prosa della
+  specifica — questi sono i letterali esatti):
+  - `skill` Claude: progetto `<projectRoot>/.claude/skills/<name>/SKILL.md`,
+    globale `~/.claude/skills/<name>/SKILL.md` — confermata la presenza di
+    esempi reali su questa macchina in `~/.claude/skills/*/`.
+  - `rule` Claude: progetto `<projectRoot>/CLAUDE.md`, globale
     `~/.claude/CLAUDE.md`.
-  - Kilo `skill`: project `<projectRoot>/.kilo/skills/<name>/SKILL.md`,
-    global `~/.kilo/skills/<name>/SKILL.md` (SPEC.md §1, `paths.ts:21-24`).
-  - Kilo `rule`: **project scope only** shares Claude's exact file —
-    `<projectRoot>/CLAUDE.md`, same path Claude's adapter writes (SPEC.md
-    §5 "rule convergence"), because Kilo reads it natively at that path
-    with no translation needed. **Global scope does NOT share Claude's
-    home** — Kilo's own native global rule file is
-    `~/.config/kilo/AGENTS.md`, not `~/.claude/CLAUDE.md`. (Corrected
-    2026-08-18, second Codex review finding I11 — an earlier version of
-    this bullet said the two paths could be shared unconditionally for
-    both scopes, which contradicted what `03.3` itself correctly
-    implemented for global scope. This is now the single source of
-    truth; `03.3`'s own file matches it.)
-- This initiative depends on completed 02.1 domain types. `03.4` is the
-  first open hardening task: its codec is consumed by `02.3`, and its
-  detector result is extended by `04.3`. Land it before both.
+  - `skill` Kilo: progetto `<projectRoot>/.kilo/skills/<name>/SKILL.md`,
+    globale `~/.kilo/skills/<name>/SKILL.md` (SPEC.md §1, `paths.ts:21-24`).
+  - `rule` Kilo: **solo lo scope di progetto** condivide esattamente il file di
+    Claude — `<projectRoot>/CLAUDE.md`, lo stesso percorso scritto dall'adapter
+    di Claude (SPEC.md §5 "rule convergence"), perché Kilo lo legge nativamente
+    a quel percorso senza necessità di traduzione. **Lo scope globale NON
+    condivide la home di Claude** — il file di regole globale nativo di Kilo è
+    `~/.config/kilo/AGENTS.md`, non `~/.claude/CLAUDE.md`. (Corretto il
+    2026-08-18, seconda revisione Codex rilievo I11 — una versione precedente di
+    questo punto affermava che i due percorsi potessero essere condivisi
+    incondizionatamente per entrambi gli scope, il che contraddiceva quanto lo
+    stesso `03.3` implementava correttamente per lo scope globale. Questa è ora
+    l'unica fonte di verità; il file di `03.3` vi corrisponde.)
+- Questa iniziativa dipende dai tipi di dominio completati in 02.1. `03.4` è il
+  primo task di hardening aperto: il suo codec è consumato da `02.3` e il
+  risultato del suo detector è esteso da `04.3`. Completarlo prima di entrambi.
 
-## Closed
+## Chiusi
 
-### 03.1 - Adapter interface
+### 03.1 - Interfaccia Adapter
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Shared Adapter interface · **Size:** S · **Depends on:** 02.1 · **Spec:** [03.1-adapter-interface.md](03.1-adapter-interface.md)
-- **Goal:** Define the shared `Adapter` contract and canonical in-memory models (`CanonicalSkill`, `CanonicalRule`, `ConversionDiagnostic`) in `src/adapters/types.ts`.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Interfaccia condivisa Adapter · **Size:** S · **Depends on:** 02.1 · **Spec:** [03.1-adapter-interface.md](03.1-adapter-interface.md)
+- **Goal:** Definire il contratto condiviso `Adapter` e i modelli canonici in memoria (`CanonicalSkill`, `CanonicalRule`, `ConversionDiagnostic`) in `src/adapters/types.ts`.
 
-### 03.2 - Claude Code adapter
+### 03.2 - Adapter Claude Code
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Claude Code adapter · **Size:** M · **Depends on:** 03.1 · **Spec:** [03.2-claude-adapter.md](03.2-claude-adapter.md)
-- **Goal:** Implement `ClaudeAdapter` in `src/adapters/claude.ts` covering `skill` and `rule` read/write/list at global and project scopes.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Adapter Claude Code · **Size:** M · **Depends on:** 03.1 · **Spec:** [03.2-claude-adapter.md](03.2-claude-adapter.md)
+- **Goal:** Implementare `ClaudeAdapter` in `src/adapters/claude.ts` coprendo lettura/scrittura/elenco di `skill` e `rule` negli scope globale e di progetto.
 
-### 03.3 - Kilo Code adapter
+### 03.3 - Adapter Kilo Code
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Kilo Code adapter · **Size:** M · **Depends on:** 03.1 · **Spec:** [03.3-kilo-adapter.md](03.3-kilo-adapter.md)
-- **Goal:** Implement `KiloAdapter` in `src/adapters/kilo.ts` covering `skill` and `rule` read/write/list at global and project scopes.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Adapter Kilo Code · **Size:** M · **Depends on:** 03.1 · **Spec:** [03.3-kilo-adapter.md](03.3-kilo-adapter.md)
+- **Goal:** Implementare `KiloAdapter` in `src/adapters/kilo.ts` coprendo lettura/scrittura/elenco di `skill` e `rule` negli scope globale e di progetto.
 
-### 03.4 - Shared skill codec, path validation, directory payload (hardening)
+### 03.4 - Codec condiviso delle skill, validazione dei percorsi, payload della directory (hardening)
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Shared skill codec hardening · **Size:** M · **Depends on:** 03.2, 03.3 · **Spec:** [03.4-hardening.md](03.4-hardening.md)
-- **Goal:** Create a shared skill codec in `src/adapters/codec.ts` that loads the full skill directory payload (`files` + executable modes), validates safe relative paths, and surfaces malformed skills as structured diagnostics.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Hardening codec skill condiviso · **Size:** M · **Depends on:** 03.2, 03.3 · **Spec:** [03.4-hardening.md](03.4-hardening.md)
+- **Goal:** Creare un codec condiviso delle skill in `src/adapters/codec.ts` che carichi l'intero payload della directory della skill (`files` + permessi di esecuzione), validi percorsi relativi sicuri ed esponga le skill malformate come diagnostiche strutturate.

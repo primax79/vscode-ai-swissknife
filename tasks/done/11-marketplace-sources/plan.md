@@ -1,24 +1,24 @@
-# 11 — Marketplace sources resolver — Implementation plan
+# 11 — Resolver delle sorgenti marketplace — Piano di implementazione
 
-> **Derived from spec:** [`../specs/phase-2-spec.md`](../../specs/phase-2-spec.md) · [`../../SPEC.md`](../../../SPEC.md)
+> **Derivato dalla specifica:** [`../specs/phase-2-spec.md`](../../specs/phase-2-spec.md) · [`../../SPEC.md`](../../../SPEC.md)
 
-Tasks (each = one commit):
+Task (ciascuno = un commit):
 
 ## Tasks
 
-## Closed
+## Chiusi
 
-### 11.1 - Claude & Kilo marketplace manifest resolver
+### 11.1 - Resolver dei manifest marketplace per Claude e Kilo
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Marketplace manifest resolver · **Size:** M · **Depends on:** 08, 09, 10 · **Spec:** [11.1-marketplace-resolver.md](11.1-marketplace-resolver.md)
-- **Goal:** Implement `resolveGitMarketplace` in `src/sources/gitMarketplace.ts` supporting `.claude-plugin/marketplace.json` and `marketplace-skills.json` manifests with cache locking, ref pinning, and multi-artifact package construction.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Resolver dei manifest marketplace · **Size:** M · **Depends on:** 08, 09, 10 · **Spec:** [11.1-marketplace-resolver.md](11.1-marketplace-resolver.md)
+- **Goal:** Implementare `resolveGitMarketplace` in `src/sources/gitMarketplace.ts` supportando i manifest `.claude-plugin/marketplace.json` e `marketplace-skills.json` con lock della cache, pin dei ref e costruzione di pacchetti multi-artefatto.
 
-### 11.2 - Marketplace content resolution & install engine
+### 11.2 - Risoluzione del contenuto marketplace e motore di installazione
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Marketplace content resolution · **Size:** M · **Depends on:** 11.1 · **Spec:** [11.2-marketplace-content.md](11.2-marketplace-content.md)
-- **Goal:** Implement `resolveArtifactContent` for `git-marketplace` sources across all artifact kinds (`skill`, `agent`, `command`, `mcp-server`) and wire into `planInstall`.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Risoluzione del contenuto marketplace · **Size:** M · **Depends on:** 11.1 · **Spec:** [11.2-marketplace-content.md](11.2-marketplace-content.md)
+- **Goal:** Implementare `resolveArtifactContent` per le sorgenti `git-marketplace` su tutti i tipi di artefatto (`skill`, `agent`, `command`, `mcp-server`) e collegarlo in `planInstall`.
 
-### 11.3 - Marketplace UI integration
+### 11.3 - Integrazione nella UI del marketplace
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Marketplace UI integration · **Size:** S · **Depends on:** 11.2 · **Spec:** [11.3-marketplace-ui.md](11.3-marketplace-ui.md)
-- **Goal:** Integrate `git-marketplace` sources in Sources, Available (with plugin/package grouping), and Installed tree views.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Integrazione nella UI del marketplace · **Size:** S · **Depends on:** 11.2 · **Spec:** [11.3-marketplace-ui.md](11.3-marketplace-ui.md)
+- **Goal:** Integrare le sorgenti `git-marketplace` nelle viste ad albero Sources, Available (con raggruppamento per plugin/pacchetto) e Installed.

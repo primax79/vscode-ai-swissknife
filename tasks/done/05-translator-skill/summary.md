@@ -1,18 +1,18 @@
-# 05 — Canonical model + translator (skill) — Summary
+# 05 — Modello canonico + traduttore (skill) — Riepilogo
 
-> **Closed on:** 2026-10-27 (registry tidy; verifier ai-coding-tools-c1)  
-> **Initiative:** 05 — Canonical model + translator (skill)  
-> **Status:** ✅ Done and merged into main
+> **Closed on:** 2026-10-27 (riordino del registro; verificatore ai-coding-tools-c1)  
+> **Initiative:** 05 — Modello canonico + traduttore (skill)  
+> **Status:** ✅ Completato e unito in main
 
-Summary written at closure from the plan and the git history; the per-task specs in this folder hold the detail.
+Riepilogo scritto alla chiusura a partire dal piano e dalla cronologia git; le specifiche per singolo task in questa cartella contengono i dettagli.
 
-## What was built
+## Cosa è stato realizzato
 
-- **05.1 Translator + conversion diagnostics** — merged 1143486 2026-08-18; commit 76e484a. Implement `translateSkill` and `translateRule` in `src/translator/skill.ts` returning translated canonical objects alongside `ConversionDiagnostic`.
-- **05.2 Per-field diagnostics (hardening)** — merged a602103 2026-08-19. Change `translateSkill` and `translateRule` to take only `targetAssistant: AssistantId` and return structured `TranslationResult<T>` with per-field diagnostics and preserved auxiliary skill files.
+- **05.1 Traduttore + diagnostiche di conversione** — unito 1143486 2026-08-18; commit 76e484a. Implementare `translateSkill` e `translateRule` in `src/translator/skill.ts` restituendo gli oggetti canonici tradotti insieme a `ConversionDiagnostic`.
+- **05.2 Diagnostiche per campo (hardening)** — unito a602103 2026-08-19. Modificare `translateSkill` e `translateRule` affinché accettino solo `targetAssistant: AssistantId` e restituiscano un `TranslationResult<T>` strutturato con diagnostiche per campo e file ausiliari della skill preservati.
 
 ## Verification
 
-- Every task's work is merged into `main` (evidence: the commits named above, from `git log --grep '<id>'`).
-- `npm test` on `main` at 5e85109 (2026-10-27): 577 tests, 576 pass, 0 fail, 1 opt-in skip (`AISK_REAL_KILO=1`).
-- `ai-orch tasks validate --tasks-dir tasks`: 0 errors.
+- Il lavoro di ogni task è stato unito in `main` (evidenza: i commit indicati sopra, da `git log --grep '<id>'`).
+- `npm test` su `main` a 5e85109 (2026-10-27): 577 test, 576 superati, 0 falliti, 1 saltato opt-in (`AISK_REAL_KILO=1`).
+- `ai-orch tasks validate --tasks-dir tasks`: 0 errori.

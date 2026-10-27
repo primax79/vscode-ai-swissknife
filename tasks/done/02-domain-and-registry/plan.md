@@ -1,51 +1,52 @@
-# 02 — Domain types + registry store — Implementation plan
+# 02 — Tipi di dominio + store del registro — Piano di implementazione
 
-> **Derived from spec:** [../specs/foundations.md](../../specs/foundations.md)
+> **Derivato dalla specifica:** [../specs/foundations.md](../../specs/foundations.md)
 
-Tasks (each = one commit; hand one file at a time to a delegated agent):
+Task (ciascuno = un commit; passare un file alla volta a un agente delegato):
 
 ## Tasks
 
-## Shared decisions
+## Decisioni condivise
 
-Shared decisions for this initiative that every task must honour:
+Decisioni condivise per questa iniziativa che ogni task deve rispettare:
 
-- Types only in 02.1 — zero logic, zero I/O. All file/JSON I/O is 02.2/02.3.
-- All 6 `ItemKind` values are declared even though only `skill` gets real
-  behavior in this Phase (`rule` is deferred to Phase 2 for the
-  resolver/install/UI path, see `tasks/CONTEXT.md` — the adapters stay,
-  see `specs/foundations.md` non-goals) — the union type itself is cheap
-  and shared, don't leave it artificially narrow.
-- **Revised (second Codex review, `../_inbox/analyzed/
-  codex-analysis-2.md`, findings B3/I13)**: the data directory is
-  `~/.ai-swissknife/` (global) / `<workspace>/.ai-swissknife/` (project),
-  **not** `.ai-toolkit` — renamed in 02.3 before any real user has data
-  under the old name. Each level now holds **two** files, not one:
-  `manifest.json` (shareable, versionable — portable `DesiredSource[]` +
-  `desiredInstallations` + `schemaVersion`, no absolute project paths or
-  other machine-specific fields) and `state.json` (machine-local —
-  `ManagedInstallation[]` + `schemaVersion`, never committed). See 02.3
-  for the exact functions. `ObservedArtifact` is still never persisted in
-  either file (SPEC.md §4) — later initiatives (discovery, Phase 3) will
-  define its own cache structure.
-- This initiative depends on 01 (needs `tsconfig.json`/`package.json` to
-  exist so the new files typecheck and build). The open 02.3 hardening
-  task additionally depends on 03.4's shared skill codec; completed 02.1/
-  02.2 remain the domain/store foundation that 03.4 already uses.
+- Solo tipi in 02.1 — zero logica, zero I/O. Tutto l'I/O su file/JSON è in 02.2/02.3.
+- Tutti i 6 valori di `ItemKind` sono dichiarati anche se solo `skill` ottiene un
+  comportamento reale in questa Fase (`rule` è rimandato alla Fase 2 per il
+  percorso resolver/installazione/UI, vedere `tasks/CONTEXT.md` — gli adapter
+  restano, vedere i non-obiettivi in `specs/foundations.md`) — il tipo unione in
+  sé è leggero e condiviso, non lasciarlo artificialmente ristretto.
+- **Rivisto (seconda revisione Codex, `../_inbox/analyzed/
+  codex-analysis-2.md`, rilievi B3/I13)**: la directory dei dati è
+  `~/.ai-swissknife/` (globale) / `<workspace>/.ai-swissknife/` (progetto),
+  **non** `.ai-toolkit` — rinominata in 02.3 prima che qualsiasi utente reale
+  abbia dati sotto il vecchio nome. Ogni livello contiene ora **due** file, non
+  uno: `manifest.json` (condivisibile, versionabile — `DesiredSource[]`
+  portabili + `desiredInstallations` + `schemaVersion`, nessun percorso assoluto
+  di progetto o altri campi specifici della macchina) e `state.json` (locale
+  alla macchina — `ManagedInstallation[]` + `schemaVersion`, mai committato).
+  Vedere 02.3 per le funzioni esatte. `ObservedArtifact` continua a non essere
+  mai persistito in nessuno dei due file (SPEC.md §4) — le iniziative successive
+  (discovery, Fase 3) definiranno la propria struttura di cache.
+- Questa iniziativa dipende dalla 01 (richiede l'esistenza di
+  `tsconfig.json`/`package.json` affinché i nuovi file superino typecheck e
+  build). Il task di hardening 02.3 dipende inoltre dal codec condiviso delle
+  skill di 03.4; i task completati 02.1/02.2 rimangono la base di dominio/store
+  che 03.4 già utilizza.
 
-## Closed
+## Chiusi
 
-### 02.1 - Core domain types
+### 02.1 - Tipi di dominio fondamentali
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Core domain types · **Size:** S · **Depends on:** 01 · **Spec:** [02.1-domain-types.md](02.1-domain-types.md)
-- **Goal:** Define every core entity from the spec (`AssistantId`, `ItemKind`, `Scope`, `Source`, `Package`, `Artifact`, `ManagedInstallation`, `ObservedArtifact`) as TypeScript interfaces in `src/domain/types.ts`.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Tipi di dominio fondamentali · **Size:** S · **Depends on:** 01 · **Spec:** [02.1-domain-types.md](02.1-domain-types.md)
+- **Goal:** Definire ogni entità fondamentale della specifica (`AssistantId`, `ItemKind`, `Scope`, `Source`, `Package`, `Artifact`, `ManagedInstallation`, `ObservedArtifact`) come interfacce TypeScript in `src/domain/types.ts`.
 
-### 02.2 - Registry store (read/write JSON, global + project)
+### 02.2 - Store del registro (lettura/scrittura JSON, globale + progetto)
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Registry JSON store · **Size:** S · **Depends on:** 02.1 · **Spec:** [02.2-registry-store.md](02.2-registry-store.md)
-- **Goal:** Implement pure-Node atomic JSON read/write functions for the registry at global and project scopes.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Store JSON del registro · **Size:** S · **Depends on:** 02.1 · **Spec:** [02.2-registry-store.md](02.2-registry-store.md)
+- **Goal:** Implementare funzioni puro-Node di lettura/scrittura JSON atomica per il registro negli scope globale e di progetto.
 
-### 02.3 - Persistence and resolved-artifact model (hardening)
+### 02.3 - Modello di persistenza e artefatti risolti (hardening)
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Portable persistence and hardening · **Size:** M · **Depends on:** 02.2, 03.4 · **Spec:** [02.3-hardening.md](02.3-hardening.md)
-- **Goal:** Split persistence into shareable `manifest.json` (`DesiredSource`, `desiredInstallations`) and machine-local `state.json` under `.ai-swissknife`, and add typed `ResolvedArtifact<CanonicalSkill>` content resolution and a shared Git cache mutex.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Persistenza portabile e hardening · **Size:** M · **Depends on:** 02.2, 03.4 · **Spec:** [02.3-hardening.md](02.3-hardening.md)
+- **Goal:** Suddividere la persistenza in `manifest.json` condivisibile (`DesiredSource`, `desiredInstallations`) e `state.json` locale alla macchina sotto `.ai-swissknife`, e aggiungere la risoluzione tipizzata del contenuto `ResolvedArtifact<CanonicalSkill>` e un mutex condiviso per la cache Git.

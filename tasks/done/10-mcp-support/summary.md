@@ -1,32 +1,32 @@
-# 10 — MCP-server artifact support — Summary
+# 10 — Supporto agli artefatti MCP-server — Riepilogo
 
 > **Shipped on:** 2026-08-19  
-> **Initiative:** 10 — MCP-server artifact support  
-> **Status:** ✅ Done and merged into main
+> **Initiative:** 10 — Supporto agli artefatti MCP-server  
+> **Status:** ✅ Completato e unito in main
 
 ---
 
-## What was built
+## Cosa è stato realizzato
 
-1. **CanonicalMcpServer Model & Adapters (10.1)**:
-   - Defined `CanonicalMcpServer` (`id`, `type`, `command`, `args`, `url`, `env`, `headers`, `extraFields`) in `src/adapters/types.ts`.
-   - Claude adapter MCP codec (`mcpConfigPath`, `readMcpServer`, `writeMcpServer`, `listMcpServers`) writing to `.mcp.json` (project) or `~/.claude/settings.json` (global).
-   - Kilo adapter MCP codec writing to `.kilo/mcp.json` (project) or `~/.config/kilo/mcp.json` (global).
+1. **Modello CanonicalMcpServer e Adapter (10.1)**:
+   - Definito `CanonicalMcpServer` (`id`, `type`, `command`, `args`, `url`, `env`, `headers`, `extraFields`) in `src/adapters/types.ts`.
+   - Codec MCP nell'adapter Claude (`mcpConfigPath`, `readMcpServer`, `writeMcpServer`, `listMcpServers`) con scrittura in `.mcp.json` (progetto) o `~/.claude/settings.json` (globale).
+   - Codec MCP nell'adapter Kilo con scrittura in `.kilo/mcp.json` (progetto) o `~/.config/kilo/mcp.json` (globale).
 
-2. **MCP Translator & Config Merge Install Engine (10.2)**:
-   - `translateMcpServer` translating stdio/sse/http MCP servers.
-   - `canonicalMcpServerHash` calculating deterministic sha256 hashes.
-   - `planInstall` and `applyInstall` support for `kind: 'mcp-server'` with non-destructive configuration merge, backup, rollback, and state persistence.
+2. **Traduttore MCP e motore di installazione con merge della configurazione (10.2)**:
+   - `translateMcpServer` che traduce server MCP stdio/sse/http.
+   - `canonicalMcpServerHash` che calcola hash sha256 deterministici.
+   - Supporto in `planInstall` e `applyInstall` per `kind: 'mcp-server'` con merge non distruttivo della configurazione, backup, rollback e persistenza dello stato.
 
-3. **MCP Discovery & UI Integration (10.3)**:
-   - `findMcpDefinitions` in `src/sources/detect.ts` scanning for `mcp.json`, `.mcp.json`, and `mcps/*.json`.
-   - Discovery of MCP packages in `localFolder` and `gitCustom` resolvers.
-   - Distinct plug icon (`plug`) for MCP servers in Available and Installed tree views.
-   - Single and batch installation of MCP servers end-to-end.
+3. **Discovery MCP e integrazione nella UI (10.3)**:
+   - `findMcpDefinitions` in `src/sources/detect.ts` che scansiona `mcp.json`, `.mcp.json` e `mcps/*.json`.
+   - Discovery dei pacchetti MCP nei resolver `localFolder` e `gitCustom`.
+   - Icona a spina distinta (`plug`) per i server MCP nelle viste ad albero Available e Installed.
+   - Installazione singola e in batch dei server MCP end-to-end.
 
 ## Verification
 
-- Lint (`npm run lint`): 0 errors, 0 warnings.
-- Typecheck (`npm run typecheck`): Clean.
-- Test suite (`npm test`): 106 tests passing out of 106.
-- Build (`npm run build`): Generated bundle `dist/extension.js`.
+- Lint (`npm run lint`): 0 errori, 0 avvisi.
+- Typecheck (`npm run typecheck`): Pulito.
+- Suite di test (`npm test`): 106 test superati su 106.
+- Build (`npm run build`): Generato il bundle `dist/extension.js`.
