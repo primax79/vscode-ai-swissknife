@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import type { ManagedInstallation, Source } from '../domain/types';
+import { toInstallationSourceIdentity, type ManagedInstallation, type Source } from '../domain/types';
 import type {
   CanonicalSkill,
   CanonicalAgent,
@@ -25,6 +25,138 @@ import { getSourceResolver } from '../sources/registry';
 import { resolveAndTranslate } from './plan';
 import type { DriftReport } from './types';
 import type { SourceResolution } from '../sources/types';
+
+export interface SourceLookupLists {
+  globalSources: Source[];
+  workspaceSources: Source[];
+}
+
+export type SourceLookupInput =
+  | SourceLookupLists
+  | Source[]
+  | ReadonlyMap<string, Source>
+  | Map<string, Source>;
+
+export type ResolvedInstallationSource =
+  | { source: Source }
+  | { unavailable: string; hint?: string };
+
+function normalizeSourceLists(sources: SourceLookupInput): SourceLookupLists {
+  if (
+    sources &&
+    typeof sources === 'object' &&
+    !Array.isArray(sources) &&
+    'globalSources' in sources &&
+    'workspaceSources' in sources
+  ) {
+    return {
+      globalSources: sources.globalSources,
+      workspaceSources: sources.workspaceSources,
+    };
+  }
+  const all: Source[] = Array.isArray(sources)
+    ? sources
+    : sources && typeof (sources as Map<string, Source>).values === 'function'
+    ? Array.from((sources as Map<string, Source>).values())
+    : [];
+  return {
+    globalSources: all.filter((s) => s.scope === 'global'),
+    workspaceSources: all.filter((s) => s.scope === 'project'),
+  };
+}
+
+function getSourceLocation(source: Source): string {
+  return toInstallationSourceIdentity(source).location;
+}
+
+function locationsMatch(source: Source, recordedLocation: string): boolean {
+  if (!recordedLocation) return true;
+  const currentLocation = getSourceLocation(source);
+  if (currentLocation === recordedLocation) return true;
+  if (source.type === 'local-folder' && currentLocation && recordedLocation) {
+    return path.resolve(currentLocation) === path.resolve(recordedLocation);
+  }
+  return false;
+}
+
+/**
+ * Resolves the upstream source for a ManagedInstallation according to spec §3 rule 1:
+ * - When `installation.source` is recorded: match by `source.scope` + `source.id`, verify `type` and `location`.
+ *   If missing from its scope, returns `{ unavailable, hint? }` (with a hint if a same-id source exists in the other scope).
+ * - For legacy installations without `installation.source`: prefers the source in the installation's own scope
+ *   (global installs -> globalSources, project installs -> workspaceSources), falling back to the other scope if unique.
+ */
+export function resolveInstallationSource(
+  installation: ManagedInstallation,
+  sources: SourceLookupInput
+): ResolvedInstallationSource {
+  const { globalSources, workspaceSources } = normalizeSourceLists(sources);
+
+  if (installation.source) {
+    const rec = installation.source;
+    const isGlobal = rec.scope === 'global';
+    const targetList = isGlobal ? globalSources : workspaceSources;
+    const otherList = isGlobal ? workspaceSources : globalSources;
+    const scopeName = isGlobal ? 'global' : 'workspace';
+    const otherScopeName = isGlobal ? 'workspace' : 'global';
+
+    const match = targetList.find((s) => s.id === rec.id);
+    if (!match) {
+      const otherMatch = otherList.find((s) => s.id === rec.id);
+      const hint = otherMatch
+        ? `A source with id "${rec.id}" (${otherMatch.type}) exists in ${otherScopeName} scope (re-link to ${otherScopeName} "${rec.id}").`
+        : undefined;
+      return {
+        unavailable: `Source "${rec.id}" not found in ${scopeName} manifest.`,
+        ...(hint ? { hint } : {}),
+      };
+    }
+
+    if (match.type !== rec.type) {
+      return {
+        unavailable: `Source "${rec.id}" in ${scopeName} scope changed type from "${rec.type}" to "${match.type}".`,
+      };
+    }
+
+    if (!locationsMatch(match, rec.location)) {
+      const currentLoc = getSourceLocation(match);
+      return {
+        unavailable: `Source "${rec.id}" in ${scopeName} scope changed location from "${rec.location}" to "${currentLoc}".`,
+      };
+    }
+
+    return { source: match };
+  }
+
+  const sourceId = installation.sourceId;
+  if (!sourceId) {
+    return {
+      unavailable: `No source ID recorded for "${installation.name}".`,
+    };
+  }
+
+  const preferredList = installation.scope === 'global' ? globalSources : workspaceSources;
+  const fallbackList = installation.scope === 'global' ? workspaceSources : globalSources;
+
+  const preferredMatch = preferredList.find((s) => s.id === sourceId);
+  if (preferredMatch) {
+    return { source: preferredMatch };
+  }
+
+  const fallbackMatch = fallbackList.find((s) => s.id === sourceId);
+  if (fallbackMatch) {
+    return { source: fallbackMatch };
+  }
+
+  return {
+    unavailable: `Source "${sourceId}" not found in manifest.`,
+  };
+}
+
+export function sourceResolutionKey(source: Source): string {
+  const identity = toInstallationSourceIdentity(source);
+  return `${identity.scope}:${identity.id}:${identity.type}:${identity.location}`;
+}
 
 export interface SourceResolutionCache {
   get(source: Source | string): Promise<SourceResolution | undefined> | SourceResolution | undefined;
@@ -390,19 +522,6 @@ export async function checkForUpstreamUpdate(
   };
 }
 
-function findSourceInSources(
-  sources: Source[] | ReadonlyMap<string, Source> | Map<string, Source>,
-  sourceId: string
-): Source | undefined {
-  if (Array.isArray(sources)) {
-    return sources.find((s) => s.id === sourceId);
-  }
-  if (sources && typeof (sources as any).get === 'function') {
-    return (sources as Map<string, Source>).get(sourceId);
-  }
-  return undefined;
-}
-
 /**
  * Checks drift for all given installations against the provided sources.
  * Resolves each source ONCE per run (with concurrency 1 per source, and sources running
@@ -411,7 +530,7 @@ function findSourceInSources(
  */
 export async function checkDriftForAll(
   installations: ManagedInstallation[],
-  sources: Source[] | ReadonlyMap<string, Source> | Map<string, Source>,
+  sources: SourceLookupInput,
   homeRootOrOptions?: string | CheckDriftForAllOptions,
   options?: CheckDriftForAllOptions
 ): Promise<DriftReport[]> {
@@ -432,22 +551,29 @@ export async function checkDriftForAll(
   const concurrency = opts?.concurrency ?? 4;
   const resolutions = opts?.resolutions ?? new Map<string, { resolution?: SourceResolution; error?: Error }>();
 
-  // 1. Identify unique sources needed by the installations
+  // 1. Resolve the source for each installation and identify unique sources needed
+  const instResolutions = new Map<ManagedInstallation, ResolvedInstallationSource>();
   const neededSources = new Map<string, Source>();
+
   for (const inst of installations) {
-    if (inst.sourceId && !neededSources.has(inst.sourceId)) {
-      const src = findSourceInSources(sources, inst.sourceId);
-      if (src) {
-        neededSources.set(inst.sourceId, src);
+    if (!inst.source && !inst.sourceId) {
+      continue;
+    }
+    const resolvedSrc = resolveInstallationSource(inst, sources);
+    instResolutions.set(inst, resolvedSrc);
+    if ('source' in resolvedSrc) {
+      const key = sourceResolutionKey(resolvedSrc.source);
+      if (!neededSources.has(key)) {
+        neededSources.set(key, resolvedSrc.source);
       }
     }
   }
 
   // 2. Resolve each source once, with concurrency up to 4
-  const sourcesToResolve: Source[] = [];
-  for (const src of neededSources.values()) {
-    if (!resolutions.has(src.id)) {
-      sourcesToResolve.push(src);
+  const sourcesToResolve: Array<{ key: string; src: Source }> = [];
+  for (const [key, src] of neededSources.entries()) {
+    if (!resolutions.has(key) && !resolutions.has(src.id)) {
+      sourcesToResolve.push({ key, src });
     }
   }
 
@@ -456,16 +582,18 @@ export async function checkDriftForAll(
     { length: Math.min(concurrency, sourcesToResolve.length) },
     async () => {
       while (nextIdx < sourcesToResolve.length) {
-        const src = sourcesToResolve[nextIdx++];
+        const { key, src } = sourcesToResolve[nextIdx++];
         try {
           const resolver = getSourceResolver(src.type);
           const resolution = await resolver.resolve(src, {
             homeRoot,
             cacheDir: opts?.resolverOpts?.cacheDir,
           });
+          resolutions.set(key, { resolution });
           resolutions.set(src.id, { resolution });
         } catch (err: unknown) {
           const error = err instanceof Error ? err : new Error(String(err));
+          resolutions.set(key, { error });
           resolutions.set(src.id, { error });
         }
       }
@@ -477,11 +605,33 @@ export async function checkDriftForAll(
   // 3. Check drift for each installation
   const reports = await Promise.all(
     installations.map(async (inst) => {
-      const src = inst.sourceId ? neededSources.get(inst.sourceId) : undefined;
-      if (!src) {
+      const resolvedSrc = instResolutions.get(inst);
+      if (!resolvedSrc) {
         return analyzeLocalDrift(inst, homeRoot);
       }
-      const resEntry = resolutions.get(src.id);
+      if ('unavailable' in resolvedSrc) {
+        const localReport = await analyzeLocalDrift(inst, homeRoot);
+        if (localReport.status === 'missing-on-disk') {
+          return localReport;
+        }
+        if (inst.source) {
+          return {
+            installation: inst,
+            status: 'source-unavailable' as const,
+            hasLocalPatch: localReport.hasLocalPatch,
+            diskHash: localReport.diskHash,
+            details: resolvedSrc.hint
+              ? `${resolvedSrc.unavailable} ${resolvedSrc.hint}`
+              : resolvedSrc.unavailable,
+            ...(resolvedSrc.hint ? { hint: resolvedSrc.hint } : {}),
+          };
+        }
+        return localReport;
+      }
+
+      const src = resolvedSrc.source;
+      const key = sourceResolutionKey(src);
+      const resEntry = resolutions.get(key) ?? resolutions.get(src.id);
       return checkForUpstreamUpdate(inst, src, homeRoot, {
         resolution: resEntry?.resolution,
         resolutionError: resEntry?.error,

@@ -10,8 +10,9 @@ folders read from the live working tree, catalog vs check commit, artifact match
 
 ### 49.2 - Source identity in the provenance record and in every lookup
 
-- **Status:** `open` · **Short:** Source identity · **Size:** L · **Depends on:** 49.1
+- **Status:** `delivered` (2026-10-27) · **Short:** Source identity · **Size:** L · **Depends on:** 49.1
 - **Goal:** spec §1 `source {id, scope, type, location}` written at install; one engine status function used by Dashboard, sidebar, pendingCounts and CLI (no UI-side merging, no first-id match); git cache keyed by id + location hash; spec §6 cases 1, 2 pass; CLI/UI parity test.
+- **Result:** Aggiunto `source: { id, scope, type, location }` a `ManagedInstallation` (scritto da `planInstall`/`applyInstall` e `promoteObservedArtifact`), introdotta `resolveInstallationSource` usata in `checkDriftForAll`, `DashboardPanel`, `InstalledTreeDataProvider`, `computePendingCounts`, `planUpdateAll` e CLI (`runUpdates`, `runUpdate`, `runItem`), e aggiornata la chiave della cache git in `<sanitized id>-<short hash of location>` con riuso dei clone legacy se l'URL `origin` corrisponde; i test 1a e 2 in `src/engine/provenance.test.ts` (inclusa la parità CLI/Dashboard) sono verdi.
 
 ### 49.3 - Exact artifact match
 

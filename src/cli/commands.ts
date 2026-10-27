@@ -21,7 +21,7 @@ import {
 import { ALL_ADAPTERS, getAdapterWithHomeRoot, getAdapter } from '../adapters/registry';
 import { getSourceResolver } from '../sources/registry';
 import { scanInstalledInventory } from '../engine/discovery';
-import { checkForUpstreamUpdate, analyzeLocalDrift } from '../engine/drift';
+import { checkForUpstreamUpdate, analyzeLocalDrift, resolveInstallationSource } from '../engine/drift';
 import { planInstallMatrix } from '../engine/installMatrix';
 import { planInstall, resolveAndTranslate } from '../engine/plan';
 import { applyInstall } from '../engine/apply';
@@ -393,24 +393,46 @@ export async function runUpdates(
     const { workspaces } = await findWorkspaces(roots, scanOpts);
 
     const updates: CliUpdateItem[] = [];
+    let gSources: Source[] = [];
+    try {
+      const gManifest = await readManifest('global', undefined, homeRoot);
+      gSources = gManifest.sources.map((d) => fromDesiredSource(d, undefined, homeRoot));
+    } catch {
+      // ignore
+    }
 
     // Global scope
     if (!filterScope || filterScope === 'global') {
       try {
         const gState = await readState('global', undefined, homeRoot);
-        const gManifest = await readManifest('global', undefined, homeRoot);
-        const gSources = gManifest.sources.map((d) => fromDesiredSource(d, undefined, homeRoot));
 
         for (const inst of gState.installations) {
           if (filterAssistant && inst.assistant !== filterAssistant) continue;
           if (filterKind && inst.kind !== filterKind) continue;
 
-          const matchingSource = gSources.find((s) => s.id === inst.sourceId);
+          const resolvedSrc = resolveInstallationSource(inst, {
+            globalSources: gSources,
+            workspaceSources: [],
+          });
           let report;
-          if (matchingSource) {
-            report = await checkForUpstreamUpdate(inst, matchingSource, homeRoot);
+          if ('source' in resolvedSrc) {
+            report = await checkForUpstreamUpdate(inst, resolvedSrc.source, homeRoot);
           } else {
-            report = await analyzeLocalDrift(inst, homeRoot);
+            const localReport = await analyzeLocalDrift(inst, homeRoot);
+            if (localReport.status !== 'missing-on-disk' && inst.source) {
+              report = {
+                installation: inst,
+                status: 'source-unavailable' as const,
+                hasLocalPatch: localReport.hasLocalPatch,
+                diskHash: localReport.diskHash,
+                details: resolvedSrc.hint
+                  ? `${resolvedSrc.unavailable} ${resolvedSrc.hint}`
+                  : resolvedSrc.unavailable,
+                ...(resolvedSrc.hint ? { hint: resolvedSrc.hint } : {}),
+              };
+            } else {
+              report = localReport;
+            }
           }
 
           updates.push({
@@ -445,12 +467,29 @@ export async function runUpdates(
             if (filterAssistant && inst.assistant !== filterAssistant) continue;
             if (filterKind && inst.kind !== filterKind) continue;
 
-            const matchingSource = pSources.find((s) => s.id === inst.sourceId);
+            const resolvedSrc = resolveInstallationSource(inst, {
+              globalSources: gSources,
+              workspaceSources: pSources,
+            });
             let report;
-            if (matchingSource) {
-              report = await checkForUpstreamUpdate(inst, matchingSource, homeRoot);
+            if ('source' in resolvedSrc) {
+              report = await checkForUpstreamUpdate(inst, resolvedSrc.source, homeRoot);
             } else {
-              report = await analyzeLocalDrift(inst, homeRoot);
+              const localReport = await analyzeLocalDrift(inst, homeRoot);
+              if (localReport.status !== 'missing-on-disk' && inst.source) {
+                report = {
+                  installation: inst,
+                  status: 'source-unavailable' as const,
+                  hasLocalPatch: localReport.hasLocalPatch,
+                  diskHash: localReport.diskHash,
+                  details: resolvedSrc.hint
+                    ? `${resolvedSrc.unavailable} ${resolvedSrc.hint}`
+                    : resolvedSrc.unavailable,
+                  ...(resolvedSrc.hint ? { hint: resolvedSrc.hint } : {}),
+                };
+              } else {
+                report = localReport;
+              }
             }
 
             updates.push({
@@ -477,7 +516,8 @@ export async function runUpdates(
   const { homeRoot, workspaceRoot } = resolveRoots(opts);
 
   const allInstallations: Array<{ inst: ManagedInstallation; wsRoot?: string }> = [];
-  const allSources: Source[] = [];
+  const globalSources: Source[] = [];
+  const workspaceSources: Source[] = [];
 
   // Global state & manifest
   try {
@@ -486,7 +526,7 @@ export async function runUpdates(
       allInstallations.push({ inst });
     }
     const gManifest = await readManifest('global', undefined, homeRoot);
-    allSources.push(...gManifest.sources.map((d) => fromDesiredSource(d, undefined, homeRoot)));
+    globalSources.push(...gManifest.sources.map((d) => fromDesiredSource(d, undefined, homeRoot)));
   } catch {
     // ignore
   }
@@ -499,7 +539,7 @@ export async function runUpdates(
         allInstallations.push({ inst, wsRoot: workspaceRoot });
       }
       const pManifest = await readManifest('project', workspaceRoot, homeRoot);
-      allSources.push(...pManifest.sources.map((d) => fromDesiredSource(d, workspaceRoot, homeRoot)));
+      workspaceSources.push(...pManifest.sources.map((d) => fromDesiredSource(d, workspaceRoot, homeRoot)));
     } catch {
       // ignore
     }
@@ -512,12 +552,26 @@ export async function runUpdates(
     if (filterAssistant && inst.assistant !== filterAssistant) continue;
     if (filterKind && inst.kind !== filterKind) continue;
 
-    const matchingSource = allSources.find((s) => s.id === inst.sourceId);
+    const resolvedSrc = resolveInstallationSource(inst, { globalSources, workspaceSources });
     let report;
-    if (matchingSource) {
-      report = await checkForUpstreamUpdate(inst, matchingSource, homeRoot);
+    if ('source' in resolvedSrc) {
+      report = await checkForUpstreamUpdate(inst, resolvedSrc.source, homeRoot);
     } else {
-      report = await analyzeLocalDrift(inst, homeRoot);
+      const localReport = await analyzeLocalDrift(inst, homeRoot);
+      if (localReport.status !== 'missing-on-disk' && inst.source) {
+        report = {
+          installation: inst,
+          status: 'source-unavailable' as const,
+          hasLocalPatch: localReport.hasLocalPatch,
+          diskHash: localReport.diskHash,
+          details: resolvedSrc.hint
+            ? `${resolvedSrc.unavailable} ${resolvedSrc.hint}`
+            : resolvedSrc.unavailable,
+          ...(resolvedSrc.hint ? { hint: resolvedSrc.hint } : {}),
+        };
+      } else {
+        report = localReport;
+      }
     }
 
     updates.push({
@@ -633,17 +687,18 @@ export async function runItem(
   }
 
   // Gather sources
-  const allSources: Source[] = [];
+  const globalSources: Source[] = [];
+  const workspaceSources: Source[] = [];
   try {
     const gManifest = await readManifest('global', undefined, homeRoot);
-    allSources.push(...gManifest.sources.map((d) => fromDesiredSource(d, undefined, homeRoot)));
+    globalSources.push(...gManifest.sources.map((d) => fromDesiredSource(d, undefined, homeRoot)));
   } catch {
     // ignore
   }
   for (const ws of targetWorkspaces) {
     try {
       const pManifest = await readManifest('project', ws, homeRoot);
-      allSources.push(...pManifest.sources.map((d) => fromDesiredSource(d, ws, homeRoot)));
+      workspaceSources.push(...pManifest.sources.map((d) => fromDesiredSource(d, ws, homeRoot)));
     } catch {
       // ignore
     }
@@ -711,8 +766,16 @@ export async function runItem(
   const sourceId = targetManaged?.sourceId || targetObserved?.match?.sourceId;
   const artifactId = targetManaged?.artifactId || targetObserved?.match?.artifactId;
 
-  if (sourceId) {
-    const source = allSources.find((s) => s.id === sourceId);
+  if (sourceId || targetManaged?.source) {
+    let source: Source | undefined;
+    if (targetManaged) {
+      const resolvedSrc = resolveInstallationSource(targetManaged, { globalSources, workspaceSources });
+      if ('source' in resolvedSrc) source = resolvedSrc.source;
+    } else if (sourceId) {
+      const preferred = item.scope === 'global' ? globalSources : workspaceSources;
+      const fallback = item.scope === 'global' ? workspaceSources : globalSources;
+      source = preferred.find((s) => s.id === sourceId) ?? fallback.find((s) => s.id === sourceId);
+    }
     if (source) {
       try {
         const resolver = getSourceResolver(source.type);
@@ -1531,13 +1594,14 @@ export async function runUpdate(
   const { homeRoot, workspaceRoot } = resolveRoots(opts);
 
   const allInstallations: ManagedInstallation[] = [];
-  const allSources: Source[] = [];
+  const globalSources: Source[] = [];
+  const workspaceSources: Source[] = [];
 
   try {
     const gState = await readState('global', undefined, homeRoot);
     allInstallations.push(...gState.installations);
     const gManifest = await readManifest('global', undefined, homeRoot);
-    allSources.push(...gManifest.sources.map((d) => fromDesiredSource(d, undefined, homeRoot)));
+    globalSources.push(...gManifest.sources.map((d) => fromDesiredSource(d, undefined, homeRoot)));
   } catch {
     // ignore
   }
@@ -1547,7 +1611,7 @@ export async function runUpdate(
       const pState = await readState('project', workspaceRoot, homeRoot);
       allInstallations.push(...pState.installations);
       const pManifest = await readManifest('project', workspaceRoot, homeRoot);
-      allSources.push(...pManifest.sources.map((d) => fromDesiredSource(d, workspaceRoot, homeRoot)));
+      workspaceSources.push(...pManifest.sources.map((d) => fromDesiredSource(d, workspaceRoot, homeRoot)));
     } catch {
       // ignore
     }
@@ -1576,7 +1640,7 @@ export async function runUpdate(
 
   const planResult = await planUpdateAll({
     installations: targetInstallations,
-    sources: allSources,
+    sources: { globalSources, workspaceSources },
     filter: {
       scope: filterScope,
       assistant: filterAssistant,

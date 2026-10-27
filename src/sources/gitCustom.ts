@@ -93,7 +93,7 @@ export async function resolveGitCustom(
   if (source.branch) validateGitRef('branch', source.branch);
 
   const baseCacheDir = opts?.cacheDir ?? path.join(opts?.homeRoot ?? os.homedir(), '.ai-swissknife', 'cache', 'sources');
-  const { targetDir } = resolveAndValidateCacheDir(baseCacheDir, source.id);
+  const { targetDir } = resolveAndValidateCacheDir(baseCacheDir, source.id, source.url);
 
   return gitCustomMutex.runExclusive(targetDir, async () => {
     if (fs.existsSync(targetDir) && !fs.existsSync(path.join(targetDir, '.git'))) {
@@ -350,7 +350,7 @@ export async function resolveArtifactContent(
     throw new Error(`Artifact packageId mismatch: expected "${pkg.id}", got "${artifact.packageId}"`);
   }
   const baseCacheDir = opts?.cacheDir ?? path.join(opts?.homeRoot ?? os.homedir(), '.ai-swissknife', 'cache', 'sources');
-  const { targetDir } = resolveAndValidateCacheDir(baseCacheDir, source.id);
+  const { targetDir } = resolveAndValidateCacheDir(baseCacheDir, source.id, source.url);
 
   let commit = pkg.version?.commit;
   if (!commit) {

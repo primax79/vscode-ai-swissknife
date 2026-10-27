@@ -14,7 +14,14 @@ import { getAdapter, getAdapterWithHomeRoot } from '../adapters/registry';
 import { getSourceResolver } from '../sources/registry';
 import { planInstall } from './plan';
 import { applyInstall } from './apply';
-import { checkForUpstreamUpdate, analyzeLocalDrift, checkDriftForAll } from './drift';
+import {
+  checkForUpstreamUpdate,
+  analyzeLocalDrift,
+  checkDriftForAll,
+  resolveInstallationSource,
+  sourceResolutionKey,
+  type SourceLookupInput,
+} from './drift';
 import { manifestPath, readState, writeState, withStateLock } from '../domain/registry';
 import { copyToTrash } from './softDelete';
 import type { DriftReport, PreparedInstall } from './types';
@@ -39,7 +46,7 @@ export interface UpdateFilter {
 
 export interface PlanUpdateAllParams {
   installations: ManagedInstallation[];
-  sources: Source[] | ReadonlyMap<string, Source> | Map<string, Source>;
+  sources: SourceLookupInput;
   reports?: DriftReport[] | ReadonlyMap<string, DriftReport> | Map<string, DriftReport>;
   filter?: UpdateFilter;
   includeModified?: boolean;
@@ -211,19 +218,6 @@ export async function planUpdate(
   });
 }
 
-function findSource(
-  sources: Source[] | ReadonlyMap<string, Source> | Map<string, Source>,
-  sourceId: string
-): Source | undefined {
-  if (Array.isArray(sources)) {
-    return sources.find((s) => s.id === sourceId);
-  }
-  if (sources && typeof (sources as any).get === 'function') {
-    return (sources as Map<string, Source>).get(sourceId);
-  }
-  return undefined;
-}
-
 function isSameInstallation(a: ManagedInstallation, b: ManagedInstallation): boolean {
   if (a === b) return true;
   return (
@@ -329,8 +323,8 @@ export async function planUpdateAll(params: PlanUpdateAllParams): Promise<PlanUp
       continue;
     }
 
-    // 2. Check sourceId
-    if (!inst.sourceId) {
+    // 2. Check source identity / sourceId
+    if (!inst.source && !inst.sourceId) {
       cannotUpdate.push({
         installation: inst,
         reason: `Cannot update "${inst.name}": no source ID recorded.`,
@@ -339,20 +333,24 @@ export async function planUpdateAll(params: PlanUpdateAllParams): Promise<PlanUp
     }
 
     // 3. Find source in manifest
-    const source = findSource(sources, inst.sourceId);
-    if (!source) {
+    const resolvedSource = resolveInstallationSource(inst, sources);
+    if ('unavailable' in resolvedSource) {
       cannotUpdate.push({
         installation: inst,
-        reason: `Source "${inst.sourceId}" not found in manifest.`,
+        reason: resolvedSource.hint
+          ? `${resolvedSource.unavailable} ${resolvedSource.hint}`
+          : resolvedSource.unavailable,
       });
       continue;
     }
+    const source = resolvedSource.source;
+    const resKey = sourceResolutionKey(source);
 
     // 4. Drift report
     let report = findReport(effectiveReports, inst);
     if (!report) {
       try {
-        const resEntry = sourceResolutions.get(source.id);
+        const resEntry = sourceResolutions.get(resKey) ?? sourceResolutions.get(source.id);
         report = await checkForUpstreamUpdate(inst, source, homeRoot, {
           resolution: resEntry?.resolution,
           resolutionError: resEntry?.error,
@@ -368,11 +366,19 @@ export async function planUpdateAll(params: PlanUpdateAllParams): Promise<PlanUp
       }
     }
 
-    // 5. Missing on disk
+    // 5. Missing on disk / source unavailable
     if (report.status === 'missing-on-disk') {
       cannotUpdate.push({
         installation: inst,
         reason: report.details ?? `Item is missing on disk at ${inst.path}`,
+        report,
+      });
+      continue;
+    }
+    if (report.status === 'source-unavailable' || report.status === 'provenance-unknown') {
+      cannotUpdate.push({
+        installation: inst,
+        reason: report.details ?? `Source "${source.id}" is unavailable.`,
         report,
       });
       continue;
@@ -418,7 +424,7 @@ export async function planUpdateAll(params: PlanUpdateAllParams): Promise<PlanUp
     }
 
     // 7. Resolve source (once per source across run)
-    let resEntry = sourceResolutions.get(source.id);
+    let resEntry = sourceResolutions.get(resKey) ?? sourceResolutions.get(source.id);
     if (!resEntry) {
       try {
         const resolver = getSourceResolver(source.type);
@@ -427,10 +433,12 @@ export async function planUpdateAll(params: PlanUpdateAllParams): Promise<PlanUp
           cacheDir: resolverOpts?.cacheDir,
         });
         resEntry = { resolution };
+        sourceResolutions.set(resKey, resEntry);
         sourceResolutions.set(source.id, resEntry);
       } catch (err: unknown) {
         const error = err instanceof Error ? err : new Error(String(err));
         resEntry = { error };
+        sourceResolutions.set(resKey, resEntry);
         sourceResolutions.set(source.id, resEntry);
       }
     }

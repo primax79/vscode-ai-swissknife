@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as crypto from 'crypto';
 import type { ManagedInstallation, ObservedArtifact, Source, AssistantId, Scope, ItemKind } from '../domain/types';
 import { readState, writeState, readManifest, fromDesiredSource, withStateLock } from '../domain/registry';
-import { analyzeLocalDrift, checkDriftForAll } from '../engine/drift';
+import { analyzeLocalDrift, checkDriftForAll, resolveInstallationSource } from '../engine/drift';
 import { scanInstalledInventory, promoteObservedArtifact } from '../engine/discovery';
 import { planSync } from '../engine/sync';
 import { applyInstall } from '../engine/apply';
@@ -465,13 +465,14 @@ export class InstalledTreeDataProvider {
   async checkDrift(): Promise<void> {
     this.driftReports.clear();
     const allInstallations: ManagedInstallation[] = [];
-    const allSources: Source[] = [];
+    const globalSources: Source[] = [];
+    const workspaceSources: Source[] = [];
 
     try {
       const gState = await readState('global', undefined, this.homeRoot);
       allInstallations.push(...gState.installations);
       const gManifest = await readManifest('global', undefined, this.homeRoot);
-      allSources.push(...gManifest.sources.map((d) => fromDesiredSource(d)));
+      globalSources.push(...gManifest.sources.map((d) => fromDesiredSource(d, undefined, this.homeRoot)));
     } catch {
       // ignore
     }
@@ -483,7 +484,7 @@ export class InstalledTreeDataProvider {
         const pState = await readState('project', projectRoot, this.homeRoot);
         allInstallations.push(...pState.installations);
         const pManifest = await readManifest('project', projectRoot, this.homeRoot);
-        allSources.push(...pManifest.sources.map((d) => fromDesiredSource(d, projectRoot)));
+        workspaceSources.push(...pManifest.sources.map((d) => fromDesiredSource(d, projectRoot, this.homeRoot)));
       } catch {
         // ignore
       }
@@ -493,7 +494,11 @@ export class InstalledTreeDataProvider {
     let updateCount = 0;
     let missingCount = 0;
 
-    const reports = await checkDriftForAll(allInstallations, allSources, this.homeRoot);
+    const reports = await checkDriftForAll(
+      allInstallations,
+      { globalSources, workspaceSources },
+      this.homeRoot
+    );
 
     for (const report of reports) {
       this.driftReports.set(this.getInstallKey(report.installation), report);
@@ -548,31 +553,40 @@ export class InstalledTreeDataProvider {
   }
 
   async doUpdateInstallation(inst: ManagedInstallation): Promise<void> {
-    if (!inst.sourceId) {
+    if (!inst.source && !inst.sourceId) {
       vscode.window.showWarningMessage(`Cannot update "${inst.name}": no source ID recorded.`);
       return;
     }
 
-    let source: Source | undefined;
-    let projectRoot: string | undefined;
+    const globalSources: Source[] = [];
+    const workspaceSources: Source[] = [];
+    const projectRoot = inst.projectPath ?? (await getWorkspaceRoot());
 
-    if (inst.scope === 'project') {
-      projectRoot = inst.projectPath ?? (await getWorkspaceRoot());
-      if (projectRoot) {
-        const pManifest = await readManifest('project', projectRoot, this.homeRoot);
-        const desired = pManifest.sources.find((s) => s.id === inst.sourceId);
-        if (desired) source = fromDesiredSource(desired, projectRoot);
-      }
-    } else {
+    try {
       const gManifest = await readManifest('global', undefined, this.homeRoot);
-      const desired = gManifest.sources.find((s) => s.id === inst.sourceId);
-      if (desired) source = fromDesiredSource(desired);
+      globalSources.push(...gManifest.sources.map((d) => fromDesiredSource(d, undefined, this.homeRoot)));
+    } catch {
+      // ignore
+    }
+    if (projectRoot) {
+      try {
+        const pManifest = await readManifest('project', projectRoot, this.homeRoot);
+        workspaceSources.push(...pManifest.sources.map((d) => fromDesiredSource(d, projectRoot, this.homeRoot)));
+      } catch {
+        // ignore
+      }
     }
 
-    if (!source) {
-      vscode.window.showErrorMessage(`Source "${inst.sourceId}" not found in manifest.`);
+    const resolvedSrc = resolveInstallationSource(inst, { globalSources, workspaceSources });
+    if ('unavailable' in resolvedSrc) {
+      vscode.window.showErrorMessage(
+        resolvedSrc.hint
+          ? `${resolvedSrc.unavailable} ${resolvedSrc.hint}`
+          : `Source "${inst.source?.id ?? inst.sourceId}" not found in manifest.`
+      );
       return;
     }
+    const source = resolvedSrc.source;
 
     const prepared = await planUpdate(inst, source, { homeRoot: this.homeRoot });
 
@@ -619,13 +633,14 @@ export class InstalledTreeDataProvider {
     }
 
     const allInstallations: ManagedInstallation[] = [];
-    const allSources: Source[] = [];
+    const globalSources: Source[] = [];
+    const workspaceSources: Source[] = [];
 
     try {
       const gState = await readState('global', undefined, this.homeRoot);
       allInstallations.push(...gState.installations);
       const gManifest = await readManifest('global', undefined, this.homeRoot);
-      allSources.push(...gManifest.sources.map((d) => fromDesiredSource(d)));
+      globalSources.push(...gManifest.sources.map((d) => fromDesiredSource(d, undefined, this.homeRoot)));
     } catch {
       // ignore
     }
@@ -638,14 +653,16 @@ export class InstalledTreeDataProvider {
         const pState = await readState('project', projectRoot, this.homeRoot);
         allInstallations.push(...pState.installations);
         const pManifest = await readManifest('project', projectRoot, this.homeRoot);
-        allSources.push(...pManifest.sources.map((d) => fromDesiredSource(d, projectRoot)));
+        workspaceSources.push(...pManifest.sources.map((d) => fromDesiredSource(d, projectRoot, this.homeRoot)));
       } catch {
         // ignore
       }
     }
 
+    const sourceLists = { globalSources, workspaceSources };
+
     // 1. Drift check once
-    const reports = await checkDriftForAll(allInstallations, allSources, this.homeRoot);
+    const reports = await checkDriftForAll(allInstallations, sourceLists, this.homeRoot);
     for (const report of reports) {
       this.driftReports.set(this.getInstallKey(report.installation), report);
     }
@@ -654,7 +671,7 @@ export class InstalledTreeDataProvider {
     // 2. Plan update all
     const plan = await planUpdateAll({
       installations: allInstallations,
-      sources: allSources,
+      sources: sourceLists,
       reports,
       filter,
       homeRoot: this.homeRoot,
@@ -734,7 +751,7 @@ export class InstalledTreeDataProvider {
     if (choice === btnModified) {
       finalPlan = await planUpdateAll({
         installations: allInstallations,
-        sources: allSources,
+        sources: sourceLists,
         reports,
         filter,
         includeModified: true,
@@ -1187,22 +1204,26 @@ export class InstalledTreeDataProvider {
     }
 
     let source: Source | undefined;
-    if (scope === 'project') {
-      const pRoot = projectRoot ?? await getWorkspaceRoot();
-      if (pRoot) {
-        try {
-          const pManifest = await readManifest('project', pRoot);
-          const desired = pManifest.sources.find((s) => s.id === sourceId);
-          if (desired) source = fromDesiredSource(desired, pRoot);
-        } catch { /* ignore */ }
-      }
-    }
-    if (!source) {
+    const globalSources: Source[] = [];
+    const workspaceSources: Source[] = [];
+    try {
+      const gManifest = await readManifest('global', undefined, this.homeRoot);
+      globalSources.push(...gManifest.sources.map((d) => fromDesiredSource(d, undefined, this.homeRoot)));
+    } catch { /* ignore */ }
+    const pRoot = projectRoot ?? (await getWorkspaceRoot());
+    if (pRoot) {
       try {
-        const gManifest = await readManifest('global');
-        const desired = gManifest.sources.find((s) => s.id === sourceId);
-        if (desired) source = fromDesiredSource(desired);
+        const pManifest = await readManifest('project', pRoot, this.homeRoot);
+        workspaceSources.push(...pManifest.sources.map((d) => fromDesiredSource(d, pRoot, this.homeRoot)));
       } catch { /* ignore */ }
+    }
+    if ('installedAt' in item) {
+      const resolvedSrc = resolveInstallationSource(item, { globalSources, workspaceSources });
+      if ('source' in resolvedSrc) source = resolvedSrc.source;
+    } else {
+      const preferred = scope === 'global' ? globalSources : workspaceSources;
+      const fallback = scope === 'global' ? workspaceSources : globalSources;
+      source = preferred.find((s) => s.id === sourceId) ?? fallback.find((s) => s.id === sourceId);
     }
 
     if (!source) {

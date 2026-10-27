@@ -46,7 +46,7 @@ export async function resolveGitSingleItem(
   if (source.branch) validateGitRef('branch', source.branch);
 
   const baseCacheDir = opts?.cacheDir ?? path.join(opts?.homeRoot ?? os.homedir(), '.ai-swissknife', 'cache', 'sources');
-  const { targetDir } = resolveAndValidateCacheDir(baseCacheDir, source.id);
+  const { targetDir } = resolveAndValidateCacheDir(baseCacheDir, source.id, source.url);
 
   return gitSingleItemMutex.runExclusive(targetDir, async () => {
     if (fs.existsSync(targetDir) && !fs.existsSync(path.join(targetDir, '.git'))) {
@@ -157,7 +157,7 @@ export async function resolveArtifactContent(
   opts?: { cacheDir?: string; homeRoot?: string }
 ): Promise<ResolvedArtifact<CanonicalSkill | CanonicalAgent | CanonicalCommand | CanonicalMcpServer | CanonicalHook | CanonicalRule>> {
   const baseCacheDir = opts?.cacheDir ?? path.join(opts?.homeRoot ?? os.homedir(), '.ai-swissknife', 'cache', 'sources');
-  const { targetDir } = resolveAndValidateCacheDir(baseCacheDir, source.id);
+  const { targetDir } = resolveAndValidateCacheDir(baseCacheDir, source.id, source.url);
 
   return gitSingleItemMutex.runExclusive(targetDir, async () => {
     if (artifact.kind === 'skill') {

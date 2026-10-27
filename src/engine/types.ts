@@ -6,6 +6,7 @@ import type {
   Artifact,
   ResolvedRevision,
   ManagedInstallation,
+  InstallationSourceIdentity,
 } from '../domain/types';
 import type {
   CanonicalSkill,
@@ -40,6 +41,7 @@ export interface ExistingFile {
 
 export interface SupportedInstallPlan {
   supported: true;
+  source?: InstallationSourceIdentity;
   sourceId: string;
   packageId: string;
   artifactId: string;
@@ -110,7 +112,9 @@ export type DriftStatus =
   | 'modified-locally'
   | 'update-available'
   | 'modified-and-update-available'
-  | 'missing-on-disk';
+  | 'missing-on-disk'
+  | 'source-unavailable'
+  | 'provenance-unknown';
 
 export interface DriftReport {
   installation: ManagedInstallation;
@@ -119,6 +123,7 @@ export interface DriftReport {
   diskHash?: string;
   sourceHash?: string;
   details?: string;
+  hint?: string;
 }
 
 export interface PlanInstallParams {

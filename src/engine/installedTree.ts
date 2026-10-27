@@ -54,6 +54,8 @@ export type ManagedPlaceState =
   | 'modified-locally'
   | 'modified-and-update-available'
   | 'missing-on-disk'
+  | 'source-unavailable'
+  | 'provenance-unknown'
   | 'disabled';
 
 export type UnmanagedPlaceState =
@@ -102,6 +104,8 @@ export const STATE_SEVERITY: Readonly<Record<PlaceState, number>> = Object.freez
   'modified-and-update-available': 8,
   'update-available': 7,
   'modified-locally': 6,
+  'source-unavailable': 5,
+  'provenance-unknown': 5,
   'different': 5,
   'local-only': 4,
   'checking': 3,
