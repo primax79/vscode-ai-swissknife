@@ -1,21 +1,21 @@
-# 22 — Project-scoped recommended installations — Summary
+# 22 — Installazioni consigliate a livello di progetto — Riepilogo
 
-> **Closed on:** 2026-10-27 (registry tidy; verifier ai-coding-tools-c1)  
-> **Initiative:** 22 — Project-scoped recommended installations  
-> **Status:** ✅ Done and merged into main
+> **Closed on:** 2026-10-27 (riordino del registro; verificatore ai-coding-tools-c1)  
+> **Initiative:** 22 — Installazioni consigliate a livello di progetto  
+> **Status:** ✅ Completato e unito in main
 
-Summary written at closure from the plan and the git history; the per-task specs in this folder hold the detail.
+Riepilogo scritto alla chiusura a partire dal piano e dalla cronologia git; le specifiche dei singoli task in questa cartella contengono i dettagli.
 
-## What was built
+## Cosa è stato realizzato
 
-- **22.1 Recommend/unrecommend commands + tree decoration** — merged 66952f8 2026-09-07; commit 903c814. Add context-menu actions on Available and Installed items to write or remove `DesiredInstallation` entries in the project manifest with a Recommended decoration and dual-view refresh.
-- **22.2 Recommendation resolution engine** — merged 716cdbc 2026-09-07; commit d170427. Implement pure `resolveRecommendations` in `src/engine/recommendations.ts` classifying `desiredInstallations` against `state.json` and source resolution attempts into `satisfied`, `pending`, and `broken`.
-- **22.3 "Install Recommended" command + Available-view "Recommended" filter** — merged 0b01b26 2026-09-07; commit 2b45d66. Add the `aiSwissknife.installRecommended` command and the `Recommended` grouping in `AvailableTreeDataProvider` using per-entry target assistant/scope installation.
-- **22.4 Workspace-open detection + notification** — merged 1612940 2026-09-07; commit 4252ad6. Wire a local-only unsatisfied-recommendations check on activation offering `Install All`, `Review`, and `Don't ask again for this workspace`.
-- **22.5 Git hygiene for the shared manifest** — merged 8ff9218 2026-09-07; commit fde6da7. Ensure `writeManifest` at project scope non-destructively appends the project `state.json` path to an existing `.gitignore`.
+- **22.1 Comandi recommend/unrecommend + decorazione dell'albero** — unito in 66952f8 2026-09-07; commit 903c814. Aggiungere azioni del menu contestuale sugli elementi Available e Installed per scrivere o rimuovere voci `DesiredInstallation` nel manifesto del progetto con una decorazione Recommended e l'aggiornamento di entrambe le viste.
+- **22.2 Motore di risoluzione delle raccomandazioni** — unito in 716cdbc 2026-09-07; commit d170427. Implementare la funzione pura `resolveRecommendations` in `src/engine/recommendations.ts` classificando `desiredInstallations` rispetto a `state.json` e ai tentativi di risoluzione delle sorgenti in `satisfied`, `pending` e `broken`.
+- **22.3 Comando "Install Recommended" + filtro "Recommended" nella vista Available** — unito in 0b01b26 2026-09-07; commit 2b45d66. Aggiungere il comando `aiSwissknife.installRecommended` e il raggruppamento `Recommended` in `AvailableTreeDataProvider` usando l'installazione sull'assistente/scope di destinazione specifico di ciascuna voce.
+- **22.4 Rilevamento all'apertura del workspace + notifica** — unito in 1612940 2026-09-07; commit 4252ad6. Collegare all'attivazione un controllo esclusivamente locale delle raccomandazioni non soddisfatte che offra `Install All`, `Review` e `Don't ask again for this workspace`.
+- **22.5 Igiene Git per il manifesto condiviso** — unito in 8ff9218 2026-09-07; commit fde6da7. Garantire che `writeManifest` a livello di progetto accodi in modo non distruttivo il percorso `state.json` del progetto a un `.gitignore` esistente.
 
 ## Verification
 
-- Every task's work is merged into `main` (evidence: the commits named above, from `git log --grep '<id>'`).
-- `npm test` on `main` at 5e85109 (2026-10-27): 577 tests, 576 pass, 0 fail, 1 opt-in skip (`AISK_REAL_KILO=1`).
-- `ai-orch tasks validate --tasks-dir tasks`: 0 errors.
+- Il lavoro di ogni task è stato unito in `main` (evidenza: i commit indicati sopra, da `git log --grep '<id>'`).
+- `npm test` su `main` a 5e85109 (2026-10-27): 577 test, 576 superati, 0 falliti, 1 saltato opzionale (`AISK_REAL_KILO=1`).
+- `ai-orch tasks validate --tasks-dir tasks`: 0 errori.

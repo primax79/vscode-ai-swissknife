@@ -1,30 +1,30 @@
-# 23 — Cross-framework identity lookup + shared content accessor — Implementation plan
+# 23 — Ricerca di identità cross-framework + accessor condiviso dei contenuti — Piano di implementazione
 
-> **Derived from spec:** [`../specs/phase-6-spec.md`](../../specs/phase-6-spec.md) §4.1, §4.2 (accessor half), §3
+> **Derived from spec:** [`../specs/phase-6-spec.md`](../../specs/phase-6-spec.md) §4.1, §4.2 (metà accessor), §3
 
-Tasks (each = one commit):
+Task (ciascuno = un commit):
 
 ## Tasks
 
-## Task order and gating
+## Ordine dei task e vincoli di sequenza
 
-- **23.1 gates 23.2** (23.2 calls what 23.1 extracts).
-- **23.3 is independent** of 23.1/23.2 — it only reads `ManagedInstallation[]`, no source resolution involved.
-- Initiative 24 (diff) depends on 23.2; initiative 26's detail panel depends on 23.3. Preview (24.2) and the rest of Phase 6 do not depend on this initiative at all.
+- **23.1 blocca 23.2** (23.2 chiama ciò che 23.1 estrae).
+- **23.3 è indipendente** da 23.1/23.2 — legge solamente `ManagedInstallation[]`, senza alcuna risoluzione delle sorgenti.
+- L'iniziativa 24 (diff) dipende da 23.2; il pannello di dettaglio dell'iniziativa 26 dipende da 23.3. L'anteprima (24.2) e il resto della Fase 6 non dipendono affatto da questa iniziativa.
 
 ## Closed
 
-### 23.1 - Extract shared resolve+translate content accessor
+### 23.1 - Estrarre l'accessor condiviso dei contenuti resolve+translate
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Shared resolveAndTranslate accessor · **Size:** M · **Depends on:** 13, 14 · **Spec:** [23.1-shared-content-accessor.md](23.1-shared-content-accessor.md)
-- **Goal:** Extract `resolveContentFromSource` and per-kind translation calls from `plan.ts` into a shared `resolveAndTranslate` content accessor supporting all 5 source types and 6 artifact kinds.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Accessor condiviso resolveAndTranslate · **Size:** M · **Depends on:** 13, 14 · **Spec:** [23.1-shared-content-accessor.md](23.1-shared-content-accessor.md)
+- **Goal:** Estrarre `resolveContentFromSource` e le chiamate di traduzione per tipo da `plan.ts` in un accessor condiviso dei contenuti `resolveAndTranslate` che supporti tutti e 5 i tipi di sorgente e i 6 tipi di artefatto.
 
-### 23.2 - Migrate drift.ts and discovery.ts onto the shared accessor
+### 23.2 - Migrare drift.ts e discovery.ts sull'accessor condiviso
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Migrate drift and discovery · **Size:** M · **Depends on:** 23.1 · **Spec:** [23.2-migrate-drift-discovery.md](23.2-migrate-drift-discovery.md)
-- **Goal:** Replace inline resolve-and-translate logic in `drift.ts` and `discovery.ts` with calls to `resolveAndTranslate`, closing the `hook` and `rule` drift/discovery gap.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Migrazione drift e discovery · **Size:** M · **Depends on:** 23.1 · **Spec:** [23.2-migrate-drift-discovery.md](23.2-migrate-drift-discovery.md)
+- **Goal:** Sostituire la logica inline di risoluzione e traduzione in `drift.ts` e `discovery.ts` con chiamate a `resolveAndTranslate`, colmando la lacuna di drift/rilevamento per `hook` e `rule`.
 
-### 23.3 - Cross-framework identity lookup function
+### 23.3 - Funzione di ricerca di identità cross-framework
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Cross-framework identity lookup · **Size:** S · **Depends on:** 13, 14 · **Spec:** [23.3-cross-framework-lookup.md](23.3-cross-framework-lookup.md)
-- **Goal:** Implement `findRelatedInstallations` in `src/engine/crossFrameworkLookup.ts` to find all `ManagedInstallation` records representing the same logical artifact across assistants and scopes.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Ricerca identità cross-framework · **Size:** S · **Depends on:** 13, 14 · **Spec:** [23.3-cross-framework-lookup.md](23.3-cross-framework-lookup.md)
+- **Goal:** Implementare `findRelatedInstallations` in `src/engine/crossFrameworkLookup.ts` per trovare tutti i record `ManagedInstallation` che rappresentano lo stesso artefatto logico tra assistenti e scope.
