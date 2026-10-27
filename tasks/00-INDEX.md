@@ -204,7 +204,13 @@ Emergent tasks (`T###`) sit beside the initiatives; see [`AGENTS.md`](AGENTS.md)
 No emergent tasks yet. Add a category folder (`tasks/<category>/` with a `README.md` and `notes/`) with the first task.
 
 <!-- ai-orch:generated tasks-by-category -->
+### tests
 
+Tasks in `tests`. Owner session: unassigned ([README](tests/README.md)).
+
+| Id | Priority | Task | State | Executor | Depends on |
+| --- | --- | --- | --- | --- | --- |
+| T001 (Test senza HOME reale) | P3 | [Test di discovery indipendenti dalla HOME reale](tests/T001-test-di-discovery-indipendenti-dalla-home-reale.md) | open | kilo | - |
 <!-- /ai-orch:generated tasks-by-category -->
 
 ## Decisions waiting
