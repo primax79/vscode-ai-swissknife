@@ -1,5 +1,6 @@
 import * as crypto from 'crypto';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import type {
   CanonicalSkill,
@@ -9,7 +10,15 @@ import type {
   CanonicalHook,
   CanonicalRule,
 } from '../adapters/types';
-import { toInstallationSourceIdentity, type ResolvedArtifact, type Source, type Package, type Artifact, type AssistantId } from '../domain/types';
+import {
+  toInstallationSourceIdentity,
+  type ResolvedArtifact,
+  type ResolvedRevision,
+  type Source,
+  type Package,
+  type Artifact,
+  type AssistantId,
+} from '../domain/types';
 import {
   serializeSkillMarkdown,
   serializeClaudeAgentMarkdown,
@@ -28,10 +37,16 @@ import {
   canonicalRuleHash,
 } from '../adapters/codec';
 import { resolveArtifactContent as resolveLocalFolderContent } from '../sources/localFolder';
-import { resolveArtifactContent as resolveGitCustomContent } from '../sources/gitCustom';
-import { resolveArtifactContent as resolveGitMarketplaceContent } from '../sources/gitMarketplace';
-import { resolveArtifactContent as resolveGitSingleItemContent } from '../sources/gitSingleItem';
+import { resolveArtifactContent as resolveGitCustomContent, gitCustomMutex } from '../sources/gitCustom';
+import { resolveArtifactContent as resolveGitMarketplaceContent, gitMarketplaceMutex } from '../sources/gitMarketplace';
+import { resolveArtifactContent as resolveGitSingleItemContent, gitSingleItemMutex } from '../sources/gitSingleItem';
 import { resolveArtifactContent as resolveRemoteUrlContent } from '../sources/remoteUrl';
+import {
+  runGit,
+  validateGitUrl,
+  validateGitRef,
+  resolveAndValidateCacheDir,
+} from '../sources/gitProcess';
 import { translateSkill } from '../translator/skill';
 import { translateAgent } from '../translator/agent';
 import { translateCommand } from '../translator/command';
@@ -55,6 +70,104 @@ function computePlanSourceRevision(source: Source, pkg: Package) {
     return { ...pkg.version, dirty: false };
   }
   return pkg.version;
+}
+
+async function getDefaultBranchForClone(cwd: string): Promise<string> {
+  try {
+    const { stdout } = await runGit(['symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], cwd);
+    return stdout.trim().replace(/^origin\//, '');
+  } catch {
+    // fallback
+  }
+
+  try {
+    const { stdout } = await runGit(['branch', '--show-current'], cwd);
+    const current = stdout.trim();
+    if (current) {
+      return current;
+    }
+  } catch {
+    // fallback
+  }
+
+  return 'main';
+}
+
+/**
+ * Resolves a git source's requested ref at install time (spec §3 rule 4),
+ * fetching/cloning and checking out/resetting to the requested ref rather than
+ * trusting a potentially stale `pkg.version.commit` from when the catalog loaded.
+ */
+async function resolveGitSourceRefAtInstallTime(
+  source: Source,
+  opts?: { cacheDir?: string; homeRoot?: string }
+): Promise<ResolvedRevision> {
+  validateGitUrl(source.type, source.url, source.id);
+  if (source.commit) validateGitRef('commit', source.commit);
+  if (source.tag) validateGitRef('tag', source.tag);
+  if (source.branch) validateGitRef('branch', source.branch);
+
+  const baseCacheDir =
+    opts?.cacheDir ?? path.join(opts?.homeRoot ?? os.homedir(), '.ai-swissknife', 'cache', 'sources');
+  const { targetDir } = resolveAndValidateCacheDir(baseCacheDir, source.id, source.url);
+
+  const mutex =
+    source.type === 'git-marketplace'
+      ? gitMarketplaceMutex
+      : source.type === 'git-single-item'
+      ? gitSingleItemMutex
+      : gitCustomMutex;
+
+  return mutex.runExclusive(targetDir, async () => {
+    if (fs.existsSync(targetDir) && !fs.existsSync(path.join(targetDir, '.git'))) {
+      const resolvedTarget = path.resolve(targetDir);
+      const resolvedBase = path.resolve(baseCacheDir);
+      if (!resolvedTarget.startsWith(resolvedBase + path.sep)) {
+        throw new Error(`Refusing to remove directory outside cache base: "${resolvedTarget}"`);
+      }
+      await fs.promises.rm(targetDir, { recursive: true, force: true });
+    }
+
+    const isExistingRepo = fs.existsSync(path.join(targetDir, '.git'));
+    if (isExistingRepo) {
+      await runGit(['fetch', '--all', '--tags', '--prune'], targetDir);
+    } else {
+      await fs.promises.mkdir(path.dirname(targetDir), { recursive: true });
+      await runGit(['clone', '--', source.url!, targetDir]);
+    }
+
+    let requestedRef: string | undefined;
+    if (source.commit) {
+      requestedRef = source.commit;
+      await runGit(['checkout', source.commit, '--'], targetDir);
+    } else if (source.tag) {
+      requestedRef = source.tag;
+      await runGit(['checkout', source.tag, '--'], targetDir);
+    } else if (source.branch) {
+      requestedRef = source.branch;
+      await runGit(['checkout', source.branch, '--'], targetDir);
+      try {
+        await runGit(['reset', '--hard', `origin/${source.branch}`], targetDir);
+      } catch {
+        // ignore
+      }
+    } else {
+      const defaultBranch = await getDefaultBranchForClone(targetDir);
+      await runGit(['checkout', defaultBranch, '--'], targetDir);
+      try {
+        await runGit(['reset', '--hard', `origin/${defaultBranch}`], targetDir);
+      } catch {
+        // ignore
+      }
+    }
+
+    const { stdout: commitSha } = await runGit(['rev-parse', 'HEAD'], targetDir);
+    const commit = commitSha.trim();
+    return {
+      commit,
+      ...(requestedRef ? { requestedRef } : {}),
+    };
+  });
 }
 
 async function resolveContentFromSource(
@@ -123,7 +236,7 @@ export async function resolveAndTranslate(
 }
 
 export async function planInstall(params: PlanInstallParams): Promise<PreparedInstall> {
-  const { source, pkg, artifact, targetAdapter, targetScope } = params;
+  const { source, pkg: inputPkg, artifact, targetAdapter, targetScope } = params;
   const resolverOpts = { ...params.resolverOpts, homeRoot: params.homeRoot ?? params.resolverOpts?.homeRoot };
   const projectRoot = targetScope === 'project' ? params.projectRoot : undefined;
   const sourceIdentity = toInstallationSourceIdentity(source);
@@ -141,11 +254,40 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
       plan: {
         supported: false,
         sourceId: source.id,
-        packageId: pkg.id,
+        packageId: inputPkg.id,
         artifactId: artifact.id,
         reason: `Artifact kind "${artifact.kind}" is not supported`,
       },
     };
+  }
+
+  let pkg: Package = inputPkg;
+  if (
+    !params.skipGitRefresh &&
+    (source.type === 'git-custom' ||
+      source.type === 'git-marketplace' ||
+      source.type === 'git-single-item') &&
+    source.url
+  ) {
+    try {
+      const installTimeRevision = await resolveGitSourceRefAtInstallTime(source, resolverOpts);
+      pkg = {
+        ...inputPkg,
+        version: installTimeRevision,
+      };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        supported: false,
+        plan: {
+          supported: false,
+          sourceId: source.id,
+          packageId: inputPkg.id,
+          artifactId: artifact.id,
+          reason: `Git source resolution failed: ${msg}`,
+        },
+      };
+    }
   }
 
   // --- RULE KIND ---
@@ -234,6 +376,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
         targetDir: targetFilePath,
         projectRoot,
         sourceRevision: computePlanSourceRevision(source, pkg),
+        sourceContentHash: contentHash,
         conflict: existingFiles.length > 0,
         existingFiles,
         proposedFiles,
@@ -241,6 +384,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
       },
       content: translatedRule,
       contentHash,
+      sourceContentHash: contentHash,
     };
   }
 
@@ -330,6 +474,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
         targetDir: targetFilePath,
         projectRoot,
         sourceRevision: computePlanSourceRevision(source, pkg),
+        sourceContentHash: contentHash,
         conflict: existingFiles.length > 0,
         existingFiles,
         proposedFiles,
@@ -337,6 +482,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
       },
       content: translatedHook,
       contentHash,
+      sourceContentHash: contentHash,
     };
   }
 
@@ -436,6 +582,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
         targetDir: targetFilePath,
         projectRoot,
         sourceRevision: computePlanSourceRevision(source, pkg),
+        sourceContentHash: contentHash,
         conflict,
         existingFiles,
         proposedFiles,
@@ -443,6 +590,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
       },
       content: translatedMcp,
       contentHash,
+      sourceContentHash: contentHash,
     };
   }
 
@@ -566,6 +714,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
         targetDir: targetFilePath,
         projectRoot,
         sourceRevision: computePlanSourceRevision(source, pkg),
+        sourceContentHash: contentHash,
         conflict,
         existingFiles,
         proposedFiles,
@@ -573,6 +722,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
       },
       content: translatedCmd,
       contentHash,
+      sourceContentHash: contentHash,
     };
   }
 
@@ -696,6 +846,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
         targetDir: targetFilePath,
         projectRoot,
         sourceRevision: computePlanSourceRevision(source, pkg),
+        sourceContentHash: contentHash,
         conflict,
         existingFiles,
         proposedFiles,
@@ -703,6 +854,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
       },
       content: translatedAgent,
       contentHash,
+      sourceContentHash: contentHash,
     };
   }
 
@@ -881,7 +1033,8 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
       targetScope,
       targetDir: targetDir,
       projectRoot,
-      sourceRevision: pkg.version,
+      sourceRevision: computePlanSourceRevision(source, pkg),
+      sourceContentHash: contentHash,
       conflict,
       existingFiles,
       proposedFiles,
@@ -889,5 +1042,6 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
     },
     content: translatedSkill,
     contentHash,
+    sourceContentHash: contentHash,
   };
 }

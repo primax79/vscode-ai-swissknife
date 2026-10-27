@@ -21,7 +21,10 @@ import {
 import { ALL_ADAPTERS, getAdapterWithHomeRoot, getAdapter } from '../adapters/registry';
 import { getSourceResolver } from '../sources/registry';
 import { scanInstalledInventory } from '../engine/discovery';
-import { checkForUpstreamUpdate, analyzeLocalDrift, resolveInstallationSource } from '../engine/drift';
+import {
+  checkDriftForAll,
+  resolveInstallationSource,
+} from '../engine/drift';
 import { planInstallMatrix } from '../engine/installMatrix';
 import { planInstall, resolveAndTranslate } from '../engine/plan';
 import { applyInstall } from '../engine/apply';
@@ -405,36 +408,20 @@ export async function runUpdates(
     if (!filterScope || filterScope === 'global') {
       try {
         const gState = await readState('global', undefined, homeRoot);
+        const filteredGlobal = gState.installations.filter((inst) => {
+          if (filterAssistant && inst.assistant !== filterAssistant) return false;
+          if (filterKind && inst.kind !== filterKind) return false;
+          return true;
+        });
 
-        for (const inst of gState.installations) {
-          if (filterAssistant && inst.assistant !== filterAssistant) continue;
-          if (filterKind && inst.kind !== filterKind) continue;
+        const gReports = await checkDriftForAll(
+          filteredGlobal,
+          { globalSources: gSources, workspaceSources: [] },
+          homeRoot
+        );
 
-          const resolvedSrc = resolveInstallationSource(inst, {
-            globalSources: gSources,
-            workspaceSources: [],
-          });
-          let report;
-          if ('source' in resolvedSrc) {
-            report = await checkForUpstreamUpdate(inst, resolvedSrc.source, homeRoot);
-          } else {
-            const localReport = await analyzeLocalDrift(inst, homeRoot);
-            if (localReport.status !== 'missing-on-disk' && inst.source) {
-              report = {
-                installation: inst,
-                status: 'source-unavailable' as const,
-                hasLocalPatch: localReport.hasLocalPatch,
-                diskHash: localReport.diskHash,
-                details: resolvedSrc.hint
-                  ? `${resolvedSrc.unavailable} ${resolvedSrc.hint}`
-                  : resolvedSrc.unavailable,
-                ...(resolvedSrc.hint ? { hint: resolvedSrc.hint } : {}),
-              };
-            } else {
-              report = localReport;
-            }
-          }
-
+        for (const report of gReports) {
+          const inst = report.installation;
           updates.push({
             key: `${inst.assistant}:${inst.scope}:${inst.kind}:${inst.name}`,
             kind: inst.kind,
@@ -443,6 +430,9 @@ export async function runUpdates(
             scope: inst.scope,
             status: report.status,
             ...(inst.sourceId ? { sourceId: inst.sourceId } : {}),
+            ...(report.installedCommit ? { installedCommit: report.installedCommit } : {}),
+            ...(report.currentCommit ? { currentCommit: report.currentCommit } : {}),
+            ...(report.commitsBehind !== undefined ? { commitsBehind: report.commitsBehind } : {}),
             ...(report.details ? { details: report.details } : {}),
             workspace: null,
           });
@@ -463,35 +453,20 @@ export async function runUpdates(
           const pManifest = await readManifest('project', ws, homeRoot);
           const pSources = pManifest.sources.map((d) => fromDesiredSource(d, ws, homeRoot));
 
-          for (const inst of pState.installations) {
-            if (filterAssistant && inst.assistant !== filterAssistant) continue;
-            if (filterKind && inst.kind !== filterKind) continue;
+          const filteredProject = pState.installations.filter((inst) => {
+            if (filterAssistant && inst.assistant !== filterAssistant) return false;
+            if (filterKind && inst.kind !== filterKind) return false;
+            return true;
+          });
 
-            const resolvedSrc = resolveInstallationSource(inst, {
-              globalSources: gSources,
-              workspaceSources: pSources,
-            });
-            let report;
-            if ('source' in resolvedSrc) {
-              report = await checkForUpstreamUpdate(inst, resolvedSrc.source, homeRoot);
-            } else {
-              const localReport = await analyzeLocalDrift(inst, homeRoot);
-              if (localReport.status !== 'missing-on-disk' && inst.source) {
-                report = {
-                  installation: inst,
-                  status: 'source-unavailable' as const,
-                  hasLocalPatch: localReport.hasLocalPatch,
-                  diskHash: localReport.diskHash,
-                  details: resolvedSrc.hint
-                    ? `${resolvedSrc.unavailable} ${resolvedSrc.hint}`
-                    : resolvedSrc.unavailable,
-                  ...(resolvedSrc.hint ? { hint: resolvedSrc.hint } : {}),
-                };
-              } else {
-                report = localReport;
-              }
-            }
+          const pReports = await checkDriftForAll(
+            filteredProject,
+            { globalSources: gSources, workspaceSources: pSources },
+            homeRoot
+          );
 
+          for (const report of pReports) {
+            const inst = report.installation;
             updates.push({
               key: `${inst.assistant}:${inst.scope}:${inst.kind}:${inst.name}${suffix}`,
               kind: inst.kind,
@@ -500,6 +475,9 @@ export async function runUpdates(
               scope: inst.scope,
               status: report.status,
               ...(inst.sourceId ? { sourceId: inst.sourceId } : {}),
+              ...(report.installedCommit ? { installedCommit: report.installedCommit } : {}),
+              ...(report.currentCommit ? { currentCommit: report.currentCommit } : {}),
+              ...(report.commitsBehind !== undefined ? { commitsBehind: report.commitsBehind } : {}),
               ...(report.details ? { details: report.details } : {}),
               workspace: ws,
             });
@@ -545,34 +523,24 @@ export async function runUpdates(
     }
   }
 
+  const filteredEntries = allInstallations.filter(({ inst }) => {
+    if (filterScope && inst.scope !== filterScope) return false;
+    if (filterAssistant && inst.assistant !== filterAssistant) return false;
+    if (filterKind && inst.kind !== filterKind) return false;
+    return true;
+  });
+
+  const reports = await checkDriftForAll(
+    filteredEntries.map((e) => e.inst),
+    { globalSources, workspaceSources },
+    homeRoot
+  );
+
   const updates: CliUpdateItem[] = [];
 
-  for (const { inst, wsRoot } of allInstallations) {
-    if (filterScope && inst.scope !== filterScope) continue;
-    if (filterAssistant && inst.assistant !== filterAssistant) continue;
-    if (filterKind && inst.kind !== filterKind) continue;
-
-    const resolvedSrc = resolveInstallationSource(inst, { globalSources, workspaceSources });
-    let report;
-    if ('source' in resolvedSrc) {
-      report = await checkForUpstreamUpdate(inst, resolvedSrc.source, homeRoot);
-    } else {
-      const localReport = await analyzeLocalDrift(inst, homeRoot);
-      if (localReport.status !== 'missing-on-disk' && inst.source) {
-        report = {
-          installation: inst,
-          status: 'source-unavailable' as const,
-          hasLocalPatch: localReport.hasLocalPatch,
-          diskHash: localReport.diskHash,
-          details: resolvedSrc.hint
-            ? `${resolvedSrc.unavailable} ${resolvedSrc.hint}`
-            : resolvedSrc.unavailable,
-          ...(resolvedSrc.hint ? { hint: resolvedSrc.hint } : {}),
-        };
-      } else {
-        report = localReport;
-      }
-    }
+  for (let i = 0; i < reports.length; i++) {
+    const report = reports[i];
+    const { inst, wsRoot } = filteredEntries[i];
 
     updates.push({
       key: `${inst.assistant}:${inst.scope}:${inst.kind}:${inst.name}`,
@@ -582,6 +550,9 @@ export async function runUpdates(
       scope: inst.scope,
       status: report.status,
       ...(inst.sourceId ? { sourceId: inst.sourceId } : {}),
+      ...(report.installedCommit ? { installedCommit: report.installedCommit } : {}),
+      ...(report.currentCommit ? { currentCommit: report.currentCommit } : {}),
+      ...(report.commitsBehind !== undefined ? { commitsBehind: report.commitsBehind } : {}),
       ...(report.details ? { details: report.details } : {}),
       workspace: inst.scope === 'global' ? null : (wsRoot ?? null),
     });
@@ -1656,53 +1627,91 @@ export async function runUpdate(
     return {
       mode: 'plan',
       targets: [
-        ...planResult.toUpdate.map((u) => ({
-          key: `${u.installation.assistant}:${u.installation.scope}:${u.installation.kind}:${u.installation.name}`,
-          item: u.installation.name,
-          kind: u.installation.kind,
-          assistant: u.installation.assistant,
-          scope: u.installation.scope,
-          status: 'update-available',
-          action: 'update',
-          oldRevision: u.installation.sourceRevision,
-          newRevision: u.prepared.supported ? u.prepared.plan.sourceRevision : undefined,
-          changedFiles: computePlanChangedFiles(u.prepared),
-        })),
-        ...planResult.skippedModified.map((s) => ({
-          key: `${s.installation.assistant}:${s.installation.scope}:${s.installation.kind}:${s.installation.name}`,
-          item: s.installation.name,
-          kind: s.installation.kind,
-          assistant: s.installation.assistant,
-          scope: s.installation.scope,
-          status: s.status,
-          action: 'skip',
-          reason: 'Modified locally (use --include-modified to overwrite)',
-          oldRevision: s.installation.sourceRevision,
-          changedFiles: { added: [], changed: [], removed: [] },
-        })),
-        ...planResult.upToDate.map((utd) => ({
-          key: `${utd.installation.assistant}:${utd.installation.scope}:${utd.installation.kind}:${utd.installation.name}`,
-          item: utd.installation.name,
-          kind: utd.installation.kind,
-          assistant: utd.installation.assistant,
-          scope: utd.installation.scope,
-          status: 'up-to-date',
-          action: 'skip',
-          oldRevision: utd.installation.sourceRevision,
-          changedFiles: { added: [], changed: [], removed: [] },
-        })),
-        ...planResult.cannotUpdate.map((c) => ({
-          key: `${c.installation.assistant}:${c.installation.scope}:${c.installation.kind}:${c.installation.name}`,
-          item: c.installation.name,
-          kind: c.installation.kind,
-          assistant: c.installation.assistant,
-          scope: c.installation.scope,
-          status: 'cannot-update',
-          action: 'skip',
-          reason: c.reason,
-          oldRevision: c.installation.sourceRevision,
-          changedFiles: { added: [], changed: [], removed: [] },
-        })),
+        ...planResult.toUpdate.map((u) => {
+          const oldRevision =
+            u.report?.installedCommit ??
+            u.installation.sourceRevision?.commit ??
+            u.installation.sourceRevision;
+          const newRevision =
+            (u.prepared.supported ? u.prepared.plan.sourceRevision?.commit : undefined) ??
+            u.report?.currentCommit ??
+            (u.prepared.supported ? u.prepared.plan.sourceRevision : undefined);
+          return {
+            key: `${u.installation.assistant}:${u.installation.scope}:${u.installation.kind}:${u.installation.name}`,
+            item: u.installation.name,
+            kind: u.installation.kind,
+            assistant: u.installation.assistant,
+            scope: u.installation.scope,
+            status: 'update-available',
+            action: 'update',
+            oldRevision,
+            newRevision,
+            ...(u.report?.commitsBehind !== undefined ? { commitsBehind: u.report.commitsBehind } : {}),
+            changedFiles: computePlanChangedFiles(u.prepared),
+          };
+        }),
+        ...planResult.skippedModified.map((s) => {
+          const oldRevision =
+            s.report?.installedCommit ??
+            s.installation.sourceRevision?.commit ??
+            s.installation.sourceRevision;
+          const newRevision = s.report?.currentCommit;
+          return {
+            key: `${s.installation.assistant}:${s.installation.scope}:${s.installation.kind}:${s.installation.name}`,
+            item: s.installation.name,
+            kind: s.installation.kind,
+            assistant: s.installation.assistant,
+            scope: s.installation.scope,
+            status: s.status,
+            action: 'skip',
+            reason: 'Modified locally (use --include-modified to overwrite)',
+            oldRevision,
+            ...(newRevision !== undefined ? { newRevision } : {}),
+            ...(s.report?.commitsBehind !== undefined ? { commitsBehind: s.report.commitsBehind } : {}),
+            changedFiles: { added: [], changed: [], removed: [] },
+          };
+        }),
+        ...planResult.upToDate.map((utd) => {
+          const oldRevision =
+            utd.report?.installedCommit ??
+            utd.installation.sourceRevision?.commit ??
+            utd.installation.sourceRevision;
+          const newRevision = utd.report?.currentCommit;
+          return {
+            key: `${utd.installation.assistant}:${utd.installation.scope}:${utd.installation.kind}:${utd.installation.name}`,
+            item: utd.installation.name,
+            kind: utd.installation.kind,
+            assistant: utd.installation.assistant,
+            scope: utd.installation.scope,
+            status: 'up-to-date',
+            action: 'skip',
+            oldRevision,
+            ...(newRevision !== undefined ? { newRevision } : {}),
+            ...(utd.report?.commitsBehind !== undefined ? { commitsBehind: utd.report.commitsBehind } : {}),
+            changedFiles: { added: [], changed: [], removed: [] },
+          };
+        }),
+        ...planResult.cannotUpdate.map((c) => {
+          const oldRevision =
+            c.report?.installedCommit ??
+            c.installation.sourceRevision?.commit ??
+            c.installation.sourceRevision;
+          const newRevision = c.report?.currentCommit;
+          return {
+            key: `${c.installation.assistant}:${c.installation.scope}:${c.installation.kind}:${c.installation.name}`,
+            item: c.installation.name,
+            kind: c.installation.kind,
+            assistant: c.installation.assistant,
+            scope: c.installation.scope,
+            status: 'cannot-update',
+            action: 'skip',
+            reason: c.reason,
+            oldRevision,
+            ...(newRevision !== undefined ? { newRevision } : {}),
+            ...(c.report?.commitsBehind !== undefined ? { commitsBehind: c.report.commitsBehind } : {}),
+            changedFiles: { added: [], changed: [], removed: [] },
+          };
+        }),
       ],
     };
   }
@@ -1718,6 +1727,7 @@ export async function runUpdate(
     action?: string;
     oldRevision?: any;
     newRevision?: any;
+    commitsBehind?: number;
     changedFiles: ChangedFilesMap;
     backupPath?: string;
     reason?: string;
@@ -1739,6 +1749,14 @@ export async function runUpdate(
 
     const beforeTree = snapshotTree(u.installation.path);
     const root = u.installation.scope === 'project' ? (u.installation.projectPath ?? workspaceRoot) : undefined;
+    const oldRevision =
+      u.report?.installedCommit ??
+      u.installation.sourceRevision?.commit ??
+      u.installation.sourceRevision;
+    const plannedNewRevision =
+      (u.prepared.supported ? u.prepared.plan.sourceRevision?.commit : undefined) ??
+      u.report?.currentCommit ??
+      (u.prepared.supported ? u.prepared.plan.sourceRevision : undefined);
 
     try {
       const outcome = await withStateLock(u.installation.scope, root, homeRoot, async () => {
@@ -1747,6 +1765,10 @@ export async function runUpdate(
 
       const afterTree = snapshotTree(u.installation.path);
       const changedFiles = diffSnapshots(beforeTree, afterTree);
+      const newRevision =
+        outcome.status === 'applied'
+          ? (outcome.installation.sourceRevision?.commit ?? plannedNewRevision)
+          : plannedNewRevision;
 
       appliedTargets.push({
         key: `${u.installation.assistant}:${u.installation.scope}:${u.installation.kind}:${u.installation.name}`,
@@ -1756,8 +1778,9 @@ export async function runUpdate(
         scope: u.installation.scope,
         status: outcome.status === 'applied' ? 'updated' : 'failed',
         action: outcome.status === 'applied' ? 'updated' : 'failed',
-        oldRevision: u.installation.sourceRevision,
-        newRevision: u.prepared.supported ? u.prepared.plan.sourceRevision : undefined,
+        oldRevision,
+        newRevision,
+        ...(u.report?.commitsBehind !== undefined ? { commitsBehind: u.report.commitsBehind } : {}),
         changedFiles,
         ...(backupPath ? { backupPath } : {}),
         ...(outcome.status !== 'applied' && outcome.reason ? { reason: outcome.reason } : {}),
@@ -1772,8 +1795,9 @@ export async function runUpdate(
         scope: u.installation.scope,
         status: 'failed',
         action: 'failed',
-        oldRevision: u.installation.sourceRevision,
-        newRevision: u.prepared.supported ? u.prepared.plan.sourceRevision : undefined,
+        oldRevision,
+        newRevision: plannedNewRevision,
+        ...(u.report?.commitsBehind !== undefined ? { commitsBehind: u.report.commitsBehind } : {}),
         changedFiles: { added: [], changed: [], removed: [] },
         reason: msg,
         ...(backupPath ? { backupPath } : {}),
@@ -1783,6 +1807,11 @@ export async function runUpdate(
 
   // Include skipped items
   for (const s of planResult.skippedModified) {
+    const oldRevision =
+      s.report?.installedCommit ??
+      s.installation.sourceRevision?.commit ??
+      s.installation.sourceRevision;
+    const newRevision = s.report?.currentCommit;
     appliedTargets.push({
       key: `${s.installation.assistant}:${s.installation.scope}:${s.installation.kind}:${s.installation.name}`,
       item: s.installation.name,
@@ -1792,12 +1821,19 @@ export async function runUpdate(
       status: s.status,
       action: 'skipped',
       reason: 'Modified locally (use --include-modified to overwrite)',
-      oldRevision: s.installation.sourceRevision,
+      oldRevision,
+      ...(newRevision !== undefined ? { newRevision } : {}),
+      ...(s.report?.commitsBehind !== undefined ? { commitsBehind: s.report.commitsBehind } : {}),
       changedFiles: { added: [], changed: [], removed: [] },
     });
   }
 
   for (const utd of planResult.upToDate) {
+    const oldRevision =
+      utd.report?.installedCommit ??
+      utd.installation.sourceRevision?.commit ??
+      utd.installation.sourceRevision;
+    const newRevision = utd.report?.currentCommit;
     appliedTargets.push({
       key: `${utd.installation.assistant}:${utd.installation.scope}:${utd.installation.kind}:${utd.installation.name}`,
       item: utd.installation.name,
@@ -1806,12 +1842,19 @@ export async function runUpdate(
       scope: utd.installation.scope,
       status: 'up-to-date',
       action: 'skipped',
-      oldRevision: utd.installation.sourceRevision,
+      oldRevision,
+      ...(newRevision !== undefined ? { newRevision } : {}),
+      ...(utd.report?.commitsBehind !== undefined ? { commitsBehind: utd.report.commitsBehind } : {}),
       changedFiles: { added: [], changed: [], removed: [] },
     });
   }
 
   for (const c of planResult.cannotUpdate) {
+    const oldRevision =
+      c.report?.installedCommit ??
+      c.installation.sourceRevision?.commit ??
+      c.installation.sourceRevision;
+    const newRevision = c.report?.currentCommit;
     appliedTargets.push({
       key: `${c.installation.assistant}:${c.installation.scope}:${c.installation.kind}:${c.installation.name}`,
       item: c.installation.name,
@@ -1821,7 +1864,9 @@ export async function runUpdate(
       status: 'cannot-update',
       action: 'skipped',
       reason: c.reason,
-      oldRevision: c.installation.sourceRevision,
+      oldRevision,
+      ...(newRevision !== undefined ? { newRevision } : {}),
+      ...(c.report?.commitsBehind !== undefined ? { commitsBehind: c.report.commitsBehind } : {}),
       changedFiles: { added: [], changed: [], removed: [] },
     });
   }

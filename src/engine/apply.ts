@@ -158,6 +158,7 @@ export async function applyInstall(
       packageId: plan.packageId,
       artifactId: plan.artifactId,
       sourceRevision: plan.sourceRevision,
+      sourceContentHash: prepared.sourceContentHash ?? plan.sourceContentHash ?? prepared.contentHash,
       installedAt: new Date().toISOString(),
       contentHash: prepared.contentHash,
     };
@@ -283,6 +284,7 @@ export async function applyInstall(
       packageId: plan.packageId,
       artifactId: plan.artifactId,
       sourceRevision: plan.sourceRevision,
+      sourceContentHash: prepared.sourceContentHash ?? plan.sourceContentHash ?? prepared.contentHash,
       installedAt: new Date().toISOString(),
       contentHash: prepared.contentHash,
     };
@@ -426,6 +428,7 @@ export async function applyInstall(
       packageId: plan.packageId,
       artifactId: plan.artifactId,
       sourceRevision: plan.sourceRevision,
+      sourceContentHash: prepared.sourceContentHash ?? plan.sourceContentHash ?? prepared.contentHash,
       installedAt: new Date().toISOString(),
       contentHash: prepared.contentHash,
     };
@@ -662,6 +665,7 @@ export async function applyInstall(
       packageId: plan.packageId,
       artifactId: plan.artifactId,
       sourceRevision: plan.sourceRevision,
+      sourceContentHash: prepared.sourceContentHash ?? plan.sourceContentHash ?? prepared.contentHash,
       installedAt: new Date().toISOString(),
       contentHash: prepared.contentHash,
     };
@@ -902,6 +906,7 @@ export async function applyInstall(
       packageId: plan.packageId,
       artifactId: plan.artifactId,
       sourceRevision: plan.sourceRevision,
+      sourceContentHash: prepared.sourceContentHash ?? plan.sourceContentHash ?? prepared.contentHash,
       installedAt: new Date().toISOString(),
       contentHash: prepared.contentHash,
     };
@@ -1223,6 +1228,7 @@ export async function applyInstall(
     packageId: plan.packageId,
     artifactId: plan.artifactId,
     sourceRevision: plan.sourceRevision,
+    sourceContentHash: prepared.sourceContentHash ?? plan.sourceContentHash ?? prepared.contentHash,
     installedAt: new Date().toISOString(),
     contentHash: prepared.contentHash,
   };

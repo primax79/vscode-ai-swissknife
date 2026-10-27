@@ -80,6 +80,7 @@ export interface ObservedSourceMatch {
   packageId?: string;
   artifactId?: string;
   sourceRevision?: ResolvedRevision;
+  sourceContentHash?: string;
   details?: string;
 }
 
@@ -134,6 +135,7 @@ export interface ManagedInstallation {
   packageId?: string;
   artifactId?: string;
   sourceRevision?: ResolvedRevision;
+  sourceContentHash?: string;
   installedAt: string;
   contentHash?: string;
   disabled?: boolean;

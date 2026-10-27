@@ -104,6 +104,9 @@ export async function planInstallMatrix<T extends MatrixItem = MatrixItem>(
   const targets: MatrixTarget<T>[] = [];
 
   for (const item of params.items) {
+    let refreshedPkg = item.pkg;
+    let didRefreshItem = false;
+
     for (const assistantEntry of params.assistants) {
       let assistantId: AssistantId;
       let targetAdapter: PlanInstallParams['targetAdapter'] | undefined;
@@ -167,14 +170,22 @@ export async function planInstallMatrix<T extends MatrixItem = MatrixItem>(
         try {
           prepared = await planInstall({
             source: item.source,
-            pkg: item.pkg,
+            pkg: refreshedPkg,
             artifact: item.artifact,
             targetAdapter,
             targetScope: scope,
             projectRoot: params.projectRoot,
             homeRoot: params.homeRoot,
             resolverOpts: params.resolverOpts,
+            skipGitRefresh: didRefreshItem,
           });
+          if (prepared.supported && prepared.plan.sourceRevision) {
+            refreshedPkg = {
+              ...refreshedPkg,
+              version: prepared.plan.sourceRevision,
+            };
+            didRefreshItem = true;
+          }
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err);
           prepared = {

@@ -24,6 +24,7 @@ import {
 import { getAdapterWithHomeRoot } from '../adapters/registry';
 import { getSourceResolver } from '../sources/registry';
 import { planInstall } from './plan';
+import * as planModule from './plan';
 import { applyInstall } from './apply';
 import { checkForUpstreamUpdate, checkDriftForAll, resolveInstallationSource } from './drift';
 import { computePendingCounts } from './pendingCounts';
@@ -287,7 +288,6 @@ describe('provenance & update detection — spec §6 acceptance cases', () => {
 
   it(
     '1b. install from a git source when remote advances between catalog load and install -> resolves at install time and is up-to-date',
-    { todo: 'fixed by 49.5' },
     async () => {
       const remoteRepoDir = path.join(testWorkspaceDir, 'remotes', 'git-origin-1');
       initGitRepo(remoteRepoDir);
@@ -357,6 +357,11 @@ describe('provenance & update detection — spec §6 acceptance cases', () => {
         'Immediate check after install must be up-to-date on UI path'
       );
       assert.strictEqual(installation.sourceRevision?.commit, installTimeCommit);
+      assert.ok(installation.sourceContentHash, 'Installation must record sourceContentHash');
+      assert.strictEqual(installation.sourceContentHash, installation.contentHash);
+      assert.strictEqual(uiReports[0].installedCommit, installTimeCommit);
+      assert.strictEqual(uiReports[0].currentCommit, installTimeCommit);
+      assert.strictEqual(uiReports[0].commitsBehind, 0);
 
       const pending = await computePendingCounts(testWorkspaceDir, testHomeDir);
       assert.strictEqual(pending.updatesAvailable, 0);
@@ -624,7 +629,6 @@ describe('provenance & update detection — spec §6 acceptance cases', () => {
   // the different commits are not shown on the report.
   it(
     '4. commit in git source that does not touch the installed skill -> up-to-date with installed and current commits shown as different',
-    { todo: 'fixed by 49.5' },
     async () => {
       const remoteRepoDir = path.join(testWorkspaceDir, 'remotes', 'git-untouched');
       initGitRepo(remoteRepoDir);
@@ -645,6 +649,8 @@ describe('provenance & update detection — spec §6 acceptance cases', () => {
         skillName: 'skill-kept',
       });
       assert.strictEqual(installation.sourceRevision?.commit, commit1);
+      assert.ok(installation.sourceContentHash, 'Installation must record sourceContentHash');
+      assert.strictEqual(installation.sourceContentHash, installation.contentHash);
 
       // Advance upstream repo with a commit that only touches skill-other
       writeSkillFile(remoteRepoDir, 'skills/skill-other', 'skill-other', 'Other v2', '# Other body v2');
@@ -668,6 +674,55 @@ describe('provenance & update detection — spec §6 acceptance cases', () => {
       assert.strictEqual(reportedInstalledCommit, commit1, 'Report must expose the installed commit');
       assert.strictEqual(reportedCurrentCommit, commit2, 'Report must expose the new upstream commit');
       assert.notStrictEqual(reportedInstalledCommit, reportedCurrentCommit);
+      assert.strictEqual(report.commitsBehind, 1, 'Report must expose commitsBehind = 1');
+    }
+  );
+
+  it(
+    '4b. fast path when current source commit == sourceRevision.commit and not dirty -> no resolveAndTranslate call',
+    async () => {
+      const remoteRepoDir = path.join(testWorkspaceDir, 'remotes', 'git-fastpath');
+      initGitRepo(remoteRepoDir);
+      writeSkillFile(remoteRepoDir, 'skills/fast-skill', 'fast-skill', 'Fast v1', '# Fast body');
+      const commit1 = commitAll(remoteRepoDir, 'Commit 1');
+
+      const gitSource: Source = {
+        id: 'src-fastpath',
+        type: 'git-custom',
+        scope: 'project',
+        projectPath: testWorkspaceDir,
+        url: remoteRepoDir,
+      };
+
+      const { installation } = await resolveAndInstallSkill({
+        source: gitSource,
+        skillName: 'fast-skill',
+      });
+      assert.strictEqual(installation.sourceRevision?.commit, commit1);
+
+      let translateCalls = 0;
+      const origResolveAndTranslate = planModule.resolveAndTranslate;
+      (planModule as { resolveAndTranslate: typeof planModule.resolveAndTranslate }).resolveAndTranslate =
+        async (...args) => {
+          translateCalls++;
+          return origResolveAndTranslate(...args);
+        };
+
+      try {
+        const fastReport = await checkForUpstreamUpdate(installation, gitSource, testHomeDir);
+        assert.strictEqual(fastReport.status, 'up-to-date');
+        assert.strictEqual(fastReport.installedCommit, commit1);
+        assert.strictEqual(fastReport.currentCommit, commit1);
+        assert.strictEqual(fastReport.commitsBehind, 0);
+        assert.strictEqual(
+          translateCalls,
+          0,
+          'Fast path must not call resolveAndTranslate when commit is unchanged and not dirty'
+        );
+      } finally {
+        (planModule as { resolveAndTranslate: typeof planModule.resolveAndTranslate }).resolveAndTranslate =
+          origResolveAndTranslate;
+      }
     }
   );
 

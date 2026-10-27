@@ -366,6 +366,7 @@ export async function scanInstalledInventory(
                   packageId: pkg.id,
                   artifactId: art.id,
                   sourceRevision: pkg.version,
+                  sourceContentHash: sourceHash,
                   details: `Identical to source "${source.id}"`,
                 });
               } else if (sourceHash) {
@@ -376,6 +377,7 @@ export async function scanInstalledInventory(
                   packageId: pkg.id,
                   artifactId: art.id,
                   sourceRevision: pkg.version,
+                  sourceContentHash: sourceHash,
                   details: `Differs from source "${source.id}"`,
                 });
               }
@@ -411,7 +413,7 @@ export async function scanInstalledInventory(
  */
 export async function promoteObservedArtifact(
   observed: ObservedArtifact,
-  provenance: Pick<ObservedSourceMatch, 'source' | 'sourceId' | 'packageId' | 'artifactId' | 'sourceRevision'>,
+  provenance: Pick<ObservedSourceMatch, 'source' | 'sourceId' | 'packageId' | 'artifactId' | 'sourceRevision' | 'sourceContentHash'>,
   homeRoot?: string
 ): Promise<ManagedInstallation> {
   if (observed.disabled) {
@@ -458,6 +460,7 @@ export async function promoteObservedArtifact(
   const finalPackageId = provenance.packageId;
   const finalArtifactId = provenance.artifactId;
   const finalSourceRevision = provenance.sourceRevision;
+  const finalSourceContentHash = provenance.sourceContentHash ?? contentHash;
 
   const installation: ManagedInstallation = {
     assistant: observed.assistant,
@@ -471,6 +474,7 @@ export async function promoteObservedArtifact(
     ...(finalPackageId ? { packageId: finalPackageId } : {}),
     ...(finalArtifactId ? { artifactId: finalArtifactId } : {}),
     ...(finalSourceRevision ? { sourceRevision: finalSourceRevision } : {}),
+    ...(finalSourceContentHash ? { sourceContentHash: finalSourceContentHash } : {}),
     installedAt: new Date().toISOString(),
     contentHash,
   };

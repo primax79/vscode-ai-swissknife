@@ -57,4 +57,10 @@ export * from './fileTree';
 export * from './uninstall';
 export * from './sourceManifest';
 export * from './missingPlaces';
+export {
+  describeRevisionGap,
+  type RevisionGap,
+  type RevisionGapReason,
+  type DescribeRevisionGapOptions,
+} from './revisionGap';
 
