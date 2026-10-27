@@ -22,7 +22,12 @@ A refresh button on each source: sidebar inline action on `sourceItem`, and an i
 
 ## Tasks
 
-| Task | Title | Depends on | Size |
-| --- | --- | --- | --- |
-| [38.1](38.1-provider-refresh-source.md) | `AvailableProvider.refreshSource` (single-source re-resolve, in-place cache update) | - | M |
-| [38.2](38.2-buttons.md) | Sidebar inline command + Dashboard row button wired to it | 38.1 | S |
+### 38.1 - `AvailableProvider.refreshSource` (single-source re-resolve, in-place cache update)
+
+- **Status:** `delivered` (merged 19ea67d 2026-10-08) · **Short:** Single-source catalog refresh · **Size:** M · **Depends on:** - · **Spec:** [38.1-provider-refresh-source.md](38.1-provider-refresh-source.md)
+- **Goal:** Add `AvailableTreeDataProvider.refreshSource(sourceId, scope)` to re-resolve a single source, update its cached group in place, and recompute recommendations without re-fetching other sources.
+
+### 38.2 - Sidebar inline command + Dashboard row button wired to it
+
+- **Status:** `delivered` (merged 42d016f 2026-10-09) · **Short:** Source refresh buttons · **Size:** S · **Depends on:** 38.1 · **Spec:** [38.2-buttons.md](38.2-buttons.md)
+- **Goal:** Wire `aiSwissknife.refreshSource` as an inline action on sidebar source items and as an icon-only `↻` button on each Dashboard source row.

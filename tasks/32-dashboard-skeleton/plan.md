@@ -8,11 +8,24 @@ provider/view registration in `activate()` that task 32.1 also edits).
 
 Tasks (each = one commit):
 
-1. **[32.1 — Provider wiring](32.1-provider-wiring.md)**: `DashboardPanel` gains `SourcesTreeDataProvider`/`AvailableTreeDataProvider` + a cross-refresh callback; `extension.ts` call sites updated.
-2. **[32.2 — Section navigation shell + New Artifact entry point](32.2-section-shell.md)**: top-level section tabs (Overview/Installed/Sources & Catalog/Recommendations), `getHtml()` split into per-section template functions, existing Installed content ported into the shell unchanged.
-3. **[32.3 — Incremental update model](32.3-incremental-updates.md)**: replace full `webview.html` reassignment on refresh/filter with shell-once + `postMessage`-driven data updates.
+## Tasks
 
-**Task order and gating:**
+### 32.1 - Provider wiring
+
+- **Status:** `delivered` (merged 57b1aac 2026-09-08) · **Short:** Dashboard provider wiring · **Size:** S · **Depends on:** 28, 29 · **Spec:** [32.1-provider-wiring.md](32.1-provider-wiring.md)
+- **Goal:** Pass `SourcesTreeDataProvider`, `AvailableTreeDataProvider`, and a cross-refresh callback into `DashboardPanel` and update `extension.ts` call sites.
+
+### 32.2 - Section navigation shell + New Artifact entry point
+
+- **Status:** `delivered` (merged 01614ea 2026-09-08) · **Short:** Dashboard section shell · **Size:** M · **Depends on:** 32.1 · **Spec:** [32.2-section-shell.md](32.2-section-shell.md)
+- **Goal:** Add top-level section tabs (Overview, Installed, Sources & Catalog, Recommendations) and `+ New Artifact` entry point, splitting `getHtml()` into per-section templates.
+
+### 32.3 - Incremental update model
+
+- **Status:** `delivered` (merged b5316d8 2026-09-08) · **Short:** Incremental dashboard updates · **Size:** M · **Depends on:** 32.2 · **Spec:** [32.3-incremental-updates.md](32.3-incremental-updates.md)
+- **Goal:** Replace wholesale `webview.html` reassignment on refresh with a single initial shell render and incremental `postMessage`-driven DOM updates.
+
+## Task order and gating
 
 - **32.1 has no dependency on 32.2/32.3** (pure constructor/wiring change) — can be dispatched first or in parallel.
 - **32.2 depends on 32.1** (the shell needs the new providers in scope even if unused until Initiative 33/34).

@@ -9,9 +9,12 @@ bar as every delegated task in this project.
 
 Two independent tasks, each one commit:
 
-## 28.1 — Merge Sources + Available into one tree
+## Tasks
 
-**Depends on:** nothing beyond current `main`.
+### 28.1 - Merge Sources + Available into one tree
+
+- **Status:** `delivered` (merged 979e456 2026-09-08) · **Short:** Merge Sources and Available · **Size:** M · **Depends on:** -
+- **Goal:** Unify `SourcesTreeDataProvider` and `AvailableTreeDataProvider` into a single sidebar tree so expanding a source shows its catalog content directly without select-to-filter coupling.
 
 **Scope:**
 - `src/ui/sourcesView.ts`: `SourcesTreeDataProvider` takes an injected
@@ -50,9 +53,10 @@ Two independent tasks, each one commit:
 - `grep -n "aiSwissknife.available"` across `package.json`/`src/` returns
   nothing (fully removed, not left dangling).
 
-## 28.2 — Installed kind-grouping
+### 28.2 - Installed kind-grouping
 
-**Depends on:** nothing (independent of 28.1, different files).
+- **Status:** `delivered` (merged 979e456 2026-09-08) · **Short:** Installed kind grouping · **Size:** S · **Depends on:** -
+- **Goal:** Add an intermediate per-kind grouping level (`KindGroupItem`) under each assistant/scope group in `InstalledTreeDataProvider`.
 
 **Scope:**
 - `src/ui/installedView.ts`: new `KindGroupItem` class; `InstalledGroupItem`
