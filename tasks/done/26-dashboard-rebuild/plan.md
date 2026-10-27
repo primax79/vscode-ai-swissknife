@@ -1,22 +1,22 @@
-# 26 — Dashboard rebuild: unified table, filters, detail — Implementation plan
+# 26 — Ricostruzione della Dashboard: tabella unificata, filtri, dettaglio — Piano di implementazione
 
-> **Derived from spec:** [`../specs/phase-6-spec.md`](../../specs/phase-6-spec.md) §4.5
+> **Derivato dalla specifica:** [`../specs/phase-6-spec.md`](../../specs/phase-6-spec.md) §4.5
 
 ## Tasks
 
-## Task order and gating
+## Ordine dei task e dipendenze
 
-- **26.1 has no dependency on 23-25** — dispatch it immediately alongside them.
-- **26.2 depends on 26.1 and on 23.3 (cross-framework lookup), 24.1 (diff availability), and 25.2/25.5 (Promote/Move actions)** — it is the integration point where those land in the UI, and must wait for all of them.
+- **26.1 non ha dipendenze da 23-25** — avviarlo immediatamente in parallelo ad essi.
+- **26.2 dipende da 26.1 e da 23.3 (ricerca cross-framework), 24.1 (disponibilità del diff) e 25.2/25.5 (azioni Promote/Move)** — è il punto di integrazione in cui tali funzionalità approdano nella UI e deve attenderle tutte.
 
-## Closed
+## Chiusi
 
-### 26.1 - Unified table + filter bar + breadcrumb
+### 26.1 - Tabella unificata + barra dei filtri + breadcrumb
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Unified table and filters · **Size:** M · **Depends on:** 16 · **Spec:** [26.1-unified-table-and-filters.md](26.1-unified-table-and-filters.md)
-- **Goal:** Replace the Dashboard's two structurally different tables (managed vs. unmanaged) with one unified row model, a single status badge, and an Environment/Scope/Membership/Kind/search filter bar with a removable-chip breadcrumb.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Tabella unificata e filtri · **Size:** M · **Depends on:** 16 · **Spec:** [26.1-unified-table-and-filters.md](26.1-unified-table-and-filters.md)
+- **Goal:** Sostituire le due tabelle strutturalmente diverse della Dashboard (elementi gestiti vs. non gestiti) con un unico modello di riga unificato, un singolo badge di stato e una barra dei filtri Environment/Scope/Membership/Kind/ricerca con breadcrumb a chip rimovibili.
 
-### 26.2 - Per-item detail panel + value-based action handlers
+### 26.2 - Pannello di dettaglio per elemento + gestori di azioni basati su valore
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Per-item detail panel · **Size:** M · **Depends on:** 26.1, 23, 24, 25 · **Spec:** [26.2-detail-panel.md](26.2-detail-panel.md)
-- **Goal:** Add a request/response webview message protocol so selecting a row opens a detail section showing origin, diff availability, cross-framework presence, and value-based Copy/Move/Promote/Edit action handlers.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Pannello di dettaglio per elemento · **Size:** M · **Depends on:** 26.1, 23, 24, 25 · **Spec:** [26.2-detail-panel.md](26.2-detail-panel.md)
+- **Goal:** Aggiungere un protocollo di messaggi webview richiesta/risposta affinché la selezione di una riga apra una sezione di dettaglio che mostri origine, disponibilità del diff, presenza cross-framework e gestori di azioni Copy/Move/Promote/Edit basati su valore.

@@ -1,33 +1,33 @@
-# 21 — Codex CLI & Gemini CLI adapters — Implementation plan
+# 21 — Adapter Codex CLI e Gemini CLI — Piano di implementazione
 
 > **Derived from spec:** [`../specs/phase-4-spec.md`](../../specs/phase-4-spec.md) §7 · [`../../SPEC.md`](../../../SPEC.md) §1
 
-Tasks (each = one commit):
+Task (ciascuno = un commit):
 
 ## Tasks
 
-## Gating
+## Vincoli di sequenza
 
-**Task 21.1 gates the `agent` portion of 21.3** (the rest of 21.3 doesn't depend on it and can proceed in parallel).
+**Il task 21.1 blocca la parte `agent` di 21.3** (il resto di 21.3 non dipende da esso e può procedere in parallelo).
 
 ## Closed
 
-### 21.1 - Gemini `agent` verification spike
+### 21.1 - Spike di verifica di `agent` per Gemini
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Gemini agent verification spike · **Size:** S · **Kind:** investigation · **Depends on:** 08 · **Spec:** [21.1-gemini-agent-verification.md](21.1-gemini-agent-verification.md)
-- **Goal:** Verify whether Gemini CLI supports a standalone `agent` format outside extension bundles before implementing `GeminiAdapter`.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Verifica agent Gemini · **Size:** S · **Kind:** investigation · **Depends on:** 08 · **Spec:** [21.1-gemini-agent-verification.md](21.1-gemini-agent-verification.md)
+- **Goal:** Verificare se Gemini CLI supporti un formato `agent` standalone al di fuori dei bundle di estensione prima di implementare `GeminiAdapter`.
 
-### 21.2 - Codex CLI adapter
+### 21.2 - Adapter Codex CLI
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Codex CLI adapter · **Size:** M · **Depends on:** 03, 05, 08, 09, 10, 12 · **Spec:** [21.2-codex-adapter.md](21.2-codex-adapter.md)
-- **Goal:** Implement `CodexAdapter` in `src/adapters/codex.ts` supporting `skill` (`SKILL.md`), `agent` (`.codex/agents/*.toml`), `command` (`.codex/prompts/*.md`), `mcp-server` (`.codex/config.json`), and `rule` (`AGENTS.md`).
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Adapter Codex CLI · **Size:** M · **Depends on:** 03, 05, 08, 09, 10, 12 · **Spec:** [21.2-codex-adapter.md](21.2-codex-adapter.md)
+- **Goal:** Implementare `CodexAdapter` in `src/adapters/codex.ts` con supporto a `skill` (`SKILL.md`), `agent` (`.codex/agents/*.toml`), `command` (`.codex/prompts/*.md`), `mcp-server` (`.codex/config.json`) e `rule` (`AGENTS.md`).
 
-### 21.3 - Gemini CLI adapter
+### 21.3 - Adapter Gemini CLI
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Gemini CLI adapter · **Size:** M · **Depends on:** 21.1, 03, 05, 08, 09, 10, 12 · **Spec:** [21.3-gemini-adapter.md](21.3-gemini-adapter.md)
-- **Goal:** Implement `GeminiAdapter` in `src/adapters/gemini.ts` supporting `skill` (`SKILL.md`), TOML `command` (`.gemini/commands/*.toml`), `mcp-server` (`settings.json`), and `rule` (`GEMINI.md`).
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Adapter Gemini CLI · **Size:** M · **Depends on:** 21.1, 03, 05, 08, 09, 10, 12 · **Spec:** [21.3-gemini-adapter.md](21.3-gemini-adapter.md)
+- **Goal:** Implementare `GeminiAdapter` in `src/adapters/gemini.ts` con supporto a `skill` (`SKILL.md`), `command` TOML (`.gemini/commands/*.toml`), `mcp-server` (`settings.json`) e `rule` (`GEMINI.md`).
 
-### 21.4 - Translator wiring & UI integration
+### 21.4 - Collegamento dei traduttori e integrazione UI
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Codex and Gemini UI integration · **Size:** M · **Depends on:** 21.2, 21.3 · **Spec:** [21.4-codex-gemini-ui.md](21.4-codex-gemini-ui.md)
-- **Goal:** Extend all per-kind translators with `codex-cli` and `gemini-cli` target branches and expose all five assistants across UI pickers, sync, discovery, and drift.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Integrazione UI Codex e Gemini · **Size:** M · **Depends on:** 21.2, 21.3 · **Spec:** [21.4-codex-gemini-ui.md](21.4-codex-gemini-ui.md)
+- **Goal:** Estendere tutti i traduttori per tipo con i rami di destinazione `codex-cli` e `gemini-cli` ed esporre tutti e cinque gli assistenti nei selettori UI, nella sincronizzazione, nel rilevamento e nel drift.

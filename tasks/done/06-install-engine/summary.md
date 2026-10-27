@@ -1,18 +1,18 @@
-# 06 — Install engine (pipeline) — Summary
+# 06 — Motore di installazione (pipeline) — Riepilogo
 
-> **Closed on:** 2026-10-27 (registry tidy; verifier ai-coding-tools-c1)  
-> **Initiative:** 06 — Install engine (pipeline)  
-> **Status:** ✅ Done and merged into main
+> **Closed on:** 2026-10-27 (riordino del registro; verificatore ai-coding-tools-c1)  
+> **Initiative:** 06 — Motore di installazione (pipeline)  
+> **Status:** ✅ Completato e unito in main
 
-Summary written at closure from the plan and the git history; the per-task specs in this folder hold the detail.
+Riepilogo scritto alla chiusura a partire dal piano e dalla cronologia git; le specifiche per singolo task in questa cartella contengono i dettagli.
 
-## What was built
+## Cosa è stato realizzato
 
-- **06.1 Plan + preview (revised)** — merged 9229aaa 2026-08-19; commit bc55b62. Resolve real skill content, translate it for the target assistant, compute a conflict/file preview against a validated target directory, and return a discriminated `PreparedInstall`.
-- **06.2 Transactional apply + verify (revised)** — merged 9229aaa 2026-08-19; commit bc55b62. Apply a `PreparedInstall` via a staged directory swap with target-tree snapshot revalidation, post-swap verification, rollback recovery outcomes, and `state.json` persistence.
+- **06.1 Pianificazione + anteprima (rivisto)** — unito 9229aaa 2026-08-19; commit bc55b62. Risolvere il contenuto reale della skill, tradurlo per l'assistente di destinazione, calcolare un'anteprima di conflitti/file rispetto a una directory di destinazione validata e restituire un `PreparedInstall` discriminato.
+- **06.2 Applicazione transazionale + verifica (rivisto)** — unito 9229aaa 2026-08-19; commit bc55b62. Applicare un `PreparedInstall` tramite uno scambio di directory con staging con rivalidazione dello snapshot dell'albero di destinazione, verifica post-scambio, esiti di ripristino rollback e persistenza in `state.json`.
 
 ## Verification
 
-- Every task's work is merged into `main` (evidence: the commits named above, from `git log --grep '<id>'`).
-- `npm test` on `main` at 5e85109 (2026-10-27): 577 tests, 576 pass, 0 fail, 1 opt-in skip (`AISK_REAL_KILO=1`).
-- `ai-orch tasks validate --tasks-dir tasks`: 0 errors.
+- Il lavoro di ogni task è stato unito in `main` (evidenza: i commit indicati sopra, da `git log --grep '<id>'`).
+- `npm test` su `main` a 5e85109 (2026-10-27): 577 test, 576 superati, 0 falliti, 1 saltato opt-in (`AISK_REAL_KILO=1`).
+- `ai-orch tasks validate --tasks-dir tasks`: 0 errori.

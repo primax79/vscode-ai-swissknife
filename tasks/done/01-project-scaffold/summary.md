@@ -1,19 +1,19 @@
-# 01 — Project scaffold — Summary
+# 01 — Scaffold del progetto — Riepilogo
 
-> **Closed on:** 2026-10-27 (registry tidy; verifier ai-coding-tools-c1)  
-> **Initiative:** 01 — Project scaffold  
-> **Status:** ✅ Done and merged into main
+> **Closed on:** 2026-10-27 (riordino del registro; verificatore ai-coding-tools-c1)  
+> **Initiative:** 01 — Scaffold del progetto  
+> **Status:** ✅ Completato e unito in main
 
-Summary written at closure from the plan and the git history; the per-task specs in this folder hold the detail.
+Riepilogo scritto alla chiusura a partire dal piano e dalla cronologia git; le specifiche per singolo task in questa cartella contengono i dettagli.
 
-## What was built
+## Cosa è stato realizzato
 
-- **01.1 package.json + build tooling** — merged 30246bc 2026-08-18. Create `package.json`, `tsconfig.json`, and an esbuild-based build script so the extension can compile.
-- **01.2 Extension entry point + activation** — merged ae7e2bb 2026-08-18. Provide a minimal `src/extension.ts` that activates cleanly in the Extension Development Host with the folder layout later initiatives fill in.
-- **01.3 Lint/format config + npm scripts sanity check** — merged 9844f67 2026-08-18. Configure working `eslint`, `typecheck`, and `build` scripts as the standard verification gate.
+- **01.1 package.json + strumenti di build** — unito 30246bc 2026-08-18. Creare `package.json`, `tsconfig.json` e uno script di build basato su esbuild affinché l'estensione possa compilare.
+- **01.2 Entry point e attivazione dell'estensione** — unito ae7e2bb 2026-08-18. Fornire un `src/extension.ts` minimale che si attivi in modo pulito nell'Extension Development Host con la struttura di cartelle che le iniziative successive popoleranno.
+- **01.3 Configurazione lint/format + controllo degli script npm** — unito 9844f67 2026-08-18. Configurare script `eslint`, `typecheck` e `build` funzionanti come gate di verifica standard.
 
 ## Verification
 
-- Every task's work is merged into `main` (evidence: the commits named above, from `git log --grep '<id>'`).
-- `npm test` on `main` at 5e85109 (2026-10-27): 577 tests, 576 pass, 0 fail, 1 opt-in skip (`AISK_REAL_KILO=1`).
-- `ai-orch tasks validate --tasks-dir tasks`: 0 errors.
+- Il lavoro di ogni task è stato unito in `main` (evidenza: i commit indicati sopra, da `git log --grep '<id>'`).
+- `npm test` su `main` a 5e85109 (2026-10-27): 577 test, 576 superati, 0 falliti, 1 saltato opt-in (`AISK_REAL_KILO=1`).
+- `ai-orch tasks validate --tasks-dir tasks`: 0 errori.

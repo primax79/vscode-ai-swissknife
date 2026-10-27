@@ -1,21 +1,21 @@
-# 46 — CLI access to ai-swissknife — Summary
+# 46 — Accesso CLI a ai-swissknife — Riepilogo
 
-> **Closed on:** 2026-10-27 (registry tidy; verifier ai-coding-tools-c1)  
-> **Initiative:** 46 — CLI access to ai-swissknife  
-> **Status:** ✅ Done and merged into main
+> **Closed on:** 2026-10-27 (riordino del registro; verificatore ai-coding-tools-c1)  
+> **Initiative:** 46 — Accesso CLI a ai-swissknife  
+> **Status:** ✅ Completata e unita in main
 
-Summary written at closure from the plan and the git history; the per-task specs in this folder hold the detail.
+Riepilogo scritto alla chiusura a partire dal piano e dalla cronologia git; le specifiche dei singoli task in questa cartella contengono i dettagli.
 
-## What was built
+## Cosa è stato realizzato
 
-- **46.1 CLI skeleton + read-only commands (sources, catalog, installed, updates, item, plan-install)** — merged 5b0bc70 2026-10-09. Build the `vscode`-free `dist/cli.js` bundle (`ai-swissknife`) with pure JSON stdout and read-only commands `sources`, `catalog`, `installed`, `updates`, `item`, and `plan-install`.
-- **46.2 Agent-facing documentation: AGENTS.md block + `--help --json` self-description** — merged 88bd55f 2026-10-09. Add the machine-readable `describe` command generated from command definitions and document the CLI contract and examples in `AGENTS.md`.
-- **46.3 Cross-process lock for manifest/state read-modify-write** — merged e909ede 2026-10-08. Implement `withStateLock` in `src/domain/stateLock.ts` with exclusive lock files and stale-lock recovery around manifest and state read-modify-write sequences.
-- **46.5 `redistribute <path|item>` v1 (installed from a local folder; plan-first, `--write`)** — merged 99a127c 2026-10-09. Add `planRedistribute`/`applyRedistribute` and the CLI `redistribute` command to push edits from a registered `local-folder` source to all installed copies (plan-only without `--write`).
-- **46.4 Write commands behind `--write`: apply-install, uninstall (soft), add/remove source** — merged b0872cb 2026-10-09. Add plan-first CLI write commands behind `--write` (`apply-install`, `uninstall`, `source add/remove`, `update`, and `trash list/restore/empty`).
+- **46.1 Scheletro della CLI + comandi in sola lettura (sources, catalog, installed, updates, item, plan-install)** — unito in 5b0bc70 il 2026-10-09. Compilare il bundle privo di `vscode` `dist/cli.js` (`ai-swissknife`) con stdout in puro JSON e i comandi in sola lettura `sources`, `catalog`, `installed`, `updates`, `item` e `plan-install`.
+- **46.2 Documentazione rivolta agli agenti: blocco AGENTS.md + auto-descrizione `--help --json`** — unito in 88bd55f il 2026-10-09. Aggiungere il comando `describe` leggibile dalle macchine generato dalle definizioni dei comandi e documentare il contratto della CLI e gli esempi in `AGENTS.md`.
+- **46.3 Lock inter-processo per lettura-modifica-scrittura di manifest/stato** — unito in e909ede il 2026-10-08. Implementare `withStateLock` in `src/domain/stateLock.ts` con file di lock esclusivi e recupero dei lock obsoleti attorno alle sequenze di lettura-modifica-scrittura di manifest e stato.
+- **46.5 `redistribute <path|item>` v1 (installato da una cartella locale; pianificazione preventiva, `--write`)** — unito in 99a127c il 2026-10-09. Aggiungere `planRedistribute`/`applyRedistribute` e il comando CLI `redistribute` per propagare le modifiche da una sorgente `local-folder` registrata a tutte le copie installate (solo pianificazione senza `--write`).
+- **46.4 Comandi di scrittura protetti da `--write`: apply-install, uninstall (soft), aggiunta/rimozione sorgente** — unito in b0872cb il 2026-10-09. Aggiungere i comandi di scrittura della CLI con pianificazione preventiva protetti da `--write` (`apply-install`, `uninstall`, `source add/remove`, `update` e `trash list/restore/empty`).
 
 ## Verification
 
-- Every task's work is merged into `main` (evidence: the commits named above, from `git log --grep '<id>'`).
-- `npm test` on `main` at 5e85109 (2026-10-27): 577 tests, 576 pass, 0 fail, 1 opt-in skip (`AISK_REAL_KILO=1`).
-- `ai-orch tasks validate --tasks-dir tasks`: 0 errors.
+- Il lavoro di ogni task è stato unito in `main` (evidenza: i commit indicati sopra, da `git log --grep '<id>'`).
+- `npm test` su `main` a 5e85109 (2026-10-27): 577 test, 576 passati, 0 falliti, 1 saltato opt-in (`AISK_REAL_KILO=1`).
+- `ai-orch tasks validate --tasks-dir tasks`: 0 errori.

@@ -1,30 +1,30 @@
-# 11 — Marketplace sources resolver — Summary
+# 11 — Resolver delle sorgenti marketplace — Riepilogo
 
 > **Shipped on:** 2026-08-19  
-> **Initiative:** 11 — Marketplace sources resolver  
-> **Status:** ✅ Done and merged into main
+> **Initiative:** 11 — Resolver delle sorgenti marketplace  
+> **Status:** ✅ Completato e unito in main
 
 ---
 
-## What was built
+## Cosa è stato realizzato
 
-1. **Git Marketplace Resolver (11.1)**:
-   - Implemented `resolveGitMarketplace` in `src/sources/gitMarketplace.ts` with clone/fetch, ref pinning, and cache synchronization under `gitMarketplaceMutex`.
-   - Native parsing of `.claude-plugin/marketplace.json` and `marketplace.json` catalogs.
-   - Discovery of multi-artifact plugin packages (skills, agents, commands, and MCP servers inside each plugin folder).
+1. **Resolver Git Marketplace (11.1)**:
+   - Implementato `resolveGitMarketplace` in `src/sources/gitMarketplace.ts` con clone/fetch, pin dei ref e sincronizzazione della cache sotto `gitMarketplaceMutex`.
+   - Parsing nativo dei cataloghi `.claude-plugin/marketplace.json` e `marketplace.json`.
+   - Discovery di pacchetti plugin multi-artefatto (skill, agent, command e server MCP all'interno della cartella di ciascun plugin).
 
-2. **Marketplace Content Resolution & Engine Integration (11.2)**:
-   - Implemented `resolveArtifactContent` for `git-marketplace` sources across all artifact kinds (`skill`, `agent`, `command`, `mcp-server`).
-   - Wired `git-marketplace` sources directly into `planInstall` and `applyInstall`.
+2. **Risoluzione del contenuto marketplace e integrazione nel motore (11.2)**:
+   - Implementato `resolveArtifactContent` per le sorgenti `git-marketplace` su tutti i tipi di artefatto (`skill`, `agent`, `command`, `mcp-server`).
+   - Collegate direttamente le sorgenti `git-marketplace` in `planInstall` e `applyInstall`.
 
-3. **UI Integration (11.3)**:
-   - Added `git-marketplace` selection in `AI Swissknife: Add Source`.
-   - Wired `resolveGitMarketplace` in `AvailableTreeDataProvider.refreshCatalog()`.
-   - Batch and single installation of marketplace packages and artifacts.
+3. **Integrazione nella UI (11.3)**:
+   - Aggiunta la selezione `git-marketplace` in `AI Swissknife: Add Source`.
+   - Collegato `resolveGitMarketplace` in `AvailableTreeDataProvider.refreshCatalog()`.
+   - Installazione singola e in batch di pacchetti e artefatti del marketplace.
 
 ## Verification
 
-- Lint (`npm run lint`): 0 errors, 0 warnings.
-- Typecheck (`npm run typecheck`): Clean.
-- Test suite (`npm test`): 108 tests passing out of 108.
-- Build (`npm run build`): Generated bundle `dist/extension.js`.
+- Lint (`npm run lint`): 0 errori, 0 avvisi.
+- Typecheck (`npm run typecheck`): Pulito.
+- Suite di test (`npm test`): 108 test superati su 108.
+- Build (`npm run build`): Generato il bundle `dist/extension.js`.

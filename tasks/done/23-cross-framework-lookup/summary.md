@@ -1,19 +1,19 @@
-# 23 — Cross-framework identity lookup + shared content accessor — Summary
+# 23 — Ricerca di identità cross-framework + accessor condiviso dei contenuti — Riepilogo
 
-> **Closed on:** 2026-10-27 (registry tidy; verifier ai-coding-tools-c1)  
-> **Initiative:** 23 — Cross-framework identity lookup + shared content accessor  
-> **Status:** ✅ Done and merged into main
+> **Closed on:** 2026-10-27 (riordino del registro; verificatore ai-coding-tools-c1)  
+> **Initiative:** 23 — Ricerca di identità cross-framework + accessor condiviso dei contenuti  
+> **Status:** ✅ Completato e unito in main
 
-Summary written at closure from the plan and the git history; the per-task specs in this folder hold the detail.
+Riepilogo scritto alla chiusura a partire dal piano e dalla cronologia git; le specifiche dei singoli task in questa cartella contengono i dettagli.
 
-## What was built
+## Cosa è stato realizzato
 
-- **23.1 Extract shared resolve+translate content accessor** — merged ab02786 2026-09-07; commit a820f3b. Extract `resolveContentFromSource` and per-kind translation calls from `plan.ts` into a shared `resolveAndTranslate` content accessor supporting all 5 source types and 6 artifact kinds.
-- **23.2 Migrate drift.ts and discovery.ts onto the shared accessor** — merged 6bd0da3 2026-09-08; commit 77f6a4a. Replace inline resolve-and-translate logic in `drift.ts` and `discovery.ts` with calls to `resolveAndTranslate`, closing the `hook` and `rule` drift/discovery gap.
-- **23.3 Cross-framework identity lookup function** — merged d0e6160 2026-09-07; commit 7c95667. Implement `findRelatedInstallations` in `src/engine/crossFrameworkLookup.ts` to find all `ManagedInstallation` records representing the same logical artifact across assistants and scopes.
+- **23.1 Estrarre l'accessor condiviso dei contenuti resolve+translate** — unito in ab02786 2026-09-07; commit a820f3b. Estrarre `resolveContentFromSource` e le chiamate di traduzione per tipo da `plan.ts` in un accessor condiviso dei contenuti `resolveAndTranslate` che supporti tutti e 5 i tipi di sorgente e i 6 tipi di artefatto.
+- **23.2 Migrare drift.ts e discovery.ts sull'accessor condiviso** — unito in 6bd0da3 2026-09-08; commit 77f6a4a. Sostituire la logica inline di risoluzione e traduzione in `drift.ts` e `discovery.ts` con chiamate a `resolveAndTranslate`, colmando la lacuna di drift/rilevamento per `hook` e `rule`.
+- **23.3 Funzione di ricerca di identità cross-framework** — unito in d0e6160 2026-09-07; commit 7c95667. Implementare `findRelatedInstallations` in `src/engine/crossFrameworkLookup.ts` per trovare tutti i record `ManagedInstallation` che rappresentano lo stesso artefatto logico tra assistenti e scope.
 
 ## Verification
 
-- Every task's work is merged into `main` (evidence: the commits named above, from `git log --grep '<id>'`).
-- `npm test` on `main` at 5e85109 (2026-10-27): 577 tests, 576 pass, 0 fail, 1 opt-in skip (`AISK_REAL_KILO=1`).
-- `ai-orch tasks validate --tasks-dir tasks`: 0 errors.
+- Il lavoro di ogni task è stato unito in `main` (evidenza: i commit indicati sopra, da `git log --grep '<id>'`).
+- `npm test` su `main` a 5e85109 (2026-10-27): 577 test, 576 superati, 0 falliti, 1 saltato opzionale (`AISK_REAL_KILO=1`).
+- `ai-orch tasks validate --tasks-dir tasks`: 0 errori.

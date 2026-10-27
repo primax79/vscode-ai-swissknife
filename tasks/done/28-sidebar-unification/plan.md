@@ -1,77 +1,77 @@
-# Initiative 28 — Sidebar Navigation Unification
+# Iniziativa 28 — Unificazione della navigazione nella sidebar
 
-Driven by [`specs/phase-7-spec.md`](../../specs/phase-7-spec.md). Implemented
-directly (not delegated to Kilo) — both tasks are mechanical
-composition/restructuring of code fully re-read during spec authoring, and
-review overhead would cost more than it'd catch. Verified with the full
-gate (`typecheck && lint && test && build`) plus manual diff review, same
-bar as every delegated task in this project.
+Guidata da [`specs/phase-7-spec.md`](../../specs/phase-7-spec.md). Implementata
+direttamente (non delegata a Kilo) — entrambi i task consistono in una
+composizione/ristrutturazione meccanica di codice interamente riletto durante la stesura della specifica, e
+l'overhead di revisione costerebbe più di quanto potrebbe intercettare. Verificata con il gate
+completo (`typecheck && lint && test && build`) più revisione manuale del diff, con la stessa
+soglia di qualità di ogni task delegato in questo progetto.
 
-Two independent tasks, each one commit:
+Due task indipendenti, ciascuno in un singolo commit:
 
 ## Tasks
 
-## Closed
+## Chiusi
 
-### 28.1 - Merge Sources + Available into one tree
+### 28.1 - Unire Sources + Available in un unico albero
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Merge Sources and Available · **Size:** M · **Depends on:** 16, 22
-- **Goal:** Unify `SourcesTreeDataProvider` and `AvailableTreeDataProvider` into a single sidebar tree so expanding a source shows its catalog content directly without select-to-filter coupling.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Unione di Sources e Available · **Size:** M · **Depends on:** 16, 22
+- **Goal:** Unificare `SourcesTreeDataProvider` e `AvailableTreeDataProvider` in un singolo albero nella sidebar in modo che l'espansione di una sorgente mostri direttamente il contenuto del suo catalogo senza accoppiamento selezione-filtro.
 
-**Scope:**
-- `src/ui/sourcesView.ts`: `SourcesTreeDataProvider` takes an injected
-  `AvailableTreeDataProvider`; `SourceTreeItem` union expands to include
-  the `Available` node types (minus `AvailableSourceGroupItem` and the
-  deleted `AvailablePlaceholderItem`); `getChildren`/`getTreeItem` handle
-  `ScopeGroupItem`/`SourceItem` directly and delegate everything else;
-  `addSource`/`removeSource` also invalidate the injected provider's
-  catalog cache.
-- `src/ui/availableView.ts`: add `getCachedSourceGroups()`/
-  `getCachedRecommendedGroup()` accessors; `installSourceGroup` takes a
-  `SourceItem` (type-only import from `sourcesView.ts`, no runtime cycle)
-  instead of `AvailableSourceGroupItem`; delete `filterSource`/
+**Ambito:**
+- `src/ui/sourcesView.ts`: `SourcesTreeDataProvider` riceve un
+  `AvailableTreeDataProvider` iniettato; l'unione `SourceTreeItem` si espande fino a includere
+  i tipi di nodo `Available` (meno `AvailableSourceGroupItem` e il
+  rimosso `AvailablePlaceholderItem`); `getChildren`/`getTreeItem` gestiscono
+  direttamente `ScopeGroupItem`/`SourceItem` e delegano tutto il resto;
+  `addSource`/`removeSource` invalidano anche la cache del catalogo del provider
+  iniettato.
+- `src/ui/availableView.ts`: aggiungere gli accessor `getCachedSourceGroups()`/
+  `getCachedRecommendedGroup()`; `installSourceGroup` accetta un
+  `SourceItem` (import solo di tipo da `sourcesView.ts`, nessun ciclo a runtime)
+  invece di `AvailableSourceGroupItem`; eliminare `filterSource`/
   `setFilterSource`/`AvailablePlaceholderItem`.
-- `src/extension.ts`: construct `availableProvider` before
-  `sourcesProvider`, inject it; drop the `aiSwissknife.available`
-  `registerTreeDataProvider` call and the `sourcesTreeView.
-  onDidChangeSelection` wiring; update the `installSourceGroup` command
-  registration's param type.
-- `package.json`: drop the `aiSwissknife.available` view; retarget every
-  `view == aiSwissknife.available` menu `when` to
-  `view == aiSwissknife.sources`; `installSourceGroup`'s `when` becomes
+- `src/extension.ts`: costruire `availableProvider` prima di
+  `sourcesProvider` e iniettarlo; rimuovere per `aiSwissknife.available` la chiamata `registerTreeDataProvider`
+  e il collegamento `sourcesTreeView.
+  onDidChangeSelection`; aggiornare il tipo del parametro nella registrazione del comando
+  `installSourceGroup`.
+- `package.json`: rimuovere la vista `aiSwissknife.available`; reindirizzare ogni
+  menu con `view == aiSwissknife.available` nella clausola `when` verso
+  `view == aiSwissknife.sources`; per `installSourceGroup` il `when` diventa
   `viewItem == sourceItem`.
-- `src/ui/ui.test.ts`: update provider construction call sites; add
-  coverage for the merged tree (a `SourceItem`'s children resolve to its
-  diagnostics+hierarchy; the root includes a `RecommendedGroupItem` when
-  present).
+- `src/ui/ui.test.ts`: aggiornare i punti di chiamata per la costruzione dei provider; aggiungere
+  copertura per l'albero unificato (i figli di un `SourceItem` risolvono nella sua
+  diagnostica+gerarchia; la radice include un `RecommendedGroupItem` quando
+  presente).
 
-**Verification:**
-- `npm run typecheck && npm run lint && npm test && npm run build` all
-  green.
-- Manual read of the final `getChildren`/`getTreeItem` in
-  `sourcesView.ts` confirms every `AvailableTreeItem` subtype from the old
-  `Available` root is still reachable (diagnostics, folders, artifacts,
-  recommended/broken) with no dropped branch.
-- `grep -n "aiSwissknife.available"` across `package.json`/`src/` returns
-  nothing (fully removed, not left dangling).
+**Verifica:**
+- `npm run typecheck && npm run lint && npm test && npm run build` tutti
+  verdi.
+- La lettura manuale dei metodi finali `getChildren`/`getTreeItem` in
+  `sourcesView.ts` conferma che ogni sottotipo di `AvailableTreeItem` della vecchia
+  radice `Available` è ancora raggiungibile (diagnostica, cartelle, artefatti,
+  consigliati/non risolti) senza alcun ramo perso.
+- `grep -n "aiSwissknife.available"` su `package.json`/`src/` non restituisce
+  nulla (completamente rimosso, nessun riferimento pendente).
 
-### 28.2 - Installed kind-grouping
+### 28.2 - Raggruppamento per tipo in Installed
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Installed kind grouping · **Size:** S · **Depends on:** -
-- **Goal:** Add an intermediate per-kind grouping level (`KindGroupItem`) under each assistant/scope group in `InstalledTreeDataProvider`.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Raggruppamento per tipo in Installed · **Size:** S · **Depends on:** -
+- **Goal:** Aggiungere un livello intermedio di raggruppamento per tipo (`KindGroupItem`) sotto ciascun gruppo assistente/scope in `InstalledTreeDataProvider`.
 
-**Scope:**
-- `src/ui/installedView.ts`: new `KindGroupItem` class; `InstalledGroupItem`
-  and `UnmanagedGroupItem` children go through an intermediate per-kind
-  grouping step (stable kind order, only non-empty groups rendered); kind
-  icons reuse the existing per-item mapping.
-- `src/ui/ui.test.ts`: update/extend the `InstalledTreeDataProvider` suite
-  for the new intermediate level.
+**Ambito:**
+- `src/ui/installedView.ts`: nuova classe `KindGroupItem`; i figli di `InstalledGroupItem`
+  e `UnmanagedGroupItem` passano attraverso un livello intermedio di
+  raggruppamento per tipo (ordine dei tipi stabile, vengono renderizzati solo i gruppi non vuoti); le icone dei tipi
+  riutilizzano la mappatura per elemento esistente.
+- `src/ui/ui.test.ts`: aggiornare/estendere la suite di `InstalledTreeDataProvider`
+  per il nuovo livello intermedio.
 
-**Verification:**
-- `npm run typecheck && npm run lint && npm test && npm run build` all
-  green.
-- Manual check: an installation set spanning 3+ kinds under one
-  assistant/scope renders one `KindGroupItem` per kind present, none for
-  kinds absent, and each item's own contextValue/commands are unchanged
-  from before (grouping is purely structural).
+**Verifica:**
+- `npm run typecheck && npm run lint && npm test && npm run build` tutti
+  verdi.
+- Controllo manuale: un insieme di installazioni che copre 3+ tipi sotto un singolo
+  assistente/scope renderizza un `KindGroupItem` per ciascun tipo presente, nessuno per
+  i tipi assenti, e i contextValue/comandi propri di ciascun elemento restano invariati
+  rispetto a prima (il raggruppamento è puramente strutturale).

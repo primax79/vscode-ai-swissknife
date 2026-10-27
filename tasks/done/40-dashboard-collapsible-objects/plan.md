@@ -1,60 +1,60 @@
-# 40 — Dashboard Installed: one collapsible row per object, one child per place — Implementation plan
+# 40 — Dashboard Installed: una riga comprimibile per oggetto, una riga figlia per posizione — Piano di implementazione
 
-> Source: owner idea of 2026-10-08, `_inbox/analyzed/2026-10-08-collapsible-installed-rows.md`; owner decisions on the collapsed view and on unification taken the same day (below).
-> Inline plan, tasks expanded because it is delegated. Restructures the area that 39 touches: **do 39.1 first, then 40, then 39.2/39.3** (their buttons and badges go into the new rows).
+> Fonte: idea del proprietario del 2026-10-08, `_inbox/analyzed/2026-10-08-collapsible-installed-rows.md`; decisioni del proprietario sulla vista compressa e sull'unificazione prese lo stesso giorno (sotto).
+> Piano inline, task espansi perché delegati. Ristruttura l'area toccata da 39: **eseguire prima 39.1, poi 40, infine 39.2/39.3** (i relativi pulsanti e badge vanno nelle nuove righe).
 
-**Depends on:** 35 (matrix view), 39.1 (inventory message fix).
+**Depends on:** 35 (vista a matrice), 39.1 (correzione del messaggio di inventario).
 
-## Problem (grounded)
+## Problema (fondato sul codice)
 
-- Managed items are grouped by `(object, scope)` (`groupByIdentityAndScope`, `src/engine/crossFrameworkLookup.ts:70`): the same skill installed globally and in the project is two parents. Parent rows toggle with `toggleFolder` (`src/ui/dashboard.ts:1736`), start collapsed, and show only assistant icons with a "checking…" badge; there is no expand-all / collapse-all.
-- Unmanaged items live in a separate flat table (`#observedTable`, `:1197-1215`) with no grouping.
-- The managed matrix HTML is built **twice**: in the `update()` fast path (`:618-672`) and in `getHtml()` (`:1267-1330`). The `[object Object]` bug (39.1) is a symptom of that duplication.
+- Gli elementi gestiti sono raggruppati per `(object, scope)` (`groupByIdentityAndScope`, `src/engine/crossFrameworkLookup.ts:70`): la stessa skill installata globalmente e nel progetto produce due nodi padre. Le righe padre si aprono/chiudono con `toggleFolder` (`src/ui/dashboard.ts:1736`), partono compresse e mostrano solo le icone degli assistenti con un badge "checking…"; non c'è un espandi tutto / comprimi tutto.
+- Gli elementi non gestiti vivono in una tabella piatta separata (`#observedTable`, `:1197-1215`) senza alcun raggruppamento.
+- L'HTML della matrice degli elementi gestiti viene costruito **due volte**: nel percorso veloce di `update()` (`:618-672`) e in `getHtml()` (`:1267-1330`). Il bug `[object Object]` (39.1) è un sintomo di tale duplicazione.
 
-## Target (owner decisions)
+## Obiettivo (decisioni del proprietario)
 
-- **One tree.** One parent row per object `(kind, name)`; child rows are the *places* where it is actually present: one per `(assistant, scope)`, each with its own state — managed up-to-date / update available / modified locally / missing on disk, or unmanaged identical / differs / local only. The separate Unmanaged table goes away; the existing Membership filter (All / Managed / Unmanaged) filters child rows.
-- **Collapsed row** = kind pill, name, a compact **strip of place chips** (the assistant's **icon only, never its name** — same icons as the env filter pills and the current matrix, `getAssistantIconPath` in `src/ui/assistantIcons.ts` — plus the **scope icon** (globe = Global, folder = Workspace, from 40.4) placed right next to the assistant icon, the pair colored by that place's state; the assistant name and scope word appear only in the tooltip) and **one badge with the worst state**, plus a place count in the tooltip. Parents start collapsed.
-- **Scope icons.** Global and Workspace get their own icons (single source of truth, `scopeIcons.ts`), always shown **paired with the environment icon** wherever a place is identified (collapsed chips, child rows, the env/scope filters). The user-facing label of the `project` scope is "Workspace" (CONTEXT.md decision, not "Project" or "Local").
-- **Filter bar.** Scope and Membership become pill groups like Env (no `<select>`s), and Env, Scope, Membership, Kind are shown as four labelled, visually separated groups (owner feedback with screenshot, 2026-10-08).
-- **Expand all / Collapse all** buttons in the Installed toolbar (icon-only, 35.5), and the expand/collapse state of each parent survives data refreshes.
+- **Un unico albero.** Una riga padre per oggetto `(kind, name)`; le righe figlie sono le *posizioni* in cui è effettivamente presente: una per `(assistant, scope)`, ciascuna con il proprio stato — gestito aggiornato / aggiornamento disponibile / modificato localmente / mancante su disco, oppure non gestito identico / differente / solo locale. La tabella separata Unmanaged scompare; il filtro Membership esistente (All / Managed / Unmanaged) filtra le righe figlie.
+- **Riga compressa** = pillola del tipo, nome, una **striscia compatta di chip di posizione** (**solo l'icona** dell'assistente, **mai il nome** — stesse icone delle pillole del filtro env e della matrice attuale, `getAssistantIconPath` in `src/ui/assistantIcons.ts` — più l'**icona dello scope** (globo = Global, cartella = Workspace, da 40.4) posizionata subito accanto all'icona dell'assistente, con la coppia colorata in base allo stato di quella posizione; il nome dell'assistente e la parola dello scope compaiono solo nel tooltip) e **un badge con lo stato peggiore**, più il conteggio delle posizioni nel tooltip. I nodi padre partono compressi.
+- **Icone dello scope.** Global e Workspace ottengono le proprie icone (unica fonte di verità, `scopeIcons.ts`), mostrate sempre **accoppiate con l'icona dell'ambiente** ovunque venga identificata una posizione (chip compressi, righe figlie, filtri env/scope). L'etichetta rivolta all'utente per lo scope `project` è "Workspace" (decisione in CONTEXT.md, non "Project" o "Local").
+- **Barra dei filtri.** Scope e Membership diventano gruppi di pillole come Env (niente `<select>`), ed Env, Scope, Membership, Kind vengono mostrati come quattro gruppi etichettati e separati visivamente (feedback del proprietario con screenshot, 2026-10-08).
+- Pulsanti **Expand all / Collapse all** nella barra degli strumenti di Installed (sola icona, 35.5), e lo stato di espansione/compressione di ciascun nodo padre sopravvive agli aggiornamenti dei dati.
 
-## Locked-in decisions
+## Decisioni consolidate
 
-- Filters apply to child rows (place level): a parent is visible iff at least one of its children passes; non-matching children are hidden while the others stay. Text filter matches the parent name.
-- Parent-level `data-*` attributes (kind, name, worst status, set of assistants/scopes/memberships) are derived from the children so sort and the header stats keep working; stats count **places**, not objects (as today they count installations/observations).
-- One server-side renderer for both the initial HTML and the `inventoryData` update; the client never builds row HTML.
-- No change to discovery/drift/promote engine semantics.
+- I filtri si applicano alle righe figlie (a livello di posizione): un nodo padre è visibile se e solo se almeno una delle sue righe figlie supera il filtro; le righe figlie che non corrispondono vengono nascoste mentre le altre restano visibili. Il filtro testuale confronta il nome del nodo padre.
+- Gli attributi `data-*` a livello di nodo padre (kind, name, stato peggiore, insieme di assistants/scopes/memberships) sono derivati dalle righe figlie così che l'ordinamento e le statistiche dell'intestazione continuino a funzionare; le statistiche contano le **posizioni**, non gli oggetti (così come oggi contano le installazioni/osservazioni).
+- Un unico renderer lato server sia per l'HTML iniziale sia per l'aggiornamento `inventoryData`; il client non costruisce mai l'HTML delle righe.
+- Nessuna modifica alla semantica del motore di discovery/drift/promote.
 
-## Open questions
+## Questioni aperte
 
-None.
+Nessuna.
 
 ## Tasks
 
-## Closed
+## Chiusi
 
-### 40.1 - Pure model: build the object → places tree from managed + observed
+### 40.1 - Modello puro: costruire l'albero oggetto → posizioni a partire da gestiti + osservati
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Object-to-places tree model · **Size:** M · **Depends on:** - · **Spec:** [40.1-installed-tree-model.md](40.1-installed-tree-model.md)
-- **Goal:** Create `src/engine/installedTree.ts` exporting `buildInstalledTree` to group managed and unmanaged items into one `InstalledObject` per `(kind, name)` with sorted `Place` children and `worstState`.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Modello ad albero oggetto-posizioni · **Size:** M · **Depends on:** - · **Spec:** [40.1-installed-tree-model.md](40.1-installed-tree-model.md)
+- **Goal:** Creare `src/engine/installedTree.ts` che esporta `buildInstalledTree` per raggruppare gli elementi gestiti e non gestiti in un unico `InstalledObject` per `(kind, name)` con figli `Place` ordinati e `worstState`.
 
-### 40.2 - One server-side renderer: collapsed row (chip strip + worst state), child rows per place, filters/sort/detail adapted
+### 40.2 - Unico renderer lato server: riga compressa (striscia di chip + stato peggiore), righe figlie per posizione, filtri/ordinamento/dettaglio adattati
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Single installed tree renderer · **Size:** L · **Depends on:** 40.1, 40.4, 39.1 · **Spec:** [40.2-single-renderer.md](40.2-single-renderer.md)
-- **Goal:** Replace the duplicate matrix builders and separate unmanaged table with a single server-side `renderInstalledTree` rendering collapsible object parent rows with place-chip strips and child place rows.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Renderer unico albero installati · **Size:** L · **Depends on:** 40.1, 40.4, 39.1 · **Spec:** [40.2-single-renderer.md](40.2-single-renderer.md)
+- **Goal:** Sostituire i costruttori duplicati della matrice e la tabella separata degli elementi non gestiti con un unico `renderInstalledTree` lato server che renderizza righe padre comprimibili per oggetto con strisce di chip di posizione e righe figlie di posizione.
 
-### 40.3 - Expand all / Collapse all + collapse state kept across refreshes
+### 40.3 - Espandi tutto / Comprimi tutto + stato di compressione mantenuto tra gli aggiornamenti
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Expand and collapse all · **Size:** S · **Depends on:** 40.2 · **Spec:** [40.3-expand-collapse-all.md](40.3-expand-collapse-all.md)
-- **Goal:** Add Expand all and Collapse all icon buttons to the Installed toolbar and persist expanded parent identities in webview state across data refreshes.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Espandi e comprimi tutto · **Size:** S · **Depends on:** 40.2 · **Spec:** [40.3-expand-collapse-all.md](40.3-expand-collapse-all.md)
+- **Goal:** Aggiungere i pulsanti icona Expand all e Collapse all alla barra degli strumenti di Installed e persistere le identità dei nodi padre espansi nello stato della webview tra gli aggiornamenti dei dati.
 
-### 40.4 - Scope vocabulary (Global/Workspace) + icons as a shared module — run before 40.2
+### 40.4 - Vocabolario dello scope (Global/Workspace) + icone come modulo condiviso — eseguire prima di 40.2
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Shared scope vocabulary and icons · **Size:** S · **Depends on:** - · **Spec:** [40.4-scope-icons.md](40.4-scope-icons.md)
-- **Goal:** Create `src/ui/scopeIcons.ts` as the single source of truth for Global/Workspace labels and icons and replace user-facing "Project" scope strings across the UI.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Vocabolario e icone scope condivisi · **Size:** S · **Depends on:** - · **Spec:** [40.4-scope-icons.md](40.4-scope-icons.md)
+- **Goal:** Creare `src/ui/scopeIcons.ts` come unica fonte di verità per le etichette e le icone Global/Workspace e sostituire le stringhe "Project" rivolte all'utente relative allo scope in tutta la UI.
 
-### 40.5 - Filter bar: Env/Scope/Membership/Kind as visually grouped pill groups (replaces the `<select>`s)
+### 40.5 - Barra dei filtri: Env/Scope/Membership/Kind come gruppi di pillole raggruppati visivamente (sostituisce i `<select>`)
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Grouped filter bar pills · **Size:** S · **Depends on:** 40.2, 40.4 · **Spec:** [40.5-filter-bar.md](40.5-filter-bar.md)
-- **Goal:** Replace the Scope and Membership `<select>` dropdowns and separate Kind tab row with four visually grouped, labelled pill groups (ENV, SCOPE, MEMBERSHIP, KIND).
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Pillole barra filtri raggruppate · **Size:** S · **Depends on:** 40.2, 40.4 · **Spec:** [40.5-filter-bar.md](40.5-filter-bar.md)
+- **Goal:** Sostituire i menu a discesa `<select>` di Scope e Membership e la riga separata di tab Kind con quattro gruppi di pillole etichettati e raggruppati visivamente (ENV, SCOPE, MEMBERSHIP, KIND).

@@ -1,38 +1,38 @@
-# 34 — Dashboard: Recommendations + Installed action parity — Implementation plan
+# 34 — Dashboard: sezione Recommendations + parità delle azioni di Installed — Piano di implementazione
 
-> **Derived from spec:** [`../specs/phase-9-spec.md`](../../specs/phase-9-spec.md) §1 (goals 2-3), §4, §4.1
+> **Derivato dalla specifica:** [`../specs/phase-9-spec.md`](../../specs/phase-9-spec.md) §1 (obiettivi 2-3), §4, §4.1
 
-**Depends on:** 31 (all of it, merged), 32 (all of it, merged). Independent
-of Initiative 33 — different sections, no shared code — may run before,
-after, or in parallel with it.
+**Depends on:** 31 (intera iniziativa, integrata), 32 (intera iniziativa, integrata). Indipendente
+dall'Iniziativa 33 — sezioni diverse, nessun codice condiviso — può essere eseguita prima,
+dopo o in parallelo ad essa.
 
-Tasks (each = one commit):
+Task (ciascuno = un commit):
 
 ## Tasks
 
-## Task order and gating
+## Ordine dei task e dipendenze
 
-- **34.1 and 34.2 are independent of each other** (different sections/data) — dispatch in parallel.
-- **34.3 depends on both** (it is the integration/verification pass across everything this initiative and Initiative 33 added).
+- **34.1 e 34.2 sono indipendenti tra loro** (sezioni/dati diversi) — avviabili in parallelo.
+- **34.3 dipende da entrambi** (è il passaggio di integrazione/verifica su tutto ciò che questa iniziativa e l'Iniziativa 33 hanno aggiunto).
 
-**Delegation note:** expanded packaging (per `tasks/AGENTS.md`), one task
-file per hand-off. Point the agent at the one task file + `specs/phase-9-spec.md`
-(§1, §4, §4.1) + `tasks/CONTEXT.md` + the relevant Initiative 31 task
-file(s) for the exact `do*` method signatures being consumed.
+**Nota sulla delega:** pacchettizzazione espansa (secondo `tasks/AGENTS.md`), un file
+di task per passaggio di consegne. Indirizzare l'agente al singolo file del task + `specs/phase-9-spec.md`
+(§1, §4, §4.1) + `tasks/CONTEXT.md` + i pertinenti file di task dell'Iniziativa 31
+per le firme esatte dei metodi `do*` utilizzati.
 
-## Closed
+## Chiusi
 
-### 34.1 - Recommendations section
+### 34.1 - Sezione Recommendations
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Dashboard recommendations section · **Size:** M · **Depends on:** 31.3, 32 · **Spec:** [34.1-recommendations-section.md](34.1-recommendations-section.md)
-- **Goal:** Surface `resolveRecommendations` `pending` and `broken` buckets in the Dashboard Recommendations tab with install-one, install-all, and unrecommend actions.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Sezione Recommendations della Dashboard · **Size:** M · **Depends on:** 31.3, 32 · **Spec:** [34.1-recommendations-section.md](34.1-recommendations-section.md)
+- **Goal:** Esporre per `resolveRecommendations` i bucket `pending` e `broken` nel tab Recommendations della Dashboard con le azioni installa singolo, installa tutti e rimuovi suggerimento.
 
-### 34.2 - Uninstall + Update-to-latest in detail panel
+### 34.2 - Uninstall + Update-to-latest nel pannello di dettaglio
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Detail panel uninstall and update · **Size:** S · **Depends on:** 31.1, 31.4 · **Spec:** [34.2-uninstall-update-parity.md](34.2-uninstall-update-parity.md)
-- **Goal:** Extend the Installed detail panel with Uninstall and Update-to-latest actions using server-side re-resolution by stable composite identity key.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Uninstall e Update nel dettaglio · **Size:** S · **Depends on:** 31.1, 31.4 · **Spec:** [34.2-uninstall-update-parity.md](34.2-uninstall-update-parity.md)
+- **Goal:** Estendere il pannello di dettaglio di Installed con le azioni Uninstall e Update-to-latest usando la nuova risoluzione lato server tramite chiave di identità composita stabile.
 
-### 34.3 - Cross-refresh wiring
+### 34.3 - Cablaggio del refresh incrociato
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Cross-refresh mutation audit · **Size:** S · **Depends on:** 34.1, 34.2 · **Spec:** [34.3-cross-refresh.md](34.3-cross-refresh.md)
-- **Goal:** Audit and ensure every Dashboard-triggered state mutation refreshes the status bar and sidebar tree providers.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Verifica refresh incrociato · **Size:** S · **Depends on:** 34.1, 34.2 · **Spec:** [34.3-cross-refresh.md](34.3-cross-refresh.md)
+- **Goal:** Verificare e garantire che ogni mutazione di stato attivata dalla Dashboard aggiorni la barra di stato e i tree provider della sidebar.

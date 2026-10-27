@@ -1,52 +1,52 @@
-# 22 — Project-scoped recommended installations — Implementation plan
+# 22 — Installazioni consigliate a livello di progetto — Piano di implementazione
 
 > **Derived from spec:** [`../specs/project-recommendations.md`](../../specs/project-recommendations.md)
-> **Revised 2026-09-07** after an independent Codex review found a circular
-> dependency between the original 22.3/22.4 ordering and an unsafe
-> auto-resolve-on-open design — see the spec's "Reviewed by" note and each
-> task's own callouts.
+> **Revisionato il 2026-09-07** dopo che una revisione indipendente di Codex ha rilevato una dipendenza
+> circolare tra l'ordinamento originale di 22.3/22.4 e un design non sicuro di
+> risoluzione automatica all'apertura — vedere la nota "Reviewed by" della specifica e i richiami
+> nei singoli task.
 
-Tasks (each = one commit):
+Task (ciascuno = un commit):
 
 ## Tasks
 
-## Task order and gating
+## Ordine dei task e vincoli di sequenza
 
-- **22.2 gates 22.3 and 22.4** — both call into the same resolution
-  function, so it must be implemented and tested first.
-- **22.3 gates 22.4** — 22.4's `Review` action and its `Install All` action
-  both reuse 22.3's Recommended filter and install-runner respectively; the
-  original draft had this backwards (22.4's "Review" needing a filter that
-  a later-ordered 22.3 hadn't built yet) and has been corrected.
-- **22.1 is independent of 22.2-22.4** (it only writes/decorates
-  `desiredInstallations`; resolution reads it) and **22.5 is independent of
-  all four** (centralized in `writeManifest`, not in any UI handler) — both
-  could ship in parallel with the others, but are listed in reading order
-  for a single agent working through the initiative sequentially.
+- **22.2 blocca 22.3 e 22.4** — entrambi chiamano la stessa funzione di
+  risoluzione, quindi questa deve essere implementata e testata per prima.
+- **22.3 blocca 22.4** — l'azione `Review` di 22.4 e la sua azione `Install All`
+  riutilizzano rispettivamente il filtro Recommended e l'esecutore di installazione di 22.3; la
+  bozza originale aveva questo ordine invertito (la "Review" di 22.4 richiedeva un filtro che
+  un 22.3 ordinato successivamente non aveva ancora costruito) ed è stata corretta.
+- **22.1 è indipendente da 22.2-22.4** (scrive/decora solamente
+  `desiredInstallations`; la risoluzione lo legge) e **22.5 è indipendente da
+  tutti e quattro** (centralizzato in `writeManifest`, non in un gestore UI) — entrambi
+  potrebbero essere rilasciati in parallelo agli altri, ma sono elencati in ordine di lettura
+  per un singolo agente che lavora sull'iniziativa in modo sequenziale.
 
 ## Closed
 
-### 22.1 - Recommend/unrecommend commands + tree decoration
+### 22.1 - Comandi recommend/unrecommend + decorazione dell'albero
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Recommend and unrecommend commands · **Size:** S · **Depends on:** 02, 07 · **Spec:** [22.1-recommend-commands.md](22.1-recommend-commands.md)
-- **Goal:** Add context-menu actions on Available and Installed items to write or remove `DesiredInstallation` entries in the project manifest with a Recommended decoration and dual-view refresh.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Comandi recommend e unrecommend · **Size:** S · **Depends on:** 02, 07 · **Spec:** [22.1-recommend-commands.md](22.1-recommend-commands.md)
+- **Goal:** Aggiungere azioni del menu contestuale sugli elementi Available e Installed per scrivere o rimuovere voci `DesiredInstallation` nel manifesto del progetto con una decorazione Recommended e l'aggiornamento di entrambe le viste.
 
-### 22.2 - Recommendation resolution engine
+### 22.2 - Motore di risoluzione delle raccomandazioni
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Recommendation resolution engine · **Size:** M · **Depends on:** 02, 06 · **Spec:** [22.2-resolution-engine.md](22.2-resolution-engine.md)
-- **Goal:** Implement pure `resolveRecommendations` in `src/engine/recommendations.ts` classifying `desiredInstallations` against `state.json` and source resolution attempts into `satisfied`, `pending`, and `broken`.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Motore risoluzione raccomandazioni · **Size:** M · **Depends on:** 02, 06 · **Spec:** [22.2-resolution-engine.md](22.2-resolution-engine.md)
+- **Goal:** Implementare la funzione pura `resolveRecommendations` in `src/engine/recommendations.ts` classificando `desiredInstallations` rispetto a `state.json` e ai tentativi di risoluzione delle sorgenti in `satisfied`, `pending` e `broken`.
 
-### 22.3 - "Install Recommended" command + Available-view "Recommended" filter
+### 22.3 - Comando "Install Recommended" + filtro "Recommended" nella vista Available
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Install Recommended and tree group · **Size:** M · **Depends on:** 22.2 · **Spec:** [22.3-install-recommended.md](22.3-install-recommended.md)
-- **Goal:** Add the `aiSwissknife.installRecommended` command and the `Recommended` grouping in `AvailableTreeDataProvider` using per-entry target assistant/scope installation.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Install Recommended e gruppo albero · **Size:** M · **Depends on:** 22.2 · **Spec:** [22.3-install-recommended.md](22.3-install-recommended.md)
+- **Goal:** Aggiungere il comando `aiSwissknife.installRecommended` e il raggruppamento `Recommended` in `AvailableTreeDataProvider` usando l'installazione sull'assistente/scope di destinazione specifico di ciascuna voce.
 
-### 22.4 - Workspace-open detection + notification
+### 22.4 - Rilevamento all'apertura del workspace + notifica
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Workspace-open recommendation prompt · **Size:** S · **Depends on:** 22.2, 22.3 · **Spec:** [22.4-open-prompt.md](22.4-open-prompt.md)
-- **Goal:** Wire a local-only unsatisfied-recommendations check on activation offering `Install All`, `Review`, and `Don't ask again for this workspace`.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Prompt raccomandazioni all'apertura · **Size:** S · **Depends on:** 22.2, 22.3 · **Spec:** [22.4-open-prompt.md](22.4-open-prompt.md)
+- **Goal:** Collegare all'attivazione un controllo esclusivamente locale delle raccomandazioni non soddisfatte che offra `Install All`, `Review` e `Don't ask again for this workspace`.
 
-### 22.5 - Git hygiene for the shared manifest
+### 22.5 - Igiene Git per il manifesto condiviso
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Project state.json gitignore hygiene · **Size:** XS · **Depends on:** 02 · **Spec:** [22.5-gitignore-hygiene.md](22.5-gitignore-hygiene.md)
-- **Goal:** Ensure `writeManifest` at project scope non-destructively appends the project `state.json` path to an existing `.gitignore`.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Igiene gitignore per state.json · **Size:** XS · **Depends on:** 02 · **Spec:** [22.5-gitignore-hygiene.md](22.5-gitignore-hygiene.md)
+- **Goal:** Garantire che `writeManifest` a livello di progetto accodi in modo non distruttivo il percorso `state.json` del progetto a un `.gitignore` esistente.

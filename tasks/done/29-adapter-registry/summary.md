@@ -1,21 +1,21 @@
-# 29 — Adapter registry & enabled-assistants config — Summary
+# 29 — Registro degli adapter e configurazione degli assistenti abilitati — Riepilogo
 
-> **Closed on:** 2026-10-27 (registry tidy; verifier ai-coding-tools-c1)  
-> **Initiative:** 29 — Adapter registry & enabled-assistants config  
-> **Status:** ✅ Done and merged into main
+> **Closed on:** 2026-10-27 (riordino del registro; verificatore ai-coding-tools-c1)  
+> **Initiative:** 29 — Registro degli adapter e configurazione degli assistenti abilitati  
+> **Status:** ✅ Completata e integrata in main
 
-Summary written at closure from the plan and the git history; the per-task specs in this folder hold the detail.
+Riepilogo scritto alla chiusura a partire dal piano e dalla cronologia git; le specifiche per singolo task in questa cartella contengono i dettagli.
 
-## What was built
+## Cosa è stato realizzato
 
-- **29.1 `Adapter` gains `displayName`/`iconId`** — merged 4d7d654 2026-09-08. Add `displayName` and `iconId` descriptive fields directly onto the `Adapter` interface and its five adapter implementations.
-- **29.2 `src/adapters/registry.ts`** — merged de6c9f3 2026-09-08. Create `src/adapters/registry.ts` as the single source of truth exporting `ALL_ADAPTERS`, `getAdapter`, and `getAdapterWithHomeRoot`.
-- **29.3 Migrate every duplicated adapter-selection site** — merged 8cb71e5 2026-09-08. Delete duplicated `getAdapter()` copies and assistant literal arrays across the codebase and replace them with calls into `src/adapters/registry.ts`.
-- **29.4 Enabled-assistants VS Code setting** — merged c2be2a0 2026-09-08. Add `aiSwissknife.enabledAssistants` VS Code configuration, `getEnabledAdapters()`, and registry-driven sidebar view registration with per-view `when` context keys.
-- **29.5 "Configure enabled assistants" command** — merged 80a9bd8 2026-09-08. Add the `aiSwissknife.configureEnabledAssistants` multi-select QuickPick command and reshape `aiSwissknife.enabledAssistants` to an object of booleans.
+- **29.1 `Adapter` acquisisce `displayName`/`iconId`** — integrato 4d7d654 2026-09-08. Aggiungere i campi descrittivi `displayName` e `iconId` direttamente sull'interfaccia `Adapter` e sulle sue cinque implementazioni adapter.
+- **29.2 `src/adapters/registry.ts`** — integrato de6c9f3 2026-09-08. Creare `src/adapters/registry.ts` come unica fonte di verità che esporta `ALL_ADAPTERS`, `getAdapter` e `getAdapterWithHomeRoot`.
+- **29.3 Migrare ogni punto duplicato di selezione dell'adapter** — integrato 8cb71e5 2026-09-08. Eliminare le copie duplicate di `getAdapter()` e gli array letterali degli assistenti in tutta la codebase e sostituirli con chiamate a `src/adapters/registry.ts`.
+- **29.4 Impostazione VS Code per gli assistenti abilitati** — integrato c2be2a0 2026-09-08. Aggiungere la configurazione VS Code `aiSwissknife.enabledAssistants`, `getEnabledAdapters()` e la registrazione delle viste della sidebar guidata dal registro con chiavi di contesto `when` per singola vista.
+- **29.5 Comando "Configure enabled assistants"** — integrato 80a9bd8 2026-09-08. Aggiungere il comando QuickPick a selezione multipla `aiSwissknife.configureEnabledAssistants` e ristrutturare `aiSwissknife.enabledAssistants` come oggetto di booleani.
 
 ## Verification
 
-- Every task's work is merged into `main` (evidence: the commits named above, from `git log --grep '<id>'`).
-- `npm test` on `main` at 5e85109 (2026-10-27): 577 tests, 576 pass, 0 fail, 1 opt-in skip (`AISK_REAL_KILO=1`).
-- `ai-orch tasks validate --tasks-dir tasks`: 0 errors.
+- Il lavoro di ogni task è integrato in `main` (evidenza: i commit indicati sopra, da `git log --grep '<id>'`).
+- `npm test` su `main` a 5e85109 (2026-10-27): 577 test, 576 superati, 0 falliti, 1 saltato opzionale (`AISK_REAL_KILO=1`).
+- `ai-orch tasks validate --tasks-dir tasks`: 0 errori.

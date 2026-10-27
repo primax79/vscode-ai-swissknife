@@ -1,33 +1,33 @@
-# 19 — `hook` kind + active `rule` merge — Implementation plan
+# 19 — Tipo `hook` + merge attivo di `rule` — Piano di implementazione
 
 > **Derived from spec:** [`../specs/phase-4-spec.md`](../../specs/phase-4-spec.md) §5 · [`../../SPEC.md`](../../../SPEC.md) §1, §5
 
-Tasks (each = one commit):
+Task (ciascuno = un commit):
 
 ## Tasks
 
-## Gating
+## Vincoli di sequenza
 
-**Task 19.1 gates 19.2**: do not start 19.2 until 19.1's findings are recorded — this mirrors the same discipline already applied to the Phase-1 hardening gate (`CONTEXT.md`).
+**Il task 19.1 blocca 19.2**: non iniziare 19.2 finché i risultati di 19.1 non sono registrati — questo rispecchia la stessa disciplina già applicata al gate di consolidamento della Fase 1 (`CONTEXT.md`).
 
 ## Closed
 
-### 19.1 - Hook path verification spike
+### 19.1 - Spike di verifica dei percorsi degli hook
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Hook path verification spike · **Size:** S · **Kind:** investigation · **Depends on:** 03, 12 · **Spec:** [19.1-hook-path-verification.md](19.1-hook-path-verification.md)
-- **Goal:** Verify Claude Code, Kilo Code, and GitHub Copilot hook file paths before implementing the hook adapters.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Verifica percorsi hook · **Size:** S · **Kind:** investigation · **Depends on:** 03, 12 · **Spec:** [19.1-hook-path-verification.md](19.1-hook-path-verification.md)
+- **Goal:** Verificare i percorsi dei file hook di Claude Code, Kilo Code e GitHub Copilot prima di implementare gli adapter per gli hook.
 
-### 19.2 - `CanonicalHook` model & Claude/Copilot adapters
+### 19.2 - Modello `CanonicalHook` e adapter Claude/Copilot
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** CanonicalHook and hook adapters · **Size:** M · **Depends on:** 19.1 · **Spec:** [19.2-hook-adapter.md](19.2-hook-adapter.md)
-- **Goal:** Implement `CanonicalHook` (`name`, `event`, `command`, `timeout`, `extraFields`), `translateHook`, and hook read/write/list in Claude, Kilo, and Copilot adapters.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** CanonicalHook e adapter hook · **Size:** M · **Depends on:** 19.1 · **Spec:** [19.2-hook-adapter.md](19.2-hook-adapter.md)
+- **Goal:** Implementare `CanonicalHook` (`name`, `event`, `command`, `timeout`, `extraFields`), `translateHook` e la lettura/scrittura/elencazione degli hook negli adapter di Claude, Kilo e Copilot.
 
-### 19.3 - Non-destructive `rule` merge policy
+### 19.3 - Politica di merge non distruttiva per `rule`
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Demarcated rule merge policy · **Size:** M · **Depends on:** 03, 06, 12 · **Spec:** [19.3-rule-merge-policy.md](19.3-rule-merge-policy.md)
-- **Goal:** Implement non-destructive demarcated-block (`<!-- ai-swissknife:managed:${sourceId} -->`) rule merging in the install engine so installing or syncing a `rule` never overwrites surrounding user instructions.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Merge rule con blocchi · **Size:** M · **Depends on:** 03, 06, 12 · **Spec:** [19.3-rule-merge-policy.md](19.3-rule-merge-policy.md)
+- **Goal:** Implementare il merge non distruttivo delle regole tramite blocchi delimitati (`<!-- ai-swissknife:managed:${sourceId} -->`) nel motore di installazione, affinché l'installazione o la sincronizzazione di una `rule` non sovrascriva mai le istruzioni utente circostanti.
 
-### 19.4 - UI integration for hook & rule
+### 19.4 - Integrazione UI per hook e rule
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Hook and rule UI integration · **Size:** S · **Depends on:** 19.2, 19.3 · **Spec:** [19.4-hook-rule-ui.md](19.4-hook-rule-ui.md)
-- **Goal:** Detect `hook` and `rule` files in source resolvers and expose both kinds in Available, Installed, and Dashboard views.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Integrazione UI hook e rule · **Size:** S · **Depends on:** 19.2, 19.3 · **Spec:** [19.4-hook-rule-ui.md](19.4-hook-rule-ui.md)
+- **Goal:** Rilevare i file `hook` e `rule` nei resolver delle sorgenti ed esporre entrambi i tipi nelle viste Available, Installed e Dashboard.

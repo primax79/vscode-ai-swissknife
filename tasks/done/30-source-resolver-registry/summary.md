@@ -1,20 +1,20 @@
-# 30 — Source-resolver registry — Summary
+# 30 — Registro dei risolutori di sorgenti — Riepilogo
 
-> **Closed on:** 2026-10-27 (registry tidy; verifier ai-coding-tools-c1)  
-> **Initiative:** 30 — Source-resolver registry  
-> **Status:** ✅ Done and merged into main
+> **Closed on:** 2026-10-27 (riordino del registro; verificatore ai-coding-tools-c1)  
+> **Initiative:** 30 — Registro dei risolutori di sorgenti  
+> **Status:** ✅ Completata e integrata in main
 
-Summary written at closure from the plan and the git history; the per-task specs in this folder hold the detail.
+Riepilogo scritto alla chiusura a partire dal piano e dalla cronologia git; le specifiche per singolo task in questa cartella contengono i dettagli.
 
-## What was built
+## Cosa è stato realizzato
 
-- **30.1 `SourceResolver` interface** — merged cbfbb8f 2026-09-08. Define the shared `SourceResolver` interface (`type`, `displayName`, `iconThemeId`, `resolve`, `resolveArtifactContent`) in `src/sources/types.ts`.
-- **30.2 Wrap the five resolver modules** — merged f2bda26 2026-09-08. Export one `SourceResolver`-conforming object per source type wrapping each module's existing functions additively.
-- **30.3 `src/sources/registry.ts` + migrate dispatch sites** — merged 06a5a21 2026-09-08. Aggregate the five source resolvers into `src/sources/registry.ts` and replace `source.type` dispatch chains in `discovery.ts`, `drift.ts`, and `availableView.ts`.
-- **30.4 Migrate `sourcesView.ts`'s icon switch** — merged 0196694 2026-09-08. Replace `sourcesView.ts`'s `getSourceTypeIcon` switch with an `iconThemeId` lookup in `src/sources/registry.ts`.
+- **30.1 Interfaccia `SourceResolver`** — integrato cbfbb8f 2026-09-08. Definire l'interfaccia condivisa `SourceResolver` (`type`, `displayName`, `iconThemeId`, `resolve`, `resolveArtifactContent`) in `src/sources/types.ts`.
+- **30.2 Incapsulare i cinque moduli risolutori** — integrato f2bda26 2026-09-08. Esportare un oggetto conforme a `SourceResolver` per ciascun tipo di sorgente che incapsuli in modo aggiuntivo le funzioni esistenti di ogni modulo.
+- **30.3 `src/sources/registry.ts` + migrazione dei punti di dispatch** — integrato 06a5a21 2026-09-08. Aggregare i cinque risolutori di sorgenti in `src/sources/registry.ts` e sostituire le catene di dispatch su `source.type` in `discovery.ts`, `drift.ts` e `availableView.ts`.
+- **30.4 Migrare lo switch delle icone di `sourcesView.ts`** — integrato 0196694 2026-09-08. Sostituire in `sourcesView.ts` lo switch `getSourceTypeIcon` con una ricerca di `iconThemeId` in `src/sources/registry.ts`.
 
 ## Verification
 
-- Every task's work is merged into `main` (evidence: the commits named above, from `git log --grep '<id>'`).
-- `npm test` on `main` at 5e85109 (2026-10-27): 577 tests, 576 pass, 0 fail, 1 opt-in skip (`AISK_REAL_KILO=1`).
-- `ai-orch tasks validate --tasks-dir tasks`: 0 errors.
+- Il lavoro di ogni task è integrato in `main` (evidenza: i commit indicati sopra, da `git log --grep '<id>'`).
+- `npm test` su `main` a 5e85109 (2026-10-27): 577 test, 576 superati, 0 falliti, 1 saltato opzionale (`AISK_REAL_KILO=1`).
+- `ai-orch tasks validate --tasks-dir tasks`: 0 errori.
