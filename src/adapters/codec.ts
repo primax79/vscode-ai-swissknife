@@ -50,6 +50,8 @@ export async function readSkill(skillDir: string): Promise<CanonicalSkill> {
       if (
         entry.name === '.git' ||
         entry.name === 'node_modules' ||
+        entry.name === '__pycache__' ||
+        entry.name.endsWith('.pyc') ||
         entry.name === 'index.json' ||
         entry.name === 'local.patch' ||
         entry.name.endsWith('.patch') ||
@@ -158,7 +160,14 @@ export function canonicalSkillHash(skill: CanonicalSkill): string {
   hash.update('\n');
 
   hash.update('extraFields:\n');
-  const extraKeys = Object.keys(skill.extraFields).filter((k) => k !== 'metadata').sort();
+  const hasFlattenedSkillMeta = skill.extraFields.metadata === '';
+  const extraKeys = Object.keys(skill.extraFields)
+    .filter(
+      (k) =>
+        k !== 'metadata' &&
+        !(hasFlattenedSkillMeta && (k === 'author' || k === 'version'))
+    )
+    .sort();
   for (const key of extraKeys) {
     hash.update(`${key}:`);
     hash.update(JSON.stringify(skill.extraFields[key]));
@@ -226,7 +235,14 @@ export function canonicalAgentHash(agent: CanonicalAgent): string {
   hash.update('\n');
 
   hash.update('extraFields:\n');
-  const extraKeys = Object.keys(agent.extraFields).filter((k) => k !== 'metadata').sort();
+  const hasFlattenedAgentMeta = agent.extraFields.metadata === '';
+  const extraKeys = Object.keys(agent.extraFields)
+    .filter(
+      (k) =>
+        k !== 'metadata' &&
+        !(hasFlattenedAgentMeta && (k === 'author' || k === 'version'))
+    )
+    .sort();
   for (const key of extraKeys) {
     hash.update(`${key}:${JSON.stringify(agent.extraFields[key])}\n`);
   }
@@ -260,7 +276,14 @@ export function canonicalCommandHash(cmd: CanonicalCommand): string {
   hash.update('\n');
 
   hash.update('extraFields:\n');
-  const extraKeys = Object.keys(cmd.extraFields).filter((k) => k !== 'metadata').sort();
+  const hasFlattenedCmdMeta = cmd.extraFields.metadata === '';
+  const extraKeys = Object.keys(cmd.extraFields)
+    .filter(
+      (k) =>
+        k !== 'metadata' &&
+        !(hasFlattenedCmdMeta && (k === 'author' || k === 'version'))
+    )
+    .sort();
   for (const key of extraKeys) {
     hash.update(`${key}:${JSON.stringify(cmd.extraFields[key])}\n`);
   }

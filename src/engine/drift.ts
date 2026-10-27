@@ -1,4 +1,5 @@
 import * as child_process from 'child_process';
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -13,6 +14,7 @@ import {
 } from '../domain/types';
 import type {
   CanonicalSkill,
+  CanonicalSkillDocument,
   CanonicalSkillFile,
   CanonicalAgent,
   CanonicalCommand,
@@ -30,6 +32,7 @@ import {
   readSkill,
 } from '../adapters/codec';
 import {
+  parseYamlValue,
   parseSkillMarkdown,
   parseClaudeAgentMarkdown,
   parseClaudeCommandMarkdown,
@@ -89,11 +92,17 @@ export type ProvenanceEvaluationResult =
   | {
       outcome: 'adopted';
       adoptionMode: 'adopted-with-commit' | 'adopted-source-only';
+      rebaselined?: 'codec';
+      realLocalEdit?: boolean;
+      recomputedContentHash?: string;
       match: ProvenanceCandidateMatch;
     }
   | {
       outcome: 'unknown';
       reason: ProvenanceUnknownReason;
+      rebaselined?: 'codec';
+      realLocalEdit?: boolean;
+      recomputedContentHash?: string;
       hint?: string;
       details: string;
     };
@@ -990,13 +999,14 @@ const MAX_HISTORY_COMMITS = 200;
 
 export interface ProvenanceHistoryCaches {
   blobCache: Map<string, Buffer>;
-  gitLogCache: Map<string, string[]>;
+  gitLogCache: Map<string, Array<{ commit: string; relPath: string }>>;
   gitCtxCache: Map<string, { repoPrefix: string; headCommit: string } | null>;
   rawArtifactAtCommitCache: Map<
     string,
     CanonicalSkill | CanonicalAgent | CanonicalCommand | CanonicalMcpServer | CanonicalHook | CanonicalRule
   >;
   translationHashCache: Map<string, string>;
+  legacyCommitHashesCache: Map<string, Set<string>>;
 }
 
 export function createProvenanceHistoryCaches(): ProvenanceHistoryCaches {
@@ -1006,6 +1016,7 @@ export function createProvenanceHistoryCaches(): ProvenanceHistoryCaches {
     gitCtxCache: new Map(),
     rawArtifactAtCommitCache: new Map(),
     translationHashCache: new Map(),
+    legacyCommitHashesCache: new Map(),
   };
 }
 
@@ -1013,12 +1024,450 @@ function isIgnoredHistorySkillSegment(name: string): boolean {
   return (
     name === '.git' ||
     name === 'node_modules' ||
+    name === '__pycache__' ||
+    name.endsWith('.pyc') ||
     name === 'index.json' ||
     name === 'local.patch' ||
     name.endsWith('.patch') ||
     name === '.DS_Store' ||
     name === 'Thumbs.db'
   );
+}
+
+/**
+ * Pre-`d61fdd1` skill frontmatter parser (line-by-line without multi-line block folding).
+ */
+function parseSkillMarkdownPreD61fdd1(content: string): CanonicalSkillDocument {
+  const normalized = content.replace(/\r\n/g, '\n');
+  if (!normalized.startsWith('---\n') && normalized !== '---') {
+    return { name: '', description: '', body: content, extraFields: {} };
+  }
+  const closingIdx = normalized.indexOf('\n---', 3);
+  if (closingIdx === -1) {
+    return { name: '', description: '', body: content, extraFields: {} };
+  }
+  const yamlBlock = normalized.slice(4, closingIdx);
+  let bodyStart = closingIdx + 4;
+  if (normalized[bodyStart] === '\n') {
+    bodyStart += 1;
+  }
+  const body = normalized.slice(bodyStart);
+  const lines = yamlBlock.split('\n');
+  let name = '';
+  let description = '';
+  const extraFields: Record<string, unknown> = {};
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) {
+      continue;
+    }
+    const colonIdx = trimmed.indexOf(':');
+    if (colonIdx === -1) {
+      continue;
+    }
+    const key = trimmed.slice(0, colonIdx).trim();
+    const rawVal = trimmed.slice(colonIdx + 1).trim();
+    const parsedVal = parseYamlValue(rawVal);
+
+    if (key === 'name') {
+      name = typeof parsedVal === 'string' ? parsedVal : String(parsedVal ?? '');
+    } else if (key === 'description') {
+      description = typeof parsedVal === 'string' ? parsedVal : String(parsedVal ?? '');
+    } else {
+      extraFields[key] = parsedVal;
+    }
+  }
+
+  return { name, description, body, extraFields };
+}
+
+function parseClaudeAgentMarkdownPreD61fdd1(content: string): CanonicalAgent {
+  const cur = parseClaudeAgentMarkdown(content);
+  const normalized = content.replace(/\r\n/g, '\n');
+  if (!normalized.startsWith('---\n') && normalized !== '---') {
+    return cur;
+  }
+  const closingIdx = normalized.indexOf('\n---', 3);
+  if (closingIdx === -1) {
+    return cur;
+  }
+  const yamlBlock = normalized.slice(4, closingIdx);
+  const lines = yamlBlock.split('\n');
+  let name = '';
+  let description = '';
+  const extraFields: Record<string, unknown> = {};
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const colonIdx = trimmed.indexOf(':');
+    if (colonIdx === -1) continue;
+    const key = trimmed.slice(0, colonIdx).trim();
+    const rawVal = trimmed.slice(colonIdx + 1).trim();
+    const parsedVal = parseYamlValue(rawVal);
+    if (key === 'name') {
+      name = typeof parsedVal === 'string' ? parsedVal : String(parsedVal ?? '');
+    } else if (key === 'description') {
+      description = typeof parsedVal === 'string' ? parsedVal : String(parsedVal ?? '');
+    } else if (!['tools', 'permissions', 'model', 'variant', 'mode'].includes(key)) {
+      extraFields[key] = parsedVal;
+    }
+  }
+
+  return {
+    ...cur,
+    name: name || cur.name,
+    description: description || cur.description,
+    extraFields,
+  };
+}
+
+function parseClaudeCommandMarkdownPreD61fdd1(
+  content: string,
+  defaultName = ''
+): CanonicalCommand {
+  const cur = parseClaudeCommandMarkdown(content, defaultName);
+  const normalized = content.replace(/\r\n/g, '\n');
+  if (!normalized.startsWith('---\n') && normalized !== '---') {
+    return cur;
+  }
+  const closingIdx = normalized.indexOf('\n---', 3);
+  if (closingIdx === -1) {
+    return cur;
+  }
+  const yamlBlock = normalized.slice(4, closingIdx);
+  const lines = yamlBlock.split('\n');
+  let name = defaultName;
+  let description = '';
+  const extraFields: Record<string, unknown> = {};
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const colonIdx = trimmed.indexOf(':');
+    if (colonIdx === -1) continue;
+    const key = trimmed.slice(0, colonIdx).trim();
+    const rawVal = trimmed.slice(colonIdx + 1).trim();
+    const parsedVal = parseYamlValue(rawVal);
+    if (key === 'name') {
+      name = typeof parsedVal === 'string' ? parsedVal : String(parsedVal ?? '');
+    } else if (key === 'description') {
+      description = typeof parsedVal === 'string' ? parsedVal : String(parsedVal ?? '');
+    } else if (!['agent', 'model', 'subtask'].includes(key)) {
+      extraFields[key] = parsedVal;
+    }
+  }
+
+  return {
+    ...cur,
+    name: name || cur.name,
+    description: description || cur.description,
+    extraFields,
+  };
+}
+
+function canonicalSkillHashPreNormalization(
+  skill: CanonicalSkill,
+  opts: { includeMetadata: boolean; modeStrategy: 'exact' | 'default' | 'regular644' }
+): string {
+  const hash = crypto.createHash('sha256');
+  hash.update('name:');
+  hash.update(skill.name);
+  hash.update('\n');
+  hash.update('description:');
+  hash.update(skill.description);
+  hash.update('\n');
+  hash.update('body:');
+  hash.update(skill.body);
+  hash.update('\n');
+  hash.update('extraFields:\n');
+  const extraKeys = Object.keys(skill.extraFields)
+    .filter((k) => (opts.includeMetadata ? true : k !== 'metadata'))
+    .sort();
+  for (const key of extraKeys) {
+    hash.update(`${key}:`);
+    hash.update(JSON.stringify(skill.extraFields[key]));
+    hash.update('\n');
+  }
+  hash.update('files:\n');
+  const sortedFiles = [...skill.files].sort((a, b) => {
+    const normA = path.posix.normalize(a.path.split(path.sep).join('/'));
+    const normB = path.posix.normalize(b.path.split(path.sep).join('/'));
+    return normA.localeCompare(normB);
+  });
+  for (const file of sortedFiles) {
+    hash.update('path:');
+    hash.update(path.posix.normalize(file.path.split(path.sep).join('/')));
+    hash.update('\n');
+    hash.update('content:');
+    hash.update(file.content);
+    hash.update('\n');
+    hash.update('mode:');
+    if (opts.modeStrategy === 'default') {
+      hash.update('default');
+    } else if (opts.modeStrategy === 'regular644') {
+      hash.update('100644');
+    } else {
+      hash.update(file.mode !== undefined ? file.mode.toString(8) : 'default');
+    }
+    hash.update('\n');
+  }
+  return hash.digest('hex');
+}
+
+function canonicalAgentHashPreNormalization(
+  agent: CanonicalAgent,
+  includeMetadata: boolean
+): string {
+  const hash = crypto.createHash('sha256');
+  hash.update(`name:${agent.name}\n`);
+  hash.update(`description:${agent.description}\n`);
+  if (agent.mode) hash.update(`mode:${agent.mode}\n`);
+  hash.update('tools:\n');
+  for (const t of [...agent.tools].sort()) hash.update(`${t}\n`);
+  hash.update('permissions:\n');
+  for (const k of Object.keys(agent.permissions).sort()) {
+    hash.update(`${k}:${agent.permissions[k]}\n`);
+  }
+  if (agent.model) hash.update(`model:${agent.model}\n`);
+  if (agent.variant) hash.update(`variant:${agent.variant}\n`);
+  hash.update(`body:\n${agent.body}\n`);
+  hash.update('extraFields:\n');
+  const extraKeys = Object.keys(agent.extraFields)
+    .filter((k) => (includeMetadata ? true : k !== 'metadata'))
+    .sort();
+  for (const key of extraKeys) {
+    hash.update(`${key}:${JSON.stringify(agent.extraFields[key])}\n`);
+  }
+  return hash.digest('hex');
+}
+
+function canonicalCommandHashPreNormalization(
+  cmd: CanonicalCommand,
+  includeMetadata: boolean
+): string {
+  const hash = crypto.createHash('sha256');
+  hash.update(`name:${cmd.name}\n`);
+  hash.update(`description:${cmd.description}\n`);
+  if (cmd.agent) hash.update(`agent:${cmd.agent}\n`);
+  if (cmd.model) hash.update(`model:${cmd.model}\n`);
+  if (cmd.subtask !== undefined) hash.update(`subtask:${cmd.subtask}\n`);
+  hash.update(`body:\n${cmd.body}\n`);
+  hash.update('extraFields:\n');
+  const extraKeys = Object.keys(cmd.extraFields)
+    .filter((k) => (includeMetadata ? true : k !== 'metadata'))
+    .sort();
+  for (const key of extraKeys) {
+    hash.update(`${key}:${JSON.stringify(cmd.extraFields[key])}\n`);
+  }
+  return hash.digest('hex');
+}
+
+async function readAllFilesInSkillDir(
+  skillDir: string
+): Promise<{ skillMdContent: string; allFiles: CanonicalSkillFile[] }> {
+  const skillMdPath = path.join(skillDir, 'SKILL.md');
+  const skillMdContent = await fs.promises.readFile(skillMdPath, 'utf-8');
+  const allFiles: CanonicalSkillFile[] = [];
+
+  async function walk(currentDir: string, relativeRoot: string) {
+    const entries = await fs.promises.readdir(currentDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name === '.git' || entry.name === 'node_modules') {
+        continue;
+      }
+      const fullPath = path.join(currentDir, entry.name);
+      const relPath =
+        relativeRoot === '' ? entry.name : path.posix.join(relativeRoot, entry.name);
+      if (relPath === 'SKILL.md') continue;
+      const stat = await fs.promises.lstat(fullPath);
+      if (stat.isDirectory()) {
+        await walk(fullPath, relPath);
+      } else if (stat.isFile()) {
+        const content = await fs.promises.readFile(fullPath);
+        allFiles.push({ path: relPath, content, mode: stat.mode });
+      }
+    }
+  }
+
+  await walk(skillDir, '');
+  return { skillMdContent, allFiles };
+}
+
+function computePreNormalizationSkillHashes(
+  skillMdContent: string,
+  allFiles: CanonicalSkillFile[],
+  assistant?: AssistantId
+): Set<string> {
+  const docCur = parseSkillMarkdown(skillMdContent);
+  const docLeg = parseSkillMarkdownPreD61fdd1(skillMdContent);
+  const normFiles = allFiles.filter(
+    (f) => !f.path.split('/').some(isIgnoredHistorySkillSegment)
+  );
+  const noPycacheFiles = allFiles.filter(
+    (f) => !f.path.split('/').some((s) => s === '__pycache__' || s.endsWith('.pyc'))
+  );
+
+  const hashes = new Set<string>();
+  for (const doc of [docCur, docLeg]) {
+    for (const files of [allFiles, noPycacheFiles, normFiles]) {
+      const baseSkill: CanonicalSkill = { ...doc, files };
+      const variants: CanonicalSkill[] = [baseSkill];
+      if (assistant) {
+        const tr = translateSkill(baseSkill, assistant);
+        if (tr.overall !== 'unsupported') {
+          variants.push(tr.value);
+        }
+      }
+      for (const sk of variants) {
+        for (const includeMetadata of [true, false]) {
+          for (const modeStrategy of ['exact', 'default', 'regular644'] as const) {
+            hashes.add(
+              canonicalSkillHashPreNormalization(sk, { includeMetadata, modeStrategy })
+            );
+          }
+        }
+      }
+    }
+  }
+  return hashes;
+}
+
+export interface RebaselineCheckResult {
+  diskExists: boolean;
+  recomputedHash?: string;
+  status: 'unchanged' | 'rebaselined-codec' | 'real-local-edit' | 'missing-on-disk';
+}
+
+/**
+ * Re-baselines an installation's `contentHash` against the files ON DISK using the
+ * current codec (`canonicalSkillHash`, etc.), distinguishing an algorithm/normalization
+ * change (pre-`d61fdd1`/`2f949cc` codec) from a genuine local edit.
+ */
+export async function checkInstallationHashRebaseline(
+  installation: ManagedInstallation,
+  homeRoot?: string,
+  candidateSourceSkillDirs?: string[]
+): Promise<RebaselineCheckResult> {
+  const localReport = await analyzeLocalDrift(installation, homeRoot);
+  if (localReport.status === 'missing-on-disk' || !localReport.diskHash) {
+    return {
+      diskExists: false,
+      status: 'missing-on-disk',
+    };
+  }
+
+  const recomputedHash = localReport.diskHash;
+  if (!installation.contentHash || installation.contentHash === recomputedHash) {
+    return {
+      diskExists: true,
+      recomputedHash,
+      status: 'unchanged',
+    };
+  }
+
+  const recorded = installation.contentHash;
+
+  try {
+    if (installation.kind === 'skill') {
+      const { skillMdContent, allFiles } = await readAllFilesInSkillDir(installation.path);
+      const legacyDiskHashes = computePreNormalizationSkillHashes(
+        skillMdContent,
+        allFiles,
+        installation.assistant
+      );
+      if (legacyDiskHashes.has(recorded)) {
+        return {
+          diskExists: true,
+          recomputedHash,
+          status: 'rebaselined-codec',
+        };
+      }
+
+      // Check if a candidate source folder has ignored files (e.g. .DS_Store, index.json)
+      // that were included in `recorded` under the pre-normalization codec while its
+      // current normalized content hash matches `recomputedHash` on disk.
+      if (candidateSourceSkillDirs) {
+        for (const srcSkillDir of candidateSourceSkillDirs) {
+          if (!fs.existsSync(path.join(srcSkillDir, 'SKILL.md'))) continue;
+          try {
+            const srcCurSkill = await readSkill(srcSkillDir);
+            const trCur = translateSkill(srcCurSkill, installation.assistant);
+            const srcCurHash =
+              trCur.overall !== 'unsupported'
+                ? canonicalSkillHash(trCur.value)
+                : canonicalSkillHash(srcCurSkill);
+            if (srcCurHash !== recomputedHash) continue;
+
+            const srcAll = await readAllFilesInSkillDir(srcSkillDir);
+            const srcLegacyHashes = computePreNormalizationSkillHashes(
+              srcAll.skillMdContent,
+              srcAll.allFiles,
+              installation.assistant
+            );
+            if (srcLegacyHashes.has(recorded)) {
+              return {
+                diskExists: true,
+                recomputedHash,
+                status: 'rebaselined-codec',
+              };
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+    } else if (installation.kind === 'agent') {
+      const raw = await fs.promises.readFile(installation.path, 'utf-8');
+      const curAgent =
+        installation.assistant === 'kilo-code'
+          ? parseKiloAgentMarkdown(raw)
+          : parseClaudeAgentMarkdown(raw);
+      const legAgent = parseClaudeAgentMarkdownPreD61fdd1(raw);
+      const candidates = new Set<string>([
+        canonicalAgentHashPreNormalization(curAgent, true),
+        canonicalAgentHashPreNormalization(curAgent, false),
+        canonicalAgentHashPreNormalization(legAgent, true),
+        canonicalAgentHashPreNormalization(legAgent, false),
+      ]);
+      if (candidates.has(recorded)) {
+        return {
+          diskExists: true,
+          recomputedHash,
+          status: 'rebaselined-codec',
+        };
+      }
+    } else if (installation.kind === 'command') {
+      const raw = await fs.promises.readFile(installation.path, 'utf-8');
+      const curCmd =
+        installation.assistant === 'kilo-code'
+          ? parseKiloCommandMarkdown(raw, installation.name)
+          : parseClaudeCommandMarkdown(raw, installation.name);
+      const legCmd = parseClaudeCommandMarkdownPreD61fdd1(raw, installation.name);
+      const candidates = new Set<string>([
+        canonicalCommandHashPreNormalization(curCmd, true),
+        canonicalCommandHashPreNormalization(curCmd, false),
+        canonicalCommandHashPreNormalization(legCmd, true),
+        canonicalCommandHashPreNormalization(legCmd, false),
+      ]);
+      if (candidates.has(recorded)) {
+        return {
+          diskExists: true,
+          recomputedHash,
+          status: 'rebaselined-codec',
+        };
+      }
+    }
+  } catch {
+    // fall through to real-local-edit
+  }
+
+  return {
+    diskExists: true,
+    recomputedHash,
+    status: 'real-local-edit',
+  };
 }
 
 function isValidHistorySkillRelativePath(p: string): boolean {
@@ -1480,19 +1929,190 @@ async function hashArtifactAtCommit(
   return hash;
 }
 
+async function getHistoryCommitsForArtifact(
+  repoDir: string,
+  repoRelPath: string,
+  logPathSpec: string,
+  artifactKind: Artifact['kind'],
+  fallbackHeadCommit: string | undefined,
+  installationPackageId: string | undefined,
+  sourceId: string,
+  caches: ProvenanceHistoryCaches
+): Promise<Array<{ commit: string; relPath: string }>> {
+  const prefix = `${sourceId}:`;
+  const legacyRelPath =
+    installationPackageId && installationPackageId.startsWith(prefix)
+      ? installationPackageId.slice(prefix.length)
+      : '';
+  const hasDistinctLegacyPath =
+    Boolean(legacyRelPath) &&
+    legacyRelPath.includes('/') &&
+    legacyRelPath !== repoRelPath &&
+    legacyRelPath !== logPathSpec;
+
+  const logKey = `${repoDir}::${repoRelPath}::${logPathSpec}::${hasDistinctLegacyPath ? legacyRelPath : ''}`;
+  const cached = caches.gitLogCache.get(logKey);
+  if (cached) {
+    return cached;
+  }
+
+  const entries: Array<{ commit: string; relPath: string }> = [];
+  const seen = new Set<string>();
+  const addEntry = (commit: string, relPath: string) => {
+    const k = `${commit}::${relPath}`;
+    if (!seen.has(k) && entries.length < MAX_HISTORY_COMMITS) {
+      seen.add(k);
+      entries.push({ commit, relPath });
+    }
+  };
+
+  try {
+    const { stdout } = await runGit(
+      ['log', '--format=%H', '-n', String(MAX_HISTORY_COMMITS), '--', logPathSpec],
+      repoDir
+    );
+    for (const line of stdout.trim().split(/\r?\n/)) {
+      const c = line.trim();
+      if (c) addEntry(c, repoRelPath);
+    }
+  } catch {
+    // ignore
+  }
+
+  // For skills, also follow SKILL.md across directory/plugin moves (up to 200 commits total)
+  if (artifactKind === 'skill' && entries.length < MAX_HISTORY_COMMITS) {
+    const skillMdSpec =
+      logPathSpec === '.' || logPathSpec === '' ? 'SKILL.md' : `${logPathSpec}/SKILL.md`;
+    try {
+      const { stdout } = await runGit(
+        [
+          'log',
+          '--follow',
+          '--name-only',
+          '--format=COMMIT:%H',
+          '-n',
+          String(MAX_HISTORY_COMMITS),
+          '--',
+          skillMdSpec,
+        ],
+        repoDir
+      );
+      let currentCommit: string | undefined;
+      for (const line of stdout.split(/\r?\n/)) {
+        const t = line.trim();
+        if (!t) continue;
+        if (t.startsWith('COMMIT:')) {
+          currentCommit = t.slice('COMMIT:'.length).trim();
+        } else if (currentCommit && t.endsWith('/SKILL.md')) {
+          const dirAtCommit = t.slice(0, -'/SKILL.md'.length);
+          addEntry(currentCommit, dirAtCommit);
+        } else if (currentCommit && t === 'SKILL.md') {
+          addEntry(currentCommit, '');
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  if (hasDistinctLegacyPath && entries.length < MAX_HISTORY_COMMITS) {
+    try {
+      const { stdout } = await runGit(
+        ['log', '--format=%H', '-n', String(MAX_HISTORY_COMMITS), '--', legacyRelPath],
+        repoDir
+      );
+      for (const line of stdout.trim().split(/\r?\n/)) {
+        const c = line.trim();
+        if (c) addEntry(c, legacyRelPath);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  if (entries.length === 0 && fallbackHeadCommit) {
+    addEntry(fallbackHeadCommit, repoRelPath);
+  }
+
+  caches.gitLogCache.set(logKey, entries);
+  return entries;
+}
+
+async function computeLegacyHashesAtSkillCommit(
+  repoDir: string,
+  repoRelPath: string,
+  commit: string,
+  assistant: AssistantId,
+  caches: ProvenanceHistoryCaches
+): Promise<Set<string>> {
+  const legKey = `${repoDir}::${commit}::${repoRelPath}::${assistant}`;
+  const cached = caches.legacyCommitHashesCache.get(legKey);
+  if (cached) {
+    return cached;
+  }
+  const treeSpec = repoRelPath ? `${commit}:${repoRelPath}` : commit;
+  const { stdout: lsOut } = await runGit(
+    ['ls-tree', '--full-tree', '-r', '-z', treeSpec],
+    repoDir
+  );
+  const entries = lsOut.split('\0').filter((e) => e.length > 0);
+  let skillMdBlobSha: string | undefined;
+  const allFiles: CanonicalSkillFile[] = [];
+
+  for (const entry of entries) {
+    const match = entry.match(/^([0-7]+) (\w+) ([0-9a-f]{40})\t([\s\S]+)$/);
+    if (!match) continue;
+    const [, modeStr, objType, blobSha, relPath] = match;
+    if (modeStr === '120000' || objType !== 'blob') continue;
+    if (relPath === 'SKILL.md') {
+      skillMdBlobSha = blobSha;
+      continue;
+    }
+    const buf = await readGitBlobBuffer(repoDir, blobSha, caches.blobCache);
+    allFiles.push({
+      path: relPath,
+      content: buf,
+      mode: parseInt(modeStr, 8),
+    });
+  }
+
+  if (!skillMdBlobSha) {
+    const empty = new Set<string>();
+    caches.legacyCommitHashesCache.set(legKey, empty);
+    return empty;
+  }
+
+  const skillMdBuf = await readGitBlobBuffer(repoDir, skillMdBlobSha, caches.blobCache);
+  const hashes = computePreNormalizationSkillHashes(
+    skillMdBuf.toString('utf-8'),
+    allFiles,
+    assistant
+  );
+  caches.legacyCommitHashesCache.set(legKey, hashes);
+  return hashes;
+}
+
 async function findInstallCommitInHistory(
   source: Source,
   effectiveCandidate: Source,
   pkg: Package,
   artifact: Artifact,
   installation: ManagedInstallation,
+  targetHash: string | undefined,
   options: {
     homeRoot?: string;
     cacheDir?: string;
     caches: ProvenanceHistoryCaches;
+    recordedLegacyHash?: string;
+    recomputedDiskHash?: string;
   }
-): Promise<{ matchedHash: boolean; commit?: string; sourceHash?: string }> {
-  if (!installation.contentHash) {
+): Promise<{
+  matchedHash: boolean;
+  commit?: string;
+  sourceHash?: string;
+  rebaselinedByCommit?: boolean;
+}> {
+  if (!targetHash) {
     return { matchedHash: false };
   }
 
@@ -1527,46 +2147,35 @@ async function findInstallCommitInHistory(
       options.caches.translationHashCache.set(hashKey, currentHash);
     }
     return {
-      matchedHash: currentHash === installation.contentHash,
+      matchedHash: currentHash === targetHash,
       commit: pkg.version?.commit,
       sourceHash: currentHash,
     };
   }
 
-  const logKey = `${gitInfo.repoDir}::${gitInfo.logPathSpec}`;
-  let commits = options.caches.gitLogCache.get(logKey);
-  if (!commits) {
-    try {
-      const { stdout } = await runGit(
-        ['log', '--format=%H', '-n', String(MAX_HISTORY_COMMITS), '--', gitInfo.logPathSpec],
-        gitInfo.repoDir
-      );
-      commits = stdout
-        .trim()
-        .split(/\r?\n/)
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
-    } catch {
-      commits = [];
-    }
-    if (commits.length === 0 && pkg.version?.commit) {
-      commits = [pkg.version.commit];
-    }
-    options.caches.gitLogCache.set(logKey, commits);
-  }
+  const commitEntries = await getHistoryCommitsForArtifact(
+    gitInfo.repoDir,
+    gitInfo.repoRelPath,
+    gitInfo.logPathSpec,
+    artifact.kind,
+    pkg.version?.commit,
+    installation.packageId,
+    source.id,
+    options.caches
+  );
 
-  for (const commit of commits.slice(0, MAX_HISTORY_COMMITS)) {
+  for (const { commit, relPath } of commitEntries) {
     try {
       const h = await hashArtifactAtCommit(
-        sourceKey,
+        `${sourceKey}::${relPath}`,
         gitInfo.repoDir,
-        gitInfo.repoRelPath,
+        relPath,
         commit,
         artifact,
         installation.assistant,
         options.caches
       );
-      if (h === installation.contentHash) {
+      if (h === targetHash) {
         return {
           matchedHash: true,
           commit,
@@ -1575,6 +2184,47 @@ async function findInstallCommitInHistory(
       }
     } catch {
       // Artifact may not exist or be valid at an older rename/commit; continue walking history
+    }
+  }
+
+  // If the recorded hash was computed with the pre-normalization codec at a commit in history:
+  // - If `recomputedDiskHash` equals that commit's current-codec hash, it is a codec rebaseline!
+  // - If `recomputedDiskHash` differs from that commit's current-codec hash, it is a real local edit
+  //   made on top of that install commit (so we still recover `commit` and its normalized `sourceHash`!).
+  const legacyTarget = options.recordedLegacyHash ?? targetHash;
+  if (artifact.kind === 'skill' && legacyTarget) {
+    for (const { commit, relPath } of commitEntries) {
+      try {
+        const legHashes = await computeLegacyHashesAtSkillCommit(
+          gitInfo.repoDir,
+          relPath,
+          commit,
+          installation.assistant,
+          options.caches
+        );
+        if (legHashes.has(legacyTarget)) {
+          const curCommitHash = await hashArtifactAtCommit(
+            `${sourceKey}::${relPath}`,
+            gitInfo.repoDir,
+            relPath,
+            commit,
+            artifact,
+            installation.assistant,
+            options.caches
+          );
+          const isRebaseline =
+            options.recomputedDiskHash !== undefined &&
+            curCommitHash === options.recomputedDiskHash;
+          return {
+            matchedHash: true,
+            commit,
+            sourceHash: curCommitHash,
+            rebaselinedByCommit: isRebaseline,
+          };
+        }
+      } catch {
+        // continue
+      }
     }
   }
 
@@ -1605,18 +2255,30 @@ export async function evaluateProvenanceCandidates(
   }
 ): Promise<ProvenanceEvaluationResult> {
   if (!installation.sourceId) {
+    const rb = await checkInstallationHashRebaseline(installation, options?.homeRoot);
     return {
       outcome: 'unknown',
       reason: 'no-source-id',
+      ...(rb.status === 'rebaselined-codec'
+        ? { rebaselined: 'codec' as const, recomputedContentHash: rb.recomputedHash }
+        : rb.status === 'real-local-edit'
+          ? { realLocalEdit: true }
+          : {}),
       details: `No sourceId recorded for "${installation.name}" — re-link to a source or reinstall.`,
     };
   }
 
   const candidates = allSources.filter((s) => s.id === installation.sourceId);
   if (candidates.length === 0) {
+    const rb = await checkInstallationHashRebaseline(installation, options?.homeRoot);
     return {
       outcome: 'unknown',
       reason: 'source-not-in-manifest',
+      ...(rb.status === 'rebaselined-codec'
+        ? { rebaselined: 'codec' as const, recomputedContentHash: rb.recomputedHash }
+        : rb.status === 'real-local-edit'
+          ? { realLocalEdit: true }
+          : {}),
       details: `Source "${installation.sourceId}" is not registered in global or workspace manifest — re-link to a source or reinstall.`,
     };
   }
@@ -1683,10 +2345,33 @@ export async function evaluateProvenanceCandidates(
     });
   }
 
+  const candidateSkillDirs = candidatesWithArtifact
+    .map((c) => c.artifact.path)
+    .filter((p): p is string => Boolean(p));
+  const rebaselineRes = await checkInstallationHashRebaseline(
+    installation,
+    options?.homeRoot,
+    candidateSkillDirs
+  );
+  let rebaselined: 'codec' | undefined =
+    rebaselineRes.status === 'rebaselined-codec' ? 'codec' : undefined;
+  let realLocalEdit: boolean | undefined =
+    rebaselineRes.status === 'real-local-edit' ? true : undefined;
+  let recomputedContentHash: string | undefined =
+    rebaselineRes.status === 'rebaselined-codec'
+      ? rebaselineRes.recomputedHash
+      : undefined;
+  const effectiveSearchHash =
+    rebaselineRes.status === 'rebaselined-codec'
+      ? rebaselineRes.recomputedHash
+      : installation.contentHash;
+
   if (needsFetch) {
     return {
       outcome: 'unknown',
       reason: 'needs-fetch',
+      ...(rebaselined ? { rebaselined, recomputedContentHash } : {}),
+      ...(realLocalEdit ? { realLocalEdit } : {}),
       hint: 'check sources to resolve',
       details: `Source "${installation.sourceId}" needs a fetch to verify provenance — check sources to resolve.`,
     };
@@ -1696,6 +2381,8 @@ export async function evaluateProvenanceCandidates(
     return {
       outcome: 'unknown',
       reason: 'artifact-not-in-source',
+      ...(rebaselined ? { rebaselined, recomputedContentHash } : {}),
+      ...(realLocalEdit ? { realLocalEdit } : {}),
       details: `Artifact "${installation.artifactId ?? installation.name}" not found in source "${installation.sourceId}" — re-link to a source or reinstall.`,
     };
   }
@@ -1709,17 +2396,33 @@ export async function evaluateProvenanceCandidates(
       single.pkg,
       single.artifact,
       installation,
+      effectiveSearchHash,
       {
         homeRoot: options?.homeRoot,
         cacheDir: options?.cacheDir,
         caches,
+        recordedLegacyHash: installation.contentHash,
+        recomputedDiskHash: rebaselineRes.recomputedHash,
       }
     );
+
+    if (historyRes.rebaselinedByCommit && rebaselineRes.recomputedHash) {
+      rebaselined = 'codec';
+      realLocalEdit = undefined;
+      recomputedContentHash = rebaselineRes.recomputedHash;
+    }
+
+    const finalInstalledHash =
+      rebaselined && recomputedContentHash
+        ? recomputedContentHash
+        : installation.contentHash;
 
     if (historyRes.matchedHash && historyRes.commit) {
       return {
         outcome: 'adopted',
         adoptionMode: 'adopted-with-commit',
+        ...(rebaselined ? { rebaselined, recomputedContentHash } : {}),
+        ...(realLocalEdit ? { realLocalEdit } : {}),
         match: {
           source: single.source,
           pkg: single.pkg,
@@ -1731,7 +2434,7 @@ export async function evaluateProvenanceCandidates(
               ? { requestedRef: single.pkg.version.requestedRef }
               : {}),
           },
-          sourceContentHash: installation.contentHash,
+          sourceContentHash: historyRes.sourceHash ?? finalInstalledHash,
         },
       };
     }
@@ -1740,13 +2443,15 @@ export async function evaluateProvenanceCandidates(
       return {
         outcome: 'adopted',
         adoptionMode: 'adopted-source-only',
+        ...(rebaselined ? { rebaselined, recomputedContentHash } : {}),
+        ...(realLocalEdit ? { realLocalEdit } : {}),
         match: {
           source: single.source,
           pkg: single.pkg,
           artifact: single.artifact,
           sourceHash: historyRes.sourceHash,
           revision: undefined,
-          sourceContentHash: installation.contentHash,
+          sourceContentHash: historyRes.sourceHash ?? finalInstalledHash,
         },
       };
     }
@@ -1756,6 +2461,8 @@ export async function evaluateProvenanceCandidates(
     return {
       outcome: 'adopted',
       adoptionMode: 'adopted-source-only',
+      ...(rebaselined ? { rebaselined, recomputedContentHash } : {}),
+      ...(realLocalEdit ? { realLocalEdit } : {}),
       match: {
         source: single.source,
         pkg: single.pkg,
@@ -1776,11 +2483,13 @@ export async function evaluateProvenanceCandidates(
     return `candidates: ${labels.join(', ')}`;
   };
 
-  if (!installation.contentHash) {
+  if (!effectiveSearchHash) {
     const hint = formatCandidatesHint(candidates);
     return {
       outcome: 'unknown',
       reason: 'ambiguous-source',
+      ...(rebaselined ? { rebaselined, recomputedContentHash } : {}),
+      ...(realLocalEdit ? { realLocalEdit } : {}),
       hint,
       details: `Ambiguous source "${installation.sourceId}" for "${installation.name}" (${hint}) — re-link to a source or reinstall.`,
     };
@@ -1792,6 +2501,7 @@ export async function evaluateProvenanceCandidates(
     artifact: Artifact;
     commit?: string;
     sourceHash?: string;
+    rebaselinedByCommit?: boolean;
   }> = [];
 
   for (const cand of candidatesWithArtifact) {
@@ -1801,10 +2511,13 @@ export async function evaluateProvenanceCandidates(
       cand.pkg,
       cand.artifact,
       installation,
+      effectiveSearchHash,
       {
         homeRoot: options?.homeRoot,
         cacheDir: options?.cacheDir,
         caches,
+        recordedLegacyHash: installation.contentHash,
+        recomputedDiskHash: rebaselineRes.recomputedHash,
       }
     );
     if (historyRes.matchedHash) {
@@ -1814,15 +2527,27 @@ export async function evaluateProvenanceCandidates(
         artifact: cand.artifact,
         commit: historyRes.commit,
         sourceHash: historyRes.sourceHash,
+        rebaselinedByCommit: historyRes.rebaselinedByCommit,
       });
     }
   }
 
   if (historyMatches.length === 1) {
     const winner = historyMatches[0];
+    if (winner.rebaselinedByCommit && rebaselineRes.recomputedHash) {
+      rebaselined = 'codec';
+      realLocalEdit = undefined;
+      recomputedContentHash = rebaselineRes.recomputedHash;
+    }
+    const finalInstalledHash =
+      rebaselined && recomputedContentHash
+        ? recomputedContentHash
+        : installation.contentHash;
     return {
       outcome: 'adopted',
       adoptionMode: winner.commit ? 'adopted-with-commit' : 'adopted-source-only',
+      ...(rebaselined ? { rebaselined, recomputedContentHash } : {}),
+      ...(realLocalEdit ? { realLocalEdit } : {}),
       match: {
         source: winner.source,
         pkg: winner.pkg,
@@ -1836,7 +2561,7 @@ export async function evaluateProvenanceCandidates(
                 : {}),
             }
           : undefined,
-        sourceContentHash: installation.contentHash,
+        sourceContentHash: winner.sourceHash ?? finalInstalledHash,
       },
     };
   }
@@ -1845,6 +2570,8 @@ export async function evaluateProvenanceCandidates(
   return {
     outcome: 'unknown',
     reason: 'ambiguous-source',
+    ...(rebaselined ? { rebaselined, recomputedContentHash } : {}),
+    ...(realLocalEdit ? { realLocalEdit } : {}),
     hint,
     details: `Ambiguous source "${installation.sourceId}" for "${installation.name}" (${hint}) — re-link to a source or reinstall.`,
   };
@@ -1859,6 +2586,14 @@ export function applyProvenanceEvaluation(
   evalResult: ProvenanceEvaluationResult,
   homeRoot?: string
 ): boolean {
+  let hashChanged = false;
+  if (evalResult.rebaselined === 'codec' && evalResult.recomputedContentHash) {
+    if (inst.contentHash !== evalResult.recomputedContentHash) {
+      inst.contentHash = evalResult.recomputedContentHash;
+      hashChanged = true;
+    }
+  }
+
   if (evalResult.outcome === 'adopted') {
     const { source, pkg, artifact, revision, sourceContentHash } = evalResult.match;
     inst.source = toInstallationSourceIdentity(source, homeRoot);
@@ -1885,6 +2620,7 @@ export function applyProvenanceEvaluation(
   }
 
   const changed =
+    hashChanged ||
     inst.provenance !== 'unknown' ||
     inst.provenanceReason !== evalResult.reason ||
     inst.provenanceHint !== evalResult.hint;

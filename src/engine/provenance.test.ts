@@ -1,6 +1,7 @@
 import { describe, it, before, after, beforeEach, afterEach } from 'node:test';
 import * as assert from 'node:assert';
 import * as child_process from 'child_process';
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -18,6 +19,7 @@ import {
   readState,
   writeState,
   statePath,
+  migrateStateFile,
   toDesiredSource,
   fromDesiredSource,
   SCHEMA_VERSION,
@@ -1548,6 +1550,193 @@ describe('provenance & update detection — spec §6 acceptance cases', () => {
         unknownD.provenanceHint?.includes(`global:${dualId}`) &&
           unknownD.provenanceHint?.includes(`workspace:${dualId}`),
         `Expected hint to list both candidates, got: "${unknownD.provenanceHint}"`
+      );
+    }
+  );
+
+  it(
+    '8d. codec rebaseline: recorded old-format hash (with metadata + index.json) -> rebaselined: codec + history hit + up-to-date; real local edit kept -> modified-locally',
+    async () => {
+      const srcId = 'codec-rebaseline-src';
+      const repoDir = path.join(testHomeDir, 'codec-rebaseline-repo');
+      initGitRepo(repoDir);
+
+      // Skill with frontmatter `metadata:` and an `index.json` file (which the pre-d61fdd1/2f949cc codec included in contentHash)
+      const skillRelDir = 'skills/rebaseline-skill';
+      const fullSkillDir = path.join(repoDir, skillRelDir);
+      fs.mkdirSync(fullSkillDir, { recursive: true });
+      const skillMd = [
+        '---',
+        'name: rebaseline-skill',
+        'description: Skill with metadata and index.json',
+        'metadata:',
+        '  author: Test Author',
+        '  version: "1.0.0"',
+        '---',
+        '# Rebaseline Skill Body v1',
+        '',
+      ].join('\n');
+      fs.writeFileSync(path.join(fullSkillDir, 'SKILL.md'), skillMd, 'utf-8');
+      const indexJsonBuf = Buffer.from('{"generated":true}\n', 'utf-8');
+      fs.writeFileSync(path.join(fullSkillDir, 'index.json'), indexJsonBuf);
+      const installCommit = commitAll(repoDir, 'Add rebaseline-skill v1');
+
+      // Advance repo HEAD on a different skill so history search must recover `installCommit`
+      writeSkillFile(repoDir, 'skills/other', 'other', 'Other skill', '# Other body');
+      const headCommit = commitAll(repoDir, 'Add other skill');
+      assert.notStrictEqual(headCommit, installCommit);
+
+      const source: Source = {
+        id: srcId,
+        type: 'local-folder',
+        scope: 'global',
+        localPath: repoDir,
+      };
+      await writeManifest(
+        'global',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          sources: [toDesiredSource(source, undefined, testHomeDir)],
+          desiredInstallations: [],
+        },
+        undefined,
+        testHomeDir
+      );
+
+      // Install the skill using current pipeline, then also place `index.json` on disk and compute the pre-d61fdd1 hash
+      const { installation: currentInstalled } = await resolveAndInstallSkill({
+        source,
+        skillName: 'rebaseline-skill',
+      });
+      const indexOnDiskPath = path.join(currentInstalled.path, 'index.json');
+      fs.writeFileSync(indexOnDiskPath, indexJsonBuf);
+      const indexStat = fs.statSync(indexOnDiskPath);
+
+      // Compute the exact pre-d61fdd1/pre-2f949cc hash (line-by-line frontmatter parser + metadata included + index.json included)
+      const oldHash = (() => {
+        const h = crypto.createHash('sha256');
+        h.update('name:rebaseline-skill\n');
+        h.update('description:Skill with metadata and index.json\n');
+        h.update('body:# Rebaseline Skill Body v1\n\n');
+        h.update('extraFields:\n');
+        const extra: Record<string, unknown> = {
+          author: 'Test Author',
+          metadata: '',
+          version: '1.0.0',
+        };
+        for (const k of Object.keys(extra).sort()) {
+          h.update(`${k}:${JSON.stringify(extra[k])}\n`);
+        }
+        h.update('files:\n');
+        h.update(`path:index.json\ncontent:`);
+        h.update(indexJsonBuf);
+        h.update(`\nmode:${indexStat.mode.toString(8)}\n`);
+        return h.digest('hex');
+      })();
+      assert.notStrictEqual(
+        oldHash,
+        currentInstalled.contentHash,
+        'Pre-normalization hash must differ from current canonicalSkillHash'
+      );
+
+      // (1) Write legacy installation with `oldHash` -> migrateStateFile rebaselines contentHash, finds installCommit in history, and checkDriftForAll reports up-to-date
+      await writeState(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          installations: [
+            {
+              assistant: currentInstalled.assistant,
+              scope: currentInstalled.scope,
+              projectPath: currentInstalled.projectPath,
+              kind: currentInstalled.kind,
+              name: currentInstalled.name,
+              path: currentInstalled.path,
+              sourceId: srcId,
+              artifactId: currentInstalled.artifactId,
+              installedAt: '2026-10-10T00:00:00.000Z',
+              contentHash: oldHash,
+            },
+          ],
+        },
+        testWorkspaceDir,
+        testHomeDir
+      );
+
+      const migReport1 = await migrateStateFile('project', testWorkspaceDir, testHomeDir, {
+        persist: true,
+      });
+      assert.strictEqual(migReport1.rebaselinedCodecCount, 1);
+      assert.strictEqual(migReport1.realLocalEditCount, 0);
+      assert.strictEqual(migReport1.adoptedWithCommitCount, 1);
+      assert.strictEqual(migReport1.entries[0].rebaselined, 'codec');
+      assert.strictEqual(migReport1.entries[0].commit, installCommit);
+
+      const migratedInst1 = migReport1.state.installations[0];
+      assert.strictEqual(
+        migratedInst1.contentHash,
+        currentInstalled.contentHash,
+        'contentHash must be replaced with the recomputed current-codec hash'
+      );
+      assert.strictEqual(migratedInst1.sourceRevision?.commit, installCommit);
+      assert.strictEqual(migratedInst1.sourceContentHash, currentInstalled.contentHash);
+
+      const drift1 = await checkDriftForAll([migratedInst1], [source], testHomeDir);
+      assert.strictEqual(
+        drift1[0].status,
+        'up-to-date',
+        'Rebaselined installation at unchanged source content must be up-to-date, never update-available'
+      );
+
+      // (2) Real local edit on disk -> keep recorded hash so item stays modified-locally
+      fs.writeFileSync(
+        path.join(currentInstalled.path, 'SKILL.md'),
+        skillMd + '\nEdited locally by user!\n',
+        'utf-8'
+      );
+      await writeState(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          installations: [
+            {
+              assistant: currentInstalled.assistant,
+              scope: currentInstalled.scope,
+              projectPath: currentInstalled.projectPath,
+              kind: currentInstalled.kind,
+              name: currentInstalled.name,
+              path: currentInstalled.path,
+              sourceId: srcId,
+              artifactId: currentInstalled.artifactId,
+              installedAt: '2026-10-10T00:00:00.000Z',
+              contentHash: oldHash,
+            },
+          ],
+        },
+        testWorkspaceDir,
+        testHomeDir
+      );
+
+      const migReport2 = await migrateStateFile('project', testWorkspaceDir, testHomeDir, {
+        persist: true,
+      });
+      assert.strictEqual(migReport2.rebaselinedCodecCount, 0);
+      assert.strictEqual(migReport2.realLocalEditCount, 1);
+      assert.strictEqual(migReport2.entries[0].realLocalEdit, true);
+
+      const migratedInst2 = migReport2.state.installations[0];
+      assert.strictEqual(
+        migratedInst2.contentHash,
+        oldHash,
+        'Real local edit must keep the recorded contentHash'
+      );
+      assert.strictEqual(migratedInst2.sourceRevision?.commit, installCommit);
+
+      const drift2 = await checkDriftForAll([migratedInst2], [source], testHomeDir);
+      assert.strictEqual(
+        drift2[0].status,
+        'modified-locally',
+        'Real local edit must stay modified-locally'
       );
     }
   );

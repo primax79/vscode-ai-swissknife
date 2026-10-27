@@ -335,6 +335,8 @@ export interface StateMigrationEntryReport {
     | 'adopted-source-only'
     | 'provenance-unknown';
   adoptionMode?: 'adopted-with-commit' | 'adopted-source-only';
+  rebaselined?: 'codec';
+  realLocalEdit?: boolean;
   adoptedSource?: InstallationSourceIdentity;
   commit?: string;
   reason?: string;
@@ -349,6 +351,8 @@ export interface StateMigrationReport {
   adoptedCount: number;
   adoptedWithCommitCount: number;
   adoptedSourceOnlyCount: number;
+  rebaselinedCodecCount: number;
+  realLocalEditCount: number;
   unknownCount: number;
   reasons: Record<string, number>;
   entries: StateMigrationEntryReport[];
@@ -431,6 +435,8 @@ export async function migrateStateFile(
         adoptedCount: 0,
         adoptedWithCommitCount: 0,
         adoptedSourceOnlyCount: 0,
+        rebaselinedCodecCount: 0,
+        realLocalEditCount: 0,
         unknownCount: 0,
         reasons: {},
         entries: [],
@@ -464,6 +470,8 @@ export async function migrateStateFile(
   let adoptedCount = 0;
   let adoptedWithCommitCount = 0;
   let adoptedSourceOnlyCount = 0;
+  let rebaselinedCodecCount = 0;
+  let realLocalEditCount = 0;
   let unknownCount = 0;
   let anyChanged = false;
   const reasons: Record<string, number> = {};
@@ -495,6 +503,12 @@ export async function migrateStateFile(
     if (changed) {
       anyChanged = true;
     }
+    if (evalResult.rebaselined === 'codec') {
+      rebaselinedCodecCount++;
+    }
+    if (evalResult.realLocalEdit) {
+      realLocalEditCount++;
+    }
 
     if (evalResult.outcome === 'adopted') {
       adoptedCount++;
@@ -511,6 +525,8 @@ export async function migrateStateFile(
         sourceId: inst.sourceId,
         outcome: evalResult.adoptionMode,
         adoptionMode: evalResult.adoptionMode,
+        ...(evalResult.rebaselined ? { rebaselined: evalResult.rebaselined } : {}),
+        ...(evalResult.realLocalEdit ? { realLocalEdit: true } : {}),
         adoptedSource: inst.source,
         commit: evalResult.match.revision?.commit,
       });
@@ -524,6 +540,8 @@ export async function migrateStateFile(
         kind: inst.kind,
         sourceId: inst.sourceId,
         outcome: 'provenance-unknown',
+        ...(evalResult.rebaselined ? { rebaselined: evalResult.rebaselined } : {}),
+        ...(evalResult.realLocalEdit ? { realLocalEdit: true } : {}),
         reason: evalResult.reason,
         hint: evalResult.hint,
       });
@@ -550,6 +568,8 @@ export async function migrateStateFile(
     adoptedCount,
     adoptedWithCommitCount,
     adoptedSourceOnlyCount,
+    rebaselinedCodecCount,
+    realLocalEditCount,
     unknownCount,
     reasons,
     entries,
