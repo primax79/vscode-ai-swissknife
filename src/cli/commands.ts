@@ -739,7 +739,8 @@ export async function runItem(
               source,
               foundPkg,
               foundArt,
-              item.assistant
+              item.assistant,
+              { homeRoot }
             );
 
             // Read local content

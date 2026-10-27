@@ -10,13 +10,29 @@ import type { ObservedArtifact } from '../domain/types';
 describe('inventory discovery & promotion — scanInstalledInventory & promoteObservedArtifact', () => {
   let testTempDir: string;
   let testHomeDir: string;
+  let origGitConfigGlobal: string | undefined;
+  let origGitConfigNoSystem: string | undefined;
 
   beforeEach(async () => {
     testTempDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'disc-test-ws-'));
     testHomeDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'disc-test-home-'));
+    origGitConfigGlobal = process.env.GIT_CONFIG_GLOBAL;
+    origGitConfigNoSystem = process.env.GIT_CONFIG_NOSYSTEM;
+    process.env.GIT_CONFIG_GLOBAL = path.join(testHomeDir, '.gitconfig');
+    process.env.GIT_CONFIG_NOSYSTEM = '1';
   });
 
   afterEach(async () => {
+    if (origGitConfigGlobal === undefined) {
+      delete process.env.GIT_CONFIG_GLOBAL;
+    } else {
+      process.env.GIT_CONFIG_GLOBAL = origGitConfigGlobal;
+    }
+    if (origGitConfigNoSystem === undefined) {
+      delete process.env.GIT_CONFIG_NOSYSTEM;
+    } else {
+      process.env.GIT_CONFIG_NOSYSTEM = origGitConfigNoSystem;
+    }
     if (testTempDir && fs.existsSync(testTempDir)) {
       await fs.promises.rm(testTempDir, { recursive: true, force: true });
     }

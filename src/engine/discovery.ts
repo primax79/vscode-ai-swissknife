@@ -341,7 +341,7 @@ export async function scanInstalledInventory(
         for (const art of pkg.artifacts) {
           if (art.kind === obs.kind && art.name === obs.name) {
             try {
-              const result = await resolveAndTranslate(source, pkg, art, obs.assistant);
+              const result = await resolveAndTranslate(source, pkg, art, obs.assistant, { homeRoot });
               let sourceHash: string | undefined;
               if (art.kind === 'skill') {
                 sourceHash = canonicalSkillHash(result.translated as CanonicalSkill);

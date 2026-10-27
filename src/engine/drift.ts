@@ -342,7 +342,7 @@ export async function checkForUpstreamUpdate(
       foundPkg,
       foundArt,
       installation.assistant,
-      cacheDir ? { cacheDir } : undefined
+      { cacheDir, homeRoot: effectiveHomeRoot }
     );
 
     if (foundArt.kind === 'skill') {

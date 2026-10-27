@@ -143,5 +143,5 @@ export interface PlanInstallParams {
   targetScope: Scope;
   projectRoot?: string;
   homeRoot?: string;
-  resolverOpts?: { cacheDir?: string };
+  resolverOpts?: { cacheDir?: string; homeRoot?: string };
 }
