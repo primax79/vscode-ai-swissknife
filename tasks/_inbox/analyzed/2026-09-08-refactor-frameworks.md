@@ -3,8 +3,8 @@
 **Date:** 2026-09-08
 **Author:** Alfredo (raw planning note, originally `note/refactor_frameworks.md`)
 **Produced:** [`specs/adapter-and-source-registries.md`](../../specs/adapter-and-source-registries.md),
-driving initiatives [29 — Adapter registry & config](../../29-adapter-registry/plan.md) and
-[30 — Source-resolver registry](../../30-source-resolver-registry/plan.md).
+driving initiatives [29 — Adapter registry & config](../../done/29-adapter-registry/plan.md) and
+[30 — Source-resolver registry](../../done/30-source-resolver-registry/plan.md).
 
 Two design forks in the original note were resolved with the user before
 writing the spec (see the spec's Locked-in decisions for the full *why*):

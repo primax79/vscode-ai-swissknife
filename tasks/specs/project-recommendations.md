@@ -373,4 +373,4 @@ instead of introducing a new schema.
 
 ## 6. Drives
 
-- Initiative [22 — Project-scoped recommended installations](../22-project-recommendations/plan.md).
+- Initiative [22 — Project-scoped recommended installations](../done/22-project-recommendations/plan.md).

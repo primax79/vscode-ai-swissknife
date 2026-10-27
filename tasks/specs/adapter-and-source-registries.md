@@ -384,5 +384,5 @@ SourceResolver`.
 
 ## 6. Drives
 
-- Initiative [29 — Adapter registry & config](../29-adapter-registry/plan.md)
-- Initiative [30 — Source-resolver registry](../30-source-resolver-registry/plan.md)
+- Initiative [29 — Adapter registry & config](../done/29-adapter-registry/plan.md)
+- Initiative [30 — Source-resolver registry](../done/30-source-resolver-registry/plan.md)

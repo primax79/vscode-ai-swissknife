@@ -1,12 +1,12 @@
 # Foundations: generic engine + Claude/Kilo, skill-first (spec & context)
 
-> **Drives initiatives:** [01](../01-project-scaffold/plan.md),
-> [02](../02-domain-and-registry/plan.md),
-> [03](../03-claude-kilo-adapters/plan.md),
-> [04](../04-source-resolver/plan.md),
-> [05](../05-translator-skill/plan.md),
-> [06](../06-install-engine/plan.md),
-> [07](../07-minimal-ui/plan.md) · raw sources: `../_inbox/analyzed/codex-analysis.md`
+> **Drives initiatives:** [01](../done/01-project-scaffold/plan.md),
+> [02](../done/02-domain-and-registry/plan.md),
+> [03](../done/03-claude-kilo-adapters/plan.md),
+> [04](../done/04-source-resolver/plan.md),
+> [05](../done/05-translator-skill/plan.md),
+> [06](../done/06-install-engine/plan.md),
+> [07](../done/07-minimal-ui/plan.md) · raw sources: `../_inbox/analyzed/codex-analysis.md`
 
 ## Goal
 

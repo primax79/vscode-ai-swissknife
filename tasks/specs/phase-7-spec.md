@@ -242,4 +242,4 @@ Same treatment for `UnmanagedGroupItem` → `KindGroupItem` →
 
 ## 5. Tasks
 
-See [`28-sidebar-unification/plan.md`](../28-sidebar-unification/plan.md).
+See [`28-sidebar-unification/plan.md`](../done/28-sidebar-unification/plan.md).
