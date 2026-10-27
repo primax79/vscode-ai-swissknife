@@ -1,18 +1,18 @@
-# 38 — Per-source refresh — Summary
+# 38 — Aggiornamento per singola sorgente — Riepilogo
 
-> **Closed on:** 2026-10-27 (registry tidy; verifier ai-coding-tools-c1)  
-> **Initiative:** 38 — Per-source refresh  
-> **Status:** ✅ Done and merged into main
+> **Closed on:** 2026-10-27 (riordino del registro; verificatore ai-coding-tools-c1)  
+> **Initiative:** 38 — Aggiornamento per singola sorgente  
+> **Status:** ✅ Completata e unita in main
 
-Summary written at closure from the plan and the git history; the per-task specs in this folder hold the detail.
+Riepilogo scritto alla chiusura a partire dal piano e dalla cronologia git; le specifiche dei singoli task in questa cartella contengono i dettagli.
 
-## What was built
+## Cosa è stato realizzato
 
-- **38.1 `AvailableProvider.refreshSource` (single-source re-resolve, in-place cache update)** — merged 19ea67d 2026-10-08. Add `AvailableTreeDataProvider.refreshSource(sourceId, scope)` to re-resolve a single source, update its cached group in place, and recompute recommendations without re-fetching other sources.
-- **38.2 Sidebar inline command + Dashboard row button wired to it** — merged 42d016f 2026-10-09. Wire `aiSwissknife.refreshSource` as an inline action on sidebar source items and as an icon-only `↻` button on each Dashboard source row.
+- **38.1 `AvailableProvider.refreshSource` (nuova risoluzione di una singola sorgente, aggiornamento sul posto della cache)** — unito in 19ea67d il 2026-10-08. Aggiungere `AvailableTreeDataProvider.refreshSource(sourceId, scope)` per risolvere nuovamente una singola sorgente, aggiornare sul posto il suo gruppo in cache e ricalcolare le raccomandazioni senza riscaricare le altre sorgenti.
+- **38.2 Comando inline nella barra laterale + pulsante sulla riga della Dashboard collegati** — unito in 42d016f il 2026-10-09. Collegare `aiSwissknife.refreshSource` come azione inline sugli elementi sorgente della barra laterale e come pulsante di sola icona `↻` su ogni riga sorgente della Dashboard.
 
 ## Verification
 
-- Every task's work is merged into `main` (evidence: the commits named above, from `git log --grep '<id>'`).
-- `npm test` on `main` at 5e85109 (2026-10-27): 577 tests, 576 pass, 0 fail, 1 opt-in skip (`AISK_REAL_KILO=1`).
-- `ai-orch tasks validate --tasks-dir tasks`: 0 errors.
+- Il lavoro di ogni task è stato unito in `main` (evidenza: i commit indicati sopra, da `git log --grep '<id>'`).
+- `npm test` su `main` a 5e85109 (2026-10-27): 577 test, 576 passati, 0 falliti, 1 saltato opt-in (`AISK_REAL_KILO=1`).
+- `ai-orch tasks validate --tasks-dir tasks`: 0 errori.
