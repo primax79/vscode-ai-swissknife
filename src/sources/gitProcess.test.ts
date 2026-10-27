@@ -168,4 +168,36 @@ describe('resolveAndValidateCacheDir', () => {
     assert.strictEqual(targetDir, path.join(tempBase, 'valid-source-id'));
     assert.ok(path.resolve(targetDir).startsWith(path.resolve(tempBase) + path.sep));
   });
+
+  it('keys cache directory by <sanitized id>-<short hash of location> when location is given', () => {
+    const res1 = resolveAndValidateCacheDir(tempBase, 'same-id', 'https://github.com/org/repo-one.git');
+    const res2 = resolveAndValidateCacheDir(tempBase, 'same-id', 'https://github.com/org/repo-two.git');
+
+    assert.strictEqual(res1.sanitizedId, 'same-id');
+    assert.strictEqual(res2.sanitizedId, 'same-id');
+    assert.notStrictEqual(res1.targetDir, res2.targetDir);
+    assert.match(path.basename(res1.targetDir), /^same-id-[0-9a-f]{8}$/);
+    assert.match(path.basename(res2.targetDir), /^same-id-[0-9a-f]{8}$/);
+  });
+
+  it('reuses legacy cache directory (<sanitized id>) when its origin remote URL matches location, and uses new hashed dir when it does not', () => {
+    const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cache-legacy-reuse-'));
+    try {
+      const legacyCloneDir = path.join(cacheDir, 'shared-src');
+      fs.mkdirSync(legacyCloneDir, { recursive: true });
+      runGitSync(['init', '-b', 'main'], legacyCloneDir);
+      runGitSync(['remote', 'add', 'origin', '/local/remotes/repo-a'], legacyCloneDir);
+
+      // Matching location -> reuses legacyCloneDir
+      const matching = resolveAndValidateCacheDir(cacheDir, 'shared-src', '/local/remotes/repo-a');
+      assert.strictEqual(matching.targetDir, legacyCloneDir);
+
+      // Different location -> does NOT reuse legacyCloneDir, returns hashed path
+      const different = resolveAndValidateCacheDir(cacheDir, 'shared-src', '/local/remotes/repo-b');
+      assert.notStrictEqual(different.targetDir, legacyCloneDir);
+      assert.match(path.basename(different.targetDir), /^shared-src-[0-9a-f]{8}$/);
+    } finally {
+      fs.rmSync(cacheDir, { recursive: true, force: true });
+    }
+  });
 });

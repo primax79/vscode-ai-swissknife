@@ -1,12 +1,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import type {
-  ManagedInstallation,
-  ObservedArtifact,
-  Scope,
-  ItemKind,
-  Source,
-  ObservedSourceMatch,
+import {
+  toInstallationSourceIdentity,
+  type ManagedInstallation,
+  type ObservedArtifact,
+  type Scope,
+  type ItemKind,
+  type Source,
+  type ObservedSourceMatch,
 } from '../domain/types';
 import type {
   CanonicalSkill,
@@ -360,6 +361,7 @@ export async function scanInstalledInventory(
               if (sourceHash && obs.contentHash && sourceHash === obs.contentHash) {
                 candidates.push({
                   status: 'identical',
+                  source: toInstallationSourceIdentity(source),
                   sourceId: source.id,
                   packageId: pkg.id,
                   artifactId: art.id,
@@ -369,6 +371,7 @@ export async function scanInstalledInventory(
               } else if (sourceHash) {
                 candidates.push({
                   status: 'different',
+                  source: toInstallationSourceIdentity(source),
                   sourceId: source.id,
                   packageId: pkg.id,
                   artifactId: art.id,
@@ -408,7 +411,7 @@ export async function scanInstalledInventory(
  */
 export async function promoteObservedArtifact(
   observed: ObservedArtifact,
-  provenance: Pick<ObservedSourceMatch, 'sourceId' | 'packageId' | 'artifactId' | 'sourceRevision'>,
+  provenance: Pick<ObservedSourceMatch, 'source' | 'sourceId' | 'packageId' | 'artifactId' | 'sourceRevision'>,
   homeRoot?: string
 ): Promise<ManagedInstallation> {
   if (observed.disabled) {
@@ -463,6 +466,7 @@ export async function promoteObservedArtifact(
     kind: observed.kind as ItemKind,
     name: observed.name,
     path: observed.path,
+    ...(provenance.source ? { source: provenance.source } : {}),
     sourceId: finalSourceId,
     ...(finalPackageId ? { packageId: finalPackageId } : {}),
     ...(finalArtifactId ? { artifactId: finalArtifactId } : {}),

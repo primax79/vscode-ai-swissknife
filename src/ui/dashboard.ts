@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import type { ManagedInstallation, ObservedArtifact, ObservedSourceMatch, Source, AssistantId, Scope } from '../domain/types';
 import { readManifest, fromDesiredSource } from '../domain/registry';
 import { scanInstalledInventory, promoteObservedArtifact } from '../engine/discovery';
-import { analyzeLocalDrift, checkForUpstreamUpdate } from '../engine/drift';
+import { analyzeLocalDrift, checkForUpstreamUpdate, resolveInstallationSource } from '../engine/drift';
 import type { DriftReport } from '../engine/types';
 import { FormEditorPanel } from './formEditor';
 import { getAssistantIconPath } from './assistantIcons';
@@ -639,24 +639,39 @@ export class DashboardPanel {
     const inst = allManaged.find(m => getIdentityKey(m) === key);
     if (inst) {
       let diffAvailable = false;
-      const allSources: Source[] = [];
+      const globalSources: Source[] = [];
+      const workspaceSources: Source[] = [];
       try {
         const gManifest = await readManifest('global');
-        allSources.push(...gManifest.sources.map((d) => fromDesiredSource(d)));
+        globalSources.push(...gManifest.sources.map((d) => fromDesiredSource(d)));
         if (folders && folders.length > 0) {
           const pManifest = await readManifest('project', folders[0].uri.fsPath);
-          allSources.push(...pManifest.sources.map((d) => fromDesiredSource(d, folders[0].uri.fsPath)));
+          workspaceSources.push(...pManifest.sources.map((d) => fromDesiredSource(d, folders[0].uri.fsPath)));
         }
       } catch {
         // ignore
       }
 
-      const matchingSource = allSources.find((s) => s.id === inst.sourceId);
+      const resolvedSrc = resolveInstallationSource(inst, { globalSources, workspaceSources });
       let report: DriftReport;
-      if (matchingSource) {
-        report = await checkForUpstreamUpdate(inst, matchingSource);
+      if ('source' in resolvedSrc) {
+        report = await checkForUpstreamUpdate(inst, resolvedSrc.source);
       } else {
-        report = await analyzeLocalDrift(inst);
+        const localReport = await analyzeLocalDrift(inst);
+        if (localReport.status !== 'missing-on-disk' && inst.source) {
+          report = {
+            installation: inst,
+            status: 'source-unavailable',
+            hasLocalPatch: localReport.hasLocalPatch,
+            diskHash: localReport.diskHash,
+            details: resolvedSrc.hint
+              ? `${resolvedSrc.unavailable} ${resolvedSrc.hint}`
+              : resolvedSrc.unavailable,
+            ...(resolvedSrc.hint ? { hint: resolvedSrc.hint } : {}),
+          };
+        } else {
+          report = localReport;
+        }
       }
       
       if (report.status === 'modified-locally' || report.status === 'modified-and-update-available') {
@@ -753,6 +768,8 @@ export class DashboardPanel {
   }
 
   public async update(): Promise<void> {
+    const globalSources: Source[] = [];
+    const workspaceSources: Source[] = [];
     const allSources: Source[] = [];
     const allManaged: ManagedInstallation[] = [];
     const allObserved: ObservedArtifact[] = [];
@@ -761,7 +778,9 @@ export class DashboardPanel {
     // Global
     try {
       const gManifest = await readManifest('global');
-      allSources.push(...gManifest.sources.map((d) => fromDesiredSource(d)));
+      const gSources = gManifest.sources.map((d) => fromDesiredSource(d));
+      globalSources.push(...gSources);
+      allSources.push(...gSources);
       const gInv = await scanInstalledInventory('global');
       allManaged.push(...gInv.managed);
       allObserved.push(...gInv.observed);
@@ -775,7 +794,9 @@ export class DashboardPanel {
       const projectRoot = folders[0].uri.fsPath;
       try {
         const pManifest = await readManifest('project', projectRoot);
-        allSources.push(...pManifest.sources.map((d) => fromDesiredSource(d, projectRoot)));
+        const pSources = pManifest.sources.map((d) => fromDesiredSource(d, projectRoot));
+        workspaceSources.push(...pSources);
+        allSources.push(...pSources);
         const pInv = await scanInstalledInventory('project', projectRoot);
         allManaged.push(...pInv.managed);
         allObserved.push(...pInv.observed);
@@ -843,12 +864,26 @@ export class DashboardPanel {
 
     // Phase B: Slow drift check
     for (const inst of allManaged) {
-      const matchingSource = allSources.find((s) => s.id === inst.sourceId);
+      const resolvedSrc = resolveInstallationSource(inst, { globalSources, workspaceSources });
       let report: DriftReport;
-      if (matchingSource) {
-        report = await checkForUpstreamUpdate(inst, matchingSource);
+      if ('source' in resolvedSrc) {
+        report = await checkForUpstreamUpdate(inst, resolvedSrc.source);
       } else {
-        report = await analyzeLocalDrift(inst);
+        const localReport = await analyzeLocalDrift(inst);
+        if (localReport.status !== 'missing-on-disk' && inst.source) {
+          report = {
+            installation: inst,
+            status: 'source-unavailable',
+            hasLocalPatch: localReport.hasLocalPatch,
+            diskHash: localReport.diskHash,
+            details: resolvedSrc.hint
+              ? `${resolvedSrc.unavailable} ${resolvedSrc.hint}`
+              : resolvedSrc.unavailable,
+            ...(resolvedSrc.hint ? { hint: resolvedSrc.hint } : {}),
+          };
+        } else {
+          report = localReport;
+        }
       }
       driftReports.push(report);
       this._panel.webview.postMessage({

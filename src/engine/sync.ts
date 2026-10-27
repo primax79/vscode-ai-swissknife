@@ -54,6 +54,7 @@ export async function planSync(params: PlanSyncParams): Promise<PreparedInstall>
   };
 
   const sourceId = ('sourceId' in sourceItem ? sourceItem.sourceId : undefined) ?? 'cross-assistant-sync';
+  const sourceIdentity = 'source' in sourceItem ? sourceItem.source : undefined;
   const packageId = 'packageId' in sourceItem ? sourceItem.packageId : undefined;
   const artifactId = 'artifactId' in sourceItem ? sourceItem.artifactId : undefined;
   const sourceRevision = 'sourceRevision' in sourceItem ? sourceItem.sourceRevision : undefined;
@@ -159,6 +160,7 @@ export async function planSync(params: PlanSyncParams): Promise<PreparedInstall>
       kind: 'skill',
       plan: {
         supported: true,
+        ...(sourceIdentity ? { source: sourceIdentity } : {}),
         sourceId,
         packageId: packageId ?? `${sourceId}:${sourceItem.name}`,
         artifactId: artifactId ?? `${sourceId}:${sourceItem.name}`,
@@ -245,6 +247,7 @@ export async function planSync(params: PlanSyncParams): Promise<PreparedInstall>
       kind: 'agent',
       plan: {
         supported: true,
+        ...(sourceIdentity ? { source: sourceIdentity } : {}),
         sourceId,
         packageId: packageId ?? `${sourceId}:${sourceItem.name}`,
         artifactId: artifactId ?? `${sourceId}:${sourceItem.name}`,
@@ -331,6 +334,7 @@ export async function planSync(params: PlanSyncParams): Promise<PreparedInstall>
       kind: 'command',
       plan: {
         supported: true,
+        ...(sourceIdentity ? { source: sourceIdentity } : {}),
         sourceId,
         packageId: packageId ?? `${sourceId}:${sourceItem.name}`,
         artifactId: artifactId ?? `${sourceId}:${sourceItem.name}`,
@@ -418,6 +422,7 @@ export async function planSync(params: PlanSyncParams): Promise<PreparedInstall>
       kind: 'mcp-server',
       plan: {
         supported: true,
+        ...(sourceIdentity ? { source: sourceIdentity } : {}),
         sourceId,
         packageId: packageId ?? `${sourceId}:${sourceItem.name}`,
         artifactId: artifactId ?? `${sourceId}:${sourceItem.name}`,

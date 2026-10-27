@@ -25,7 +25,7 @@ import { getAdapterWithHomeRoot } from '../adapters/registry';
 import { getSourceResolver } from '../sources/registry';
 import { planInstall } from './plan';
 import { applyInstall } from './apply';
-import { checkForUpstreamUpdate, checkDriftForAll } from './drift';
+import { checkForUpstreamUpdate, checkDriftForAll, resolveInstallationSource } from './drift';
 import { computePendingCounts } from './pendingCounts';
 import { planUpdate } from './update';
 import { runUpdates } from '../cli/commands';
@@ -182,9 +182,112 @@ describe('provenance & update detection — spec §6 acceptance cases', () => {
   // (b) When the remote advances between catalog load and install (spec §0.3 & §3.4), `planInstall` checks out
   //     the stale catalog commit (`pkg.version.commit`) instead of resolving at install time, so an immediate
   //     check right after install fetches the new commit and reports `update-available` instead of `up-to-date`.
+  it('1a. install from a git source and check immediately -> up-to-date on both UI and CLI paths (source identity lookup)', async () => {
+    const remoteRepoDir = path.join(testWorkspaceDir, 'remotes', 'git-origin-1a');
+    initGitRepo(remoteRepoDir);
+    writeSkillFile(remoteRepoDir, 'skills/alpha-skill', 'alpha-skill', 'Alpha v1', '# Alpha v1');
+    const commit1 = commitAll(remoteRepoDir, 'Initial commit');
+
+    // Also register a global local-folder source with the same id ('team-git') that has different content
+    const globalCollisionFolder = path.join(testHomeDir, 'works', 'team-git');
+    writeSkillFile(
+      globalCollisionFolder,
+      'skills/alpha-skill',
+      'alpha-skill',
+      'Alpha global ahead',
+      '# Alpha global working copy'
+    );
+    const globalCollisionSource: Source = {
+      id: 'team-git',
+      type: 'local-folder',
+      scope: 'global',
+      localPath: globalCollisionFolder,
+    };
+    await writeManifest(
+      'global',
+      {
+        schemaVersion: SCHEMA_VERSION,
+        sources: [toDesiredSource(globalCollisionSource, undefined, testHomeDir)],
+        desiredInstallations: [],
+      },
+      undefined,
+      testHomeDir
+    );
+
+    const gitSource: Source = {
+      id: 'team-git',
+      type: 'git-custom',
+      scope: 'project',
+      projectPath: testWorkspaceDir,
+      url: remoteRepoDir,
+    };
+
+    await writeManifest(
+      'project',
+      {
+        schemaVersion: SCHEMA_VERSION,
+        sources: [toDesiredSource(gitSource, testWorkspaceDir, testHomeDir)],
+        desiredInstallations: [],
+      },
+      testWorkspaceDir,
+      testHomeDir
+    );
+
+    const { installation } = await resolveAndInstallSkill({
+      source: gitSource,
+      skillName: 'alpha-skill',
+      targetScope: 'project',
+    });
+
+    assert.deepStrictEqual(installation.source, {
+      id: 'team-git',
+      scope: 'workspace',
+      type: 'git-custom',
+      location: remoteRepoDir,
+    });
+    assert.strictEqual(installation.sourceId, 'team-git');
+    assert.strictEqual(installation.sourceRevision?.commit, commit1);
+
+    // UI path: checkDriftForAll & computePendingCounts
+    const gManifest = await readManifest('global', undefined, testHomeDir);
+    const pManifest = await readManifest('project', testWorkspaceDir, testHomeDir);
+    const globalSources = gManifest.sources.map((d) => fromDesiredSource(d, undefined, testHomeDir));
+    const workspaceSources = pManifest.sources.map((d) => fromDesiredSource(d, testWorkspaceDir, testHomeDir));
+
+    const uiReports = await checkDriftForAll(
+      [installation],
+      { globalSources, workspaceSources },
+      testHomeDir
+    );
+    assert.strictEqual(uiReports.length, 1);
+    assert.strictEqual(
+      uiReports[0].status,
+      'up-to-date',
+      'Immediate check after install must be up-to-date on UI path'
+    );
+
+    const pending = await computePendingCounts(testWorkspaceDir, testHomeDir);
+    assert.strictEqual(pending.updatesAvailable, 0);
+
+    // CLI path: runUpdates (single workspace and --roots multi-workspace)
+    const cliUpdatesSingle = await runUpdates({
+      home: testHomeDir,
+      workspace: testWorkspaceDir,
+    });
+    assert.strictEqual(cliUpdatesSingle.length, 1);
+    assert.strictEqual(cliUpdatesSingle[0].status, 'up-to-date');
+
+    const cliUpdatesRoots = await runUpdates({
+      home: testHomeDir,
+      roots: [testWorkspaceDir],
+    });
+    assert.strictEqual(cliUpdatesRoots.length, 1);
+    assert.strictEqual(cliUpdatesRoots[0].status, 'up-to-date');
+  });
+
   it(
-    '1. install from a git source and check immediately -> up-to-date on both UI and CLI paths',
-    { todo: 'fixed by 49.2 and 49.5' },
+    '1b. install from a git source when remote advances between catalog load and install -> resolves at install time and is up-to-date',
+    { todo: 'fixed by 49.5' },
     async () => {
       const remoteRepoDir = path.join(testWorkspaceDir, 'remotes', 'git-origin-1');
       initGitRepo(remoteRepoDir);
@@ -283,7 +386,6 @@ describe('provenance & update detection — spec §6 acceptance cases', () => {
   // `runUpdates({ roots })` checks project installations against project sources and reports `up-to-date` (CLI/UI disagreement).
   it(
     '2. same source id in global (local-folder) and workspace (git), installed from workspace git -> check uses git source (up-to-date) and ignores global local-folder edits',
-    { todo: 'fixed by 49.2' },
     async () => {
       const sharedId = 'ai-orchestration';
 
@@ -358,6 +460,13 @@ describe('provenance & update detection — spec §6 acceptance cases', () => {
         targetScope: 'project',
       });
 
+      assert.deepStrictEqual(installation.source, {
+        id: sharedId,
+        scope: 'workspace',
+        type: 'git-marketplace',
+        location: remoteRepoDir,
+      });
+
       // Edit the global local-folder further
       writeSkillFile(
         globalLocalFolder,
@@ -367,13 +476,19 @@ describe('provenance & update detection — spec §6 acceptance cases', () => {
         '# Edited local working copy'
       );
 
-      // Dashboard merged list path (src/ui/dashboard.ts:644-657, 762-785, 845-851)
+      // Dashboard / UI path (resolveInstallationSource & checkDriftForAll)
       const gManifest = await readManifest('global', undefined, testHomeDir);
       const pManifest = await readManifest('project', testWorkspaceDir, testHomeDir);
-      const dashboardMergedSources: Source[] = [
-        ...gManifest.sources.map((d) => fromDesiredSource(d, undefined, testHomeDir)),
-        ...pManifest.sources.map((d) => fromDesiredSource(d, testWorkspaceDir, testHomeDir)),
-      ];
+      const globalSources = gManifest.sources.map((d) => fromDesiredSource(d, undefined, testHomeDir));
+      const workspaceSources = pManifest.sources.map((d) => fromDesiredSource(d, testWorkspaceDir, testHomeDir));
+      const dashboardMergedSources: Source[] = [...globalSources, ...workspaceSources];
+
+      const resolved = resolveInstallationSource(installation, { globalSources, workspaceSources });
+      assert.ok('source' in resolved, 'resolveInstallationSource must find the workspace source');
+      if ('source' in resolved) {
+        assert.strictEqual(resolved.source.scope, 'project');
+        assert.strictEqual(resolved.source.type, 'git-marketplace');
+      }
 
       const driftReports = await checkDriftForAll([installation], dashboardMergedSources, testHomeDir);
       assert.strictEqual(driftReports.length, 1);
@@ -406,10 +521,26 @@ describe('provenance & update detection — spec §6 acceptance cases', () => {
       assert.strictEqual(cliRoots.length, 1);
       assert.strictEqual(cliRoots[0].status, 'up-to-date');
       assert.strictEqual(
+        driftReports[0].status,
+        cliSingle[0].status,
+        'Dashboard and CLI single-workspace paths must give the same state'
+      );
+      assert.strictEqual(
         cliSingle[0].status,
         cliRoots[0].status,
         'CLI single-workspace and --roots paths must agree with Dashboard'
       );
+
+      // Also verify that if workspace source is removed from workspace manifest while global source with same id remains,
+      // resolveInstallationSource returns unavailable with a hint (never silently falling back to global source).
+      const missingRes = resolveInstallationSource(installation, {
+        globalSources,
+        workspaceSources: [],
+      });
+      assert.ok('unavailable' in missingRes, 'Must be unavailable when workspace source is gone');
+      if ('unavailable' in missingRes) {
+        assert.ok(missingRes.hint && missingRes.hint.includes('global'), 'Must include hint about same-id source in global scope');
+      }
     }
   );
 

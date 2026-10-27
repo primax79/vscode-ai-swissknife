@@ -1,4 +1,6 @@
 import * as child_process from 'child_process';
+import * as crypto from 'crypto';
+import * as fs from 'fs';
 import * as path from 'path';
 import { promisify } from 'util';
 import type { SourceType } from '../domain/types';
@@ -81,14 +83,19 @@ export function validateGitRef(name: 'branch' | 'tag' | 'commit', value: string)
 }
 
 /**
- * Validates and resolves cache directory target path for a source id.
+ * Validates and resolves cache directory target path for a source id and optional location.
  * Rejects empty, '.', '..', or ids with leading dots.
+ * When `location` is provided:
+ * - Keys the clone directory by `<sanitized id>-<short hash of location>`.
+ * - If an existing cache directory under the legacy key (`<sanitized id>`) exists and its
+ *   `origin` remote URL matches `location`, reuses that legacy directory (without network calls).
  * Asserts that resolved target directory is strictly contained within base cache directory.
  */
 export function resolveAndValidateCacheDir(
   baseCacheDir: string,
-  sourceId: string
-): { targetDir: string; sanitizedId: string } {
+  sourceId: string,
+  location?: string
+): { targetDir: string; sanitizedId: string; hashedTargetDir?: string } {
   const sanitizedId = (sourceId ?? '').replace(/[^a-zA-Z0-9._-]/g, '_');
   if (
     sanitizedId === '' ||
@@ -101,7 +108,43 @@ export function resolveAndValidateCacheDir(
     );
   }
 
-  const targetDir = path.join(baseCacheDir, sanitizedId);
+  const trimmedLocation = location?.trim() ?? '';
+  let dirName = sanitizedId;
+  let hashedTargetDir: string | undefined;
+
+  if (trimmedLocation) {
+    const shortHash = crypto.createHash('sha256').update(trimmedLocation).digest('hex').slice(0, 8);
+    const hashedDirName = `${sanitizedId}-${shortHash}`;
+    hashedTargetDir = path.join(baseCacheDir, hashedDirName);
+    const legacyDir = path.join(baseCacheDir, sanitizedId);
+
+    // If an existing clone lives at the old key `<sanitizedId>` and its remote URL matches `location`, reuse it.
+    let reuseLegacy = false;
+    if (!fs.existsSync(path.join(hashedTargetDir, '.git')) && fs.existsSync(path.join(legacyDir, '.git'))) {
+      try {
+        const remoteOut = child_process
+          .execFileSync('git', ['remote', 'get-url', 'origin'], {
+            cwd: legacyDir,
+            timeout: 5_000,
+            env: {
+              ...process.env,
+              GIT_TERMINAL_PROMPT: '0',
+            },
+          })
+          .toString('utf-8')
+          .trim();
+        if (remoteOut === trimmedLocation) {
+          reuseLegacy = true;
+        }
+      } catch {
+        // Not a matching remote; fall through to hashedTargetDir
+      }
+    }
+
+    dirName = reuseLegacy ? sanitizedId : hashedDirName;
+  }
+
+  const targetDir = path.join(baseCacheDir, dirName);
   const resolvedTarget = path.resolve(targetDir);
   const resolvedBase = path.resolve(baseCacheDir);
 
@@ -111,7 +154,7 @@ export function resolveAndValidateCacheDir(
     );
   }
 
-  return { targetDir, sanitizedId };
+  return { targetDir, sanitizedId, ...(hashedTargetDir ? { hashedTargetDir } : {}) };
 }
 
 /**

@@ -7,7 +7,7 @@ import {
   readState,
   fromDesiredSource,
 } from '../domain/registry';
-import { checkForUpstreamUpdate } from './drift';
+import { checkDriftForAll } from './drift';
 
 export interface PendingCounts {
   unsatisfiedRecommendations: number;
@@ -53,13 +53,14 @@ export async function computePendingCounts(
   }
 
   const allInstallations: ManagedInstallation[] = [];
-  const allSources: Source[] = [];
+  const globalSources: Source[] = [];
+  const workspaceSources: Source[] = [];
 
   try {
     const gState = await readState('global', undefined, homeRoot);
     allInstallations.push(...gState.installations);
     const gManifest = await readManifest('global', undefined, homeRoot);
-    allSources.push(...gManifest.sources.map((d) => fromDesiredSource(d, undefined, homeRoot)));
+    globalSources.push(...gManifest.sources.map((d) => fromDesiredSource(d, undefined, homeRoot)));
   } catch {
     // ignore
   }
@@ -69,25 +70,26 @@ export async function computePendingCounts(
       const pStateLoaded = pState ?? (await readState('project', projectRoot, homeRoot));
       allInstallations.push(...pStateLoaded.installations);
       const pManifestLoaded = pManifest ?? (await readManifest('project', projectRoot, homeRoot));
-      allSources.push(...pManifestLoaded.sources.map((d) => fromDesiredSource(d, projectRoot, homeRoot)));
+      workspaceSources.push(...pManifestLoaded.sources.map((d) => fromDesiredSource(d, projectRoot, homeRoot)));
     } catch {
       // ignore
     }
   }
 
   let updatesAvailable = 0;
-  for (const inst of allInstallations) {
-    const matchingSource = allSources.find((s) => s.id === inst.sourceId);
-    if (matchingSource) {
-      try {
-        const report = await checkForUpstreamUpdate(inst, matchingSource, homeRoot);
-        if (report.status === 'update-available' || report.status === 'modified-and-update-available') {
-          updatesAvailable++;
-        }
-      } catch {
-        // ignore
+  try {
+    const reports = await checkDriftForAll(
+      allInstallations,
+      { globalSources, workspaceSources },
+      homeRoot
+    );
+    for (const report of reports) {
+      if (report.status === 'update-available' || report.status === 'modified-and-update-available') {
+        updatesAvailable++;
       }
     }
+  } catch {
+    // ignore
   }
 
   return {

@@ -9,7 +9,7 @@ import type {
   CanonicalHook,
   CanonicalRule,
 } from '../adapters/types';
-import type { ResolvedArtifact, Source, Package, Artifact, AssistantId } from '../domain/types';
+import { toInstallationSourceIdentity, type ResolvedArtifact, type Source, type Package, type Artifact, type AssistantId } from '../domain/types';
 import {
   serializeSkillMarkdown,
   serializeClaudeAgentMarkdown,
@@ -118,6 +118,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
   const { source, pkg, artifact, targetAdapter, targetScope } = params;
   const resolverOpts = { ...params.resolverOpts, homeRoot: params.homeRoot ?? params.resolverOpts?.homeRoot };
   const projectRoot = targetScope === 'project' ? params.projectRoot : undefined;
+  const sourceIdentity = toInstallationSourceIdentity(source);
 
   if (
     artifact.kind !== 'skill' &&
@@ -216,6 +217,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
       kind: 'rule',
       plan: {
         supported: true,
+        source: sourceIdentity,
         sourceId: source.id,
         packageId: pkg.id,
         artifactId: artifact.id,
@@ -311,6 +313,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
       kind: 'hook',
       plan: {
         supported: true,
+        source: sourceIdentity,
         sourceId: source.id,
         packageId: pkg.id,
         artifactId: artifact.id,
@@ -416,6 +419,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
       kind: 'mcp-server',
       plan: {
         supported: true,
+        source: sourceIdentity,
         sourceId: source.id,
         packageId: pkg.id,
         artifactId: artifact.id,
@@ -545,6 +549,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
       kind: 'command',
       plan: {
         supported: true,
+        source: sourceIdentity,
         sourceId: source.id,
         packageId: pkg.id,
         artifactId: artifact.id,
@@ -674,6 +679,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
       kind: 'agent',
       plan: {
         supported: true,
+        source: sourceIdentity,
         sourceId: source.id,
         packageId: pkg.id,
         artifactId: artifact.id,
@@ -859,6 +865,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
     kind: 'skill',
     plan: {
       supported: true,
+      source: sourceIdentity,
       sourceId: source.id,
       packageId: pkg.id,
       artifactId: artifact.id,

@@ -1,3 +1,5 @@
+import * as path from 'path';
+
 export type AssistantId =
   | 'claude-code'
   | 'kilo-code'
@@ -71,6 +73,7 @@ export interface ResolvedArtifact<T> {
 
 export interface ObservedSourceMatch {
   status: 'identical' | 'different' | 'unmatched';
+  source?: InstallationSourceIdentity;
   sourceId?: string;
   packageId?: string;
   artifactId?: string;
@@ -92,6 +95,31 @@ export interface ObservedArtifact {
   disabled?: boolean;
 }
 
+export interface InstallationSourceIdentity {
+  id: string;
+  scope: 'global' | 'workspace';
+  type: SourceType;
+  location: string;
+}
+
+export function toInstallationSourceIdentity(source: Source): InstallationSourceIdentity {
+  const scope: 'global' | 'workspace' = source.scope === 'project' ? 'workspace' : 'global';
+  const rawLocation =
+    source.type === 'local-folder'
+      ? (source.localPath ?? '')
+      : (source.url ?? '');
+  const location =
+    source.type === 'local-folder' && rawLocation
+      ? (path.isAbsolute(rawLocation) ? rawLocation : path.resolve(source.projectPath ?? process.cwd(), rawLocation))
+      : rawLocation;
+  return {
+    id: source.id,
+    scope,
+    type: source.type,
+    location,
+  };
+}
+
 export interface ManagedInstallation {
   assistant: AssistantId;
   scope: Scope;
@@ -99,6 +127,7 @@ export interface ManagedInstallation {
   kind: ItemKind;
   name: string;
   path: string;
+  source?: InstallationSourceIdentity;
   sourceId?: string;
   packageId?: string;
   artifactId?: string;
