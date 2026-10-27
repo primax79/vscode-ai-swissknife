@@ -20,6 +20,7 @@ import {
   checkDriftForAll,
   resolveInstallationSource,
   sourceResolutionKey,
+  matchInstallationArtifact,
   type SourceLookupInput,
 } from './drift';
 import { manifestPath, readState, writeState, withStateLock } from '../domain/registry';
@@ -171,19 +172,22 @@ export async function planUpdate(
   }
 
   if (resolution) {
-    for (const pkg of resolution.packages) {
-      for (const art of pkg.artifacts) {
-        if (
-          (inst.artifactId && art.id === inst.artifactId) ||
-          (art.kind === inst.kind && art.name === inst.name)
-        ) {
-          targetPkg = pkg;
-          targetArt = art;
-          break;
-        }
-      }
-      if (targetArt) break;
+    const matched = matchInstallationArtifact(inst, source, resolution);
+    if (!matched.matched) {
+      const reason = matched.hint ? `${matched.reason}; ${matched.hint}` : matched.reason;
+      return {
+        supported: false,
+        plan: {
+          supported: false,
+          sourceId: source.id,
+          packageId: inst.packageId ?? `${source.id}:${inst.name}`,
+          artifactId: inst.artifactId ?? `${source.id}:${inst.name}`,
+          reason,
+        },
+      };
     }
+    targetPkg = matched.pkg;
+    targetArt = matched.artifact;
   }
 
   const fakePkg: Package = targetPkg ?? {

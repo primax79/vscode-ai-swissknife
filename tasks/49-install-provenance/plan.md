@@ -10,8 +10,9 @@ folders read from the live working tree, catalog vs check commit, artifact match
 
 ### 49.3 - Exact artifact match
 
-- **Status:** `open` · **Short:** Exact artifact match · **Size:** S · **Depends on:** 49.2
+- **Status:** `delivered` (2026-10-27) · **Short:** Exact artifact match · **Size:** S · **Depends on:** 49.2
 - **Goal:** spec §3.5 in `checkForUpstreamUpdate` and `planUpdate`; name fallback removed, replaced by `source-unavailable` with a same-name hint; case 6 passes.
+- **Result:** Introdotto `matchInstallationArtifact` in `src/engine/drift.ts` (usato da `checkForUpstreamUpdate` e `planUpdate`) che confronta gli artefatti esclusivamente per `artifactId` esatto o conversione deterministica della forma dell'id (stesso `sourceId`, plugin, kind e nome), rimuovendo il fallback `kind && name` e restituendo `source-unavailable` con `reason` `"artifact <id> no longer in source"` e `hint` `"same name found: <its id>"`; ristretto `resolveArtifactContent` in `src/sources/gitMarketplace.ts` al percorso registrato dell'artefatto e alla cartella del proprio plugin; il caso 6 in `src/engine/provenance.test.ts` è verde.
 
 ### 49.4 - Commit provenance for local-folder sources; committed HEAD by default
 
