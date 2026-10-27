@@ -53,7 +53,7 @@ async function resolveContentFromSource(
   source: Source,
   pkg: Package,
   artifact: Artifact,
-  resolverOpts?: { cacheDir?: string }
+  resolverOpts?: { cacheDir?: string; homeRoot?: string }
 ): Promise<ResolvedArtifact<CanonicalSkill | CanonicalAgent | CanonicalCommand | CanonicalMcpServer | CanonicalHook | CanonicalRule>> {
   if (source.type === 'local-folder') {
     return await resolveLocalFolderContent(source, pkg, artifact);
@@ -79,7 +79,7 @@ export async function resolveAndTranslate(
   pkg: Package,
   artifact: Artifact,
   targetAssistant: AssistantId,
-  resolverOpts?: { cacheDir?: string }
+  resolverOpts?: { cacheDir?: string; homeRoot?: string }
 ) {
   if (artifact.kind === 'rule') {
     const resolved = (await resolveContentFromSource(source, pkg, artifact, resolverOpts)) as ResolvedArtifact<CanonicalRule>;
@@ -115,7 +115,8 @@ export async function resolveAndTranslate(
 }
 
 export async function planInstall(params: PlanInstallParams): Promise<PreparedInstall> {
-  const { source, pkg, artifact, targetAdapter, targetScope, resolverOpts } = params;
+  const { source, pkg, artifact, targetAdapter, targetScope } = params;
+  const resolverOpts = { ...params.resolverOpts, homeRoot: params.homeRoot ?? params.resolverOpts?.homeRoot };
   const projectRoot = targetScope === 'project' ? params.projectRoot : undefined;
 
   if (
