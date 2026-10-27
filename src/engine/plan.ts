@@ -49,6 +49,14 @@ function sha256(data: Uint8Array | string): string {
   return crypto.createHash('sha256').update(data).digest('hex');
 }
 
+function computePlanSourceRevision(source: Source, pkg: Package) {
+  if (!pkg.version) return undefined;
+  if (source.type === 'local-folder' && !source.readWorkingTree && pkg.version.dirty) {
+    return { ...pkg.version, dirty: false };
+  }
+  return pkg.version;
+}
+
 async function resolveContentFromSource(
   source: Source,
   pkg: Package,
@@ -225,7 +233,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
         targetScope,
         targetDir: targetFilePath,
         projectRoot,
-        sourceRevision: pkg.version,
+        sourceRevision: computePlanSourceRevision(source, pkg),
         conflict: existingFiles.length > 0,
         existingFiles,
         proposedFiles,
@@ -321,7 +329,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
         targetScope,
         targetDir: targetFilePath,
         projectRoot,
-        sourceRevision: pkg.version,
+        sourceRevision: computePlanSourceRevision(source, pkg),
         conflict: existingFiles.length > 0,
         existingFiles,
         proposedFiles,
@@ -427,7 +435,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
         targetScope,
         targetDir: targetFilePath,
         projectRoot,
-        sourceRevision: pkg.version,
+        sourceRevision: computePlanSourceRevision(source, pkg),
         conflict,
         existingFiles,
         proposedFiles,
@@ -557,7 +565,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
         targetScope,
         targetDir: targetFilePath,
         projectRoot,
-        sourceRevision: pkg.version,
+        sourceRevision: computePlanSourceRevision(source, pkg),
         conflict,
         existingFiles,
         proposedFiles,
@@ -687,7 +695,7 @@ export async function planInstall(params: PlanInstallParams): Promise<PreparedIn
         targetScope,
         targetDir: targetFilePath,
         projectRoot,
-        sourceRevision: pkg.version,
+        sourceRevision: computePlanSourceRevision(source, pkg),
         conflict,
         existingFiles,
         proposedFiles,

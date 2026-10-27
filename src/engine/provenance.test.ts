@@ -551,7 +551,6 @@ describe('provenance & update detection — spec §6 acceptance cases', () => {
   // return `update-available` instead of `up-to-date` (committed HEAD).
   it(
     '3. local-folder git source with an uncommitted edit -> default up-to-date (reads committed HEAD); with readWorkingTree: true -> update-available with dirty shown',
-    { todo: 'fixed by 49.4' },
     async () => {
       const localGitFolder = path.join(testWorkspaceDir, 'local-git-source');
       initGitRepo(localGitFolder);

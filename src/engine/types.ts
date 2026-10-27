@@ -122,6 +122,7 @@ export interface DriftReport {
   hasLocalPatch?: boolean;
   diskHash?: string;
   sourceHash?: string;
+  dirty?: boolean;
   details?: string;
   hint?: string;
 }

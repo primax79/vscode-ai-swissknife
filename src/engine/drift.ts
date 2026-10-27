@@ -22,6 +22,7 @@ import { parseClaudeAgentMarkdown, parseClaudeCommandMarkdown } from '../adapter
 import { parseKiloAgentMarkdown, parseKiloCommandMarkdown } from '../adapters/kilo';
 import { getAdapter, getAdapterWithHomeRoot } from '../adapters/registry';
 import { getSourceResolver } from '../sources/registry';
+import { isUntrackedArtifactError } from '../sources/localFolder';
 import { resolveAndTranslate } from './plan';
 import type { DriftReport } from './types';
 import type { SourceResolution } from '../sources/types';
@@ -490,9 +491,23 @@ export async function checkForUpstreamUpdate(
     } else if (foundArt.kind === 'rule') {
       sourceHash = canonicalRuleHash(result.translated as CanonicalRule);
     }
-  } catch {
+  } catch (err: unknown) {
+    if (isUntrackedArtifactError(err)) {
+      return {
+        installation,
+        status: 'source-unavailable',
+        hasLocalPatch: localReport.hasLocalPatch,
+        diskHash: localReport.diskHash,
+        details: err.message,
+        hint: err.hint,
+      };
+    }
     return localReport;
   }
+
+  const isDirtyWorkingTree = Boolean(
+    source.type === 'local-folder' && source.readWorkingTree && foundPkg.version?.dirty
+  );
 
   if (sourceHash && installation.contentHash && sourceHash !== installation.contentHash) {
     if (localReport.status === 'modified-locally') {
@@ -502,9 +517,10 @@ export async function checkForUpstreamUpdate(
         hasLocalPatch: localReport.hasLocalPatch,
         diskHash: localReport.diskHash,
         sourceHash,
+        ...(isDirtyWorkingTree ? { dirty: true } : {}),
         details: localReport.hasLocalPatch
-          ? 'Upstream source has a newer version and local adaptation patch is applied'
-          : 'Local files were modified and upstream source has a newer version',
+          ? `Upstream source has a newer version${isDirtyWorkingTree ? ' (dirty working tree)' : ''} and local adaptation patch is applied`
+          : `Local files were modified and upstream source has a newer version${isDirtyWorkingTree ? ' (dirty working tree)' : ''}`,
       };
     }
     return {
@@ -512,13 +528,18 @@ export async function checkForUpstreamUpdate(
       status: 'update-available',
       diskHash: localReport.diskHash,
       sourceHash,
-      details: 'A newer version is available from upstream source',
+      ...(isDirtyWorkingTree ? { dirty: true } : {}),
+      details: isDirtyWorkingTree
+        ? 'A newer version is available from upstream source (dirty working tree)'
+        : 'A newer version is available from upstream source',
     };
   }
 
+  const isDirty = isDirtyWorkingTree || Boolean(installation.sourceRevision?.dirty);
   return {
     ...localReport,
     sourceHash,
+    ...(isDirty ? { dirty: true } : {}),
   };
 }
 

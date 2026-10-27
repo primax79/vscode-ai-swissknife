@@ -24,6 +24,7 @@ export interface DesiredSource {
   tag?: string;
   commit?: string;
   localPath?: string; // relative to the scope root; never absolute
+  readWorkingTree?: boolean;
 }
 
 export interface DesiredInstallation {
@@ -148,6 +149,7 @@ export function toDesiredSource(
   if (source.tag !== undefined) desired.tag = source.tag;
   if (source.commit !== undefined) desired.commit = source.commit;
   if (relativeLocalPath !== undefined) desired.localPath = relativeLocalPath;
+  if (source.readWorkingTree !== undefined) desired.readWorkingTree = source.readWorkingTree;
 
   return desired;
 }
@@ -187,6 +189,7 @@ export function fromDesiredSource(
   if (desired.tag !== undefined) source.tag = desired.tag;
   if (desired.commit !== undefined) source.commit = desired.commit;
   if (resolvedLocalPath !== undefined) source.localPath = resolvedLocalPath;
+  if (desired.readWorkingTree !== undefined) source.readWorkingTree = desired.readWorkingTree;
 
   return source;
 }

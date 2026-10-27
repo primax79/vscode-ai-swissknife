@@ -35,6 +35,7 @@ export interface Source {
   tag?: string;
   commit?: string;
   name?: string;
+  readWorkingTree?: boolean;
 }
 
 export interface Artifact {
@@ -56,6 +57,7 @@ export interface Artifact {
 export interface ResolvedRevision {
   commit: string;
   requestedRef?: string;
+  dirty?: boolean;
 }
 
 export interface Package {

@@ -76,10 +76,12 @@ describe('registry store (manifest & state)', () => {
         projectPath: testTempDir,
         localPath: path.join(testTempDir, 'packages', 'skills'),
         name: 'Local Skills',
+        readWorkingTree: true,
       };
 
       const desired = toDesiredSource(source, testTempDir);
       assert.strictEqual(desired.localPath, path.join('packages', 'skills'));
+      assert.strictEqual(desired.readWorkingTree, true);
       assert.strictEqual((desired as unknown as Record<string, unknown>).projectPath, undefined);
 
       // Verify reading with a different workspace root resolves relative to the new root
@@ -89,6 +91,7 @@ describe('registry store (manifest & state)', () => {
       assert.strictEqual(reconstructed.scope, 'project');
       assert.strictEqual(reconstructed.projectPath, newWorkspaceRoot);
       assert.strictEqual(reconstructed.localPath, path.resolve(newWorkspaceRoot, 'packages/skills'));
+      assert.strictEqual(reconstructed.readWorkingTree, true);
     });
 
     it('refuses project path outside workspace root and global path outside home root', () => {
