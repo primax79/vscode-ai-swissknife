@@ -8,12 +8,6 @@ folders read from the live working tree, catalog vs check commit, artifact match
 
 ## Tasks
 
-### 49.2 - Source identity in the provenance record and in every lookup
-
-- **Status:** `delivered` (2026-10-27) · **Short:** Source identity · **Size:** L · **Depends on:** 49.1
-- **Goal:** spec §1 `source {id, scope, type, location}` written at install; one engine status function used by Dashboard, sidebar, pendingCounts and CLI (no UI-side merging, no first-id match); git cache keyed by id + location hash; spec §6 cases 1, 2 pass; CLI/UI parity test.
-- **Result:** Aggiunto `source: { id, scope, type, location }` a `ManagedInstallation` (scritto da `planInstall`/`applyInstall` e `promoteObservedArtifact`), introdotta `resolveInstallationSource` usata in `checkDriftForAll`, `DashboardPanel`, `InstalledTreeDataProvider`, `computePendingCounts`, `planUpdateAll` e CLI (`runUpdates`, `runUpdate`, `runItem`), e aggiornata la chiave della cache git in `<sanitized id>-<short hash of location>` con riuso dei clone legacy se l'URL `origin` corrisponde; i test 1a e 2 in `src/engine/provenance.test.ts` (inclusa la parità CLI/Dashboard) sono verdi.
-
 ### 49.3 - Exact artifact match
 
 - **Status:** `open` · **Short:** Exact artifact match · **Size:** S · **Depends on:** 49.2
@@ -46,3 +40,9 @@ folders read from the live working tree, catalog vs check commit, artifact match
 - **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** False Update tests · **Size:** M · **Depends on:** -
 - **Goal:** spec §6 cases 1-8 as tests on temp fixtures (git sources in temp repos, local-folder sources, two manifests with the same id); they fail on HEAD 41a4fb4 for the right reason (assert the failure message), marked expected-fail until the fixing task lands.
 - **Result:** Added `src/engine/provenance.test.ts` covering spec §6 cases 1–8 on isolated temp git/local-folder/manifest fixtures (cases 5 and 7 pass on main; cases 1–4, 6, 8 reproduce the bugs and are marked `{ todo: 'fixed by 49.x' }`).
+
+### 49.2 - Source identity in the provenance record and in every lookup
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Source identity · **Size:** L · **Depends on:** 49.1
+- **Goal:** spec §1 `source {id, scope, type, location}` written at install; one engine status function used by Dashboard, sidebar, pendingCounts and CLI (no UI-side merging, no first-id match); git cache keyed by id + location hash; spec §6 cases 1, 2 pass; CLI/UI parity test.
+- **Result:** Aggiunto `source: { id, scope, type, location }` a `ManagedInstallation` (scritto da `planInstall`/`applyInstall` e `promoteObservedArtifact`), introdotta `resolveInstallationSource` usata in `checkDriftForAll`, `DashboardPanel`, `InstalledTreeDataProvider`, `computePendingCounts`, `planUpdateAll` e CLI (`runUpdates`, `runUpdate`, `runItem`), e aggiornata la chiave della cache git in `<sanitized id>-<short hash of location>` con riuso dei clone legacy se l'URL `origin` corrisponde; i test 1a e 2 in `src/engine/provenance.test.ts` (inclusa la parità CLI/Dashboard) sono verdi.
