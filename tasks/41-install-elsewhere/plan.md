@@ -1,48 +1,48 @@
-# 41 — "Install elsewhere" from a Dashboard row — Implementation plan
+# 41 — "Install elsewhere" da una riga della Dashboard — Piano di implementazione
 
-> Source: owner idea of 2026-10-08, `_inbox/analyzed/2026-10-08-dashboard-installed-feedback.md` (Idea 6).
-> Inline plan, tasks expanded because it is delegated.
+> Fonte: idea dell'owner del 2026-10-08, `_inbox/analyzed/2026-10-08-dashboard-installed-feedback.md` (Idea 6).
+> Piano inline, task espansi perché delegati.
 
-**Depends on:** 37.1, 37.2 (assistant × scope matrix + unified multi-select install flow), 40.2 (tree rows), 40.4 (scope vocabulary/icons).
+**Depends on:** 37.1, 37.2 (matrice assistente × ambito + flusso di installazione unificato a selezione multipla), 40.2 (righe dell'albero), 40.4 (vocabolario/icone degli ambiti).
 
-## Need (owner)
+## Esigenza (owner)
 
-From a row seen in the Dashboard, install it into another environment/scope **without searching for it in the Sources**: a button that proposes the other envs and scopes, "as from the source".
+Da una riga visualizzata nella Dashboard, installarla in un altro ambiente/ambito **senza doverla cercare in Sources**: un pulsante che propone gli altri ambienti e ambiti, "come dalla sorgente".
 
-## Problem (grounded)
+## Problema (verificato nel codice)
 
-- The only per-item way to put an installed item elsewhere in the Dashboard is `Copy to...` (`⧉`, `doSyncItem`, `src/ui/installedView.ts:557-621`), reachable only from the **managed** detail panel (`dashboard.ts:2182`). It copies the *local files of that copy* (no source provenance, no manifest entry), asks one assistant and one scope in two separate QuickPicks, lists all enabled assistants including the one it already is in, and does not know which places already have the item. Unmanaged rows can only use it from the sidebar (`syncItem`).
-- Installing "from the source" exists only through the Sources tree / catalog (`AvailableProvider.installArtifact`, `src/ui/availableView.ts:543`), i.e. exactly the search the owner wants to avoid. `resolveArtifactById(sourceId, scope, artifactId)` (`:698`) already maps a managed installation back to its catalog item.
+- L'unico modo per elemento per collocare altrove nella Dashboard un elemento installato è `Copy to...` (`⧉`, `doSyncItem`, `src/ui/installedView.ts:557-621`), raggiungibile solo dal pannello di dettaglio **gestito** (`dashboard.ts:2182`). Copia i *file locali di quella copia* (nessuna provenienza dalla sorgente, nessuna voce nel manifest), chiede un assistente e un ambito in due QuickPick separati, elenca tutti gli assistenti abilitati incluso quello in cui si trova già e non sa quali posizioni abbiano già l'elemento. Le righe non gestite possono usarlo solo dalla barra laterale (`syncItem`).
+- L'installazione "dalla sorgente" esiste solo passando dall'albero Sources / catalogo (`AvailableProvider.installArtifact`, `src/ui/availableView.ts:543`), cioè esattamente la ricerca che l'owner vuole evitare. `resolveArtifactById(sourceId, scope, artifactId)` (`:698`) mappa già un'installazione gestita al corrispondente elemento del catalogo.
 
-## Target
+## Obiettivo
 
-An icon-only button **"Install to other environments"** (`+`-style, tooltip, 35.5/Q3 rule) on each place row and on the object's collapsed row:
+Un pulsante solo icona **"Install to other environments"** (stile `+`, tooltip, regola 35.5/Q3) su ogni riga posizione e sulla riga compressa dell'oggetto:
 
-1. Resolve the artifact's **source origin**: managed → `(sourceId, artifactId)` of the installation; unmanaged → the match candidate (if several candidates, ask which); no origin (local only) → fall back to copying the content of the clicked place (existing `planSync`), and say so in the picker title.
-2. Propose the **missing places**: every enabled assistant × {Global, Workspace} minus the places where this object is already present (those are not offered; places the kind is unsupported for are listed disabled with the reason from `planInstall`). Workspace entries are absent when no workspace is open (37 plan Q2). Nothing preselected.
-3. Hand the chosen places to the unified install flow of 37.2 (final summary with Preview / Install / Overwrite, per-target result reporting of 37.3). Installing from a source records provenance as any install from the catalog does.
+1. Risolvere l'**origine della sorgente** dell'artefatto: gestito → `(sourceId, artifactId)` dell'installazione; non gestito → il candidato corrispondente (se ci sono più candidati, chiedere quale); nessuna origine (solo locale) → ripiegare sulla copia del contenuto della posizione cliccata (`planSync` esistente) e dichiararlo nel titolo del selettore.
+2. Proporre le **posizioni mancanti**: ogni assistente abilitato × {Global, Workspace} meno le posizioni in cui questo oggetto è già presente (quelle non vengono offerte; le posizioni per cui il tipo non è supportato sono elencate disabilitate con il motivo restituito da `planInstall`). Le voci Workspace sono assenti quando nessun workspace è aperto (piano 37 Q2). Nulla è preselezionato.
+3. Passare le posizioni scelte al flusso di installazione unificato di 37.2 (riepilogo finale con Preview / Install / Overwrite, rendicontazione degli esiti per target di 37.3). L'installazione da una sorgente registra la provenienza come qualsiasi installazione dal catalogo.
 
-## Locked-in decisions
+## Decisioni consolidate
 
-- "As from the source" = the **source's current version**, not the local, possibly modified copy; the local copy is the origin only when no source exists. The existing `Copy to...` stays (it clones this exact copy) and is not removed.
-- The button on the **object** row (collapsed) appears only when the object has a registered source; local-only objects get it on their place rows (origin = that place).
-- The place picker is a multi-select QuickPick of `(assistant, scope)` pairs with the assistant icon and the scope icon (40.4); it never lists an existing place.
-- The same button also appears for unmanaged rows (installing from the matched source also makes the new places managed; the unmanaged original is left alone and can be promoted separately).
+- "Come dalla sorgente" = la **versione corrente della sorgente**, non la copia locale eventualmente modificata; la copia locale è l'origine solo quando non esiste alcuna sorgente. L'esistente `Copy to...` rimane (clona questa copia esatta) e non viene rimosso.
+- Il pulsante sulla riga dell'**oggetto** (compressa) appare solo quando l'oggetto ha una sorgente registrata; gli oggetti solo locali lo ricevono sulle proprie righe posizione (origine = quella posizione).
+- Il selettore delle posizioni è un QuickPick a selezione multipla di coppie `(assistant, scope)` con l'icona dell'assistente e l'icona dell'ambito (40.4); non elenca mai una posizione già esistente.
+- Lo stesso pulsante appare anche per le righe non gestite (l'installazione dalla sorgente corrispondente rende inoltre gestite le nuove posizioni; l'originale non gestito viene lasciato intatto e può essere promosso separatamente).
 
-## Open questions
+## Questioni aperte
 
-- ~~41-Q1~~ resolved (owner, 2026-10-08): an unmanaged item that differs from its source is installed from the **source's version**; the picker title states "from <source>"; the local version stays available via `Copy to...`.
+- ~~41-Q1~~ risolta (owner, 2026-10-08): un elemento non gestito che differisce dalla propria sorgente viene installato a partire dalla **versione della sorgente**; il titolo del selettore dichiara "from <source>"; la versione locale resta disponibile tramite `Copy to...`.
 
 ## Tasks
 
-### 41.2 - Button on rows + place picker + hand-off to the 37.2 flow
+### 41.2 - Pulsante sulle righe + selettore delle posizioni + passaggio al flusso di 37.2
 
-- **Status:** `open` · **Short:** Install elsewhere button and flow · **Size:** M · **Depends on:** 41.1, 37.2, 40.2 · **Spec:** [41.2-dashboard-button-and-flow.md](41.2-dashboard-button-and-flow.md)
-- **Goal:** Add an "Install to other environments" button on Dashboard rows that opens a multi-select missing-places picker and hands the chosen targets to the unified install flow.
+- **Status:** `open` · **Short:** Pulsante e flusso installa altrove · **Size:** M · **Depends on:** 41.1, 37.2, 40.2 · **Spec:** [41.2-dashboard-button-and-flow.md](41.2-dashboard-button-and-flow.md)
+- **Goal:** Aggiungere un pulsante "Install to other environments" sulle righe della Dashboard che apre un selettore a selezione multipla delle posizioni mancanti e passa i target scelti al flusso di installazione unificato.
 
 ## Closed
 
-### 41.1 - Pure model: origin resolution + missing places for an object/place
+### 41.1 - Modello puro: risoluzione dell'origine + posizioni mancanti per un oggetto/posizione
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Missing places model · **Size:** M · **Depends on:** 37.1 · **Spec:** [41.1-missing-places-model.md](41.1-missing-places-model.md)
-- **Goal:** Create `src/engine/missingPlaces.ts` with `resolveOrigin` and `computeMissingPlaces` to determine source/local origin and candidate target environments where an artifact is not yet installed.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Modello delle posizioni mancanti · **Size:** M · **Depends on:** 37.1 · **Spec:** [41.1-missing-places-model.md](41.1-missing-places-model.md)
+- **Goal:** Creare `src/engine/missingPlaces.ts` con `resolveOrigin` e `computeMissingPlaces` per determinare l'origine da sorgente/locale e gli ambienti target candidati in cui un artefatto non è ancora installato.

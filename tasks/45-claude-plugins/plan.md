@@ -1,49 +1,49 @@
-# 45 — Claude Code plugins, native management — Implementation plan
+# 45 — Plugin di Claude Code, gestione nativa — Piano di implementazione
 
-> Source: `specs/claude-plugins-study.md`; owner decisions 2026-10-08: **CP-Q1 = C** (native management: install, update, enable/disable, uninstall) and **CP-Q2** (everything through the `claude plugin` CLI, never by editing Claude's own JSON files). Working assumptions, **not yet confirmed by the owner**: **CP-Q3** plugins appear inside the Installed tree of the Claude environment (parent = plugin, children = its components, token cost on the parent); **CP-Q4 (confirmed by the owner, 2026-10-08, after an explanation of the three scopes)** Claude's `user` / `project` (shared with the team via the repo) / `local` (private to the owner) scopes map to Global / Workspace / "Workspace (private)" (distinct badge); **CP-Q5** installing from our Sources into Claude defaults to a native plugin, other assistants keep loose artifacts. (CP-Q4 was confirmed by the owner earlier.)
-> **Priority lowered to P3 by the owner (2026-10-08): "when the rest is ready"**. The spike 45.1 was started and is paused; its partial findings (isolation via `CLAUDE_CONFIG_DIR`, binary location, marketplace add/list shapes) are in `notes/45.1-findings.md`.
-> Inline plan, tasks expanded because they are delegated. Spike 45.1 gates the rest.
+> Fonte: `specs/claude-plugins-study.md`; decisioni dell'owner del 2026-10-08: **CP-Q1 = C** (gestione nativa: installa, aggiorna, abilita/disabilita, disinstalla) e **CP-Q2** (tutto tramite la CLI `claude plugin`, mai modificando direttamente i file JSON di Claude). Ipotesi di lavoro, **non ancora confermate dall'owner**: **CP-Q3** i plugin appaiono dentro l'albero Installed dell'ambiente Claude (genitore = plugin, figli = i suoi componenti, costo in token sul genitore); **CP-Q4 (confermata dall'owner, 2026-10-08, dopo una spiegazione dei tre ambiti)** gli ambiti `user` / `project` (condiviso con il team tramite il repository) / `local` (privato dell'owner) di Claude corrispondono a Global / Workspace / "Workspace (private)" (badge distinto); **CP-Q5** l'installazione dalle nostre Sources verso Claude usa come impostazione predefinita un plugin nativo, mentre gli altri assistenti mantengono artefatti sciolti. (CP-Q4 è stata confermata in precedenza dall'owner.)
+> **Priorità abbassata a P3 dall'owner (2026-10-08): "quando il resto è pronto"**. Lo spike 45.1 è stato avviato ed è in pausa; i suoi risultati parziali (isolamento tramite `CLAUDE_CONFIG_DIR`, posizione del binario, forme di marketplace add/list) si trovano in `notes/45.1-findings.md`.
+> Piano inline, task espansi perché delegati. Lo spike 45.1 fa da prerequisito al resto.
 
-**Depends on:** 40.1, 40.2, 40.4 (tree, rows, scope vocabulary) for the UI tasks; 42.3 for action placement. 45.1 and 45.2 depend on nothing.
+**Depends on:** 40.1, 40.2, 40.4 (albero, righe, vocabolario degli ambiti) per i task UI; 42.3 per la collocazione delle azioni. 45.1 e 45.2 non dipendono da nulla.
 
-## Facts (verified, details in the study)
+## Fatti (verificati, dettagli nello studio)
 
-`claude plugin list --json` returns `{id, version, scope: user|project|local, enabled, installPath, projectPath?, projectEnabled?, installedAt, lastUpdated}`; `claude plugin details <id>` returns the component inventory (skills/agents/hooks/MCP/LSP) and the projected always-on token cost; the CLI also has `install | uninstall | enable | disable | update | marketplace add|remove|update|list | list --available`; `install --accept-command <sha256>` guards marketplaces that declare an install command.
+`claude plugin list --json` restituisce `{id, version, scope: user|project|local, enabled, installPath, projectPath?, projectEnabled?, installedAt, lastUpdated}`; `claude plugin details <id>` restituisce l'inventario dei componenti (skills/agents/hooks/MCP/LSP) e il costo stimato in token sempre attivi; la CLI dispone inoltre di `install | uninstall | enable | disable | update | marketplace add|remove|update|list | list --available`; `install --accept-command <sha256>` protegge i marketplace che dichiarano un comando di installazione.
 
-## Locked-in decisions
+## Decisioni consolidate
 
-- Mechanism = CLI only. A single wrapper module (`ClaudeCli`) is the only code that spawns `claude`; nothing else reads or writes `~/.claude/plugins/*` or the `enabledPlugins` keys.
-- Safety: never pass `-y` / `--accept-command` on the user's behalf; a command-source install shows the declared command and its sha256 in a modal and proceeds only on explicit confirmation. Never run `claude plugin eval`.
-- Disable for plugins is `claude plugin disable` (native); initiative 43's `_disabled` folder does not apply.
-- Uninstall of a plugin is the CLI's `uninstall` (not our trash: Claude owns the files in its cache); the confirmation says so.
-- The wrapper has timeouts, a clear "claude CLI not found" error with the PATH it searched, and tolerates unknown JSON fields; unknown/failed output is reported, never guessed.
-- Vocabulary (CONTEXT.md): "Workspace", never "Project"; Claude's `project` scope is shown as Workspace.
+- Meccanismo = solo CLI. Un singolo modulo wrapper (`ClaudeCli`) è l'unico codice che avvia `claude`; nient'altro legge o scrive `~/.claude/plugins/*` o le chiavi `enabledPlugins`.
+- Sicurezza: non passare mai `-y` / `--accept-command` per conto dell'utente; un'installazione da sorgente comando mostra il comando dichiarato e il relativo sha256 in una modale e procede solo su conferma esplicita. Non eseguire mai `claude plugin eval`.
+- La disabilitazione per i plugin è `claude plugin disable` (nativa); la cartella `_disabled` dell'iniziativa 43 non si applica.
+- La disinstallazione di un plugin è il comando `uninstall` della CLI (non il nostro cestino: Claude possiede i file nella propria cache); il messaggio di conferma lo dichiara.
+- Il wrapper prevede timeout, un errore chiaro "claude CLI not found" con il PATH cercato, e tollera campi JSON sconosciuti; qualsiasi output sconosciuto o fallito viene segnalato, mai interpretato a tentativi.
+- Vocabolario (CONTEXT.md): "Workspace", mai "Project"; l'ambito `project` di Claude viene mostrato come Workspace.
 
 ## Tasks
 
-### 45.1 - Spike: verify the CLI behaviour the design relies on
+### 45.1 - Spike: verificare il comportamento della CLI su cui si basa il progetto
 
-- **Status:** `paused` (partial findings in notes/45.1-findings.md; paused 2026-10-08 per owner P3 priority decision) · **Short:** Claude plugin CLI spike · **Size:** S · **Kind:** investigation · **Depends on:** - · **Spec:** [45.1-cli-spike.md](45.1-cli-spike.md)
-- **Goal:** Verify `claude plugin` CLI binary discovery, JSON output schemas, scope semantics, non-interactive flags, and version gating in an isolated config directory.
+- **Status:** `paused` (risultati parziali in notes/45.1-findings.md; in pausa dal 2026-10-08 per decisione di priorità P3 dell'owner) · **Short:** Spike CLI plugin di Claude · **Size:** S · **Kind:** investigation · **Depends on:** - · **Spec:** [45.1-cli-spike.md](45.1-cli-spike.md)
+- **Goal:** Verificare l'individuazione del binario della CLI `claude plugin`, gli schemi di output JSON, la semantica degli ambiti, i flag non interattivi e il controllo di versione in una directory di configurazione isolata.
 
-### 45.3 - Plugin places in the Installed tree and Dashboard (read-only), token cost, duplicate detection
+### 45.3 - Posizioni dei plugin nell'albero Installed e nella Dashboard (sola lettura), costo in token, rilevamento dei duplicati
 
-- **Status:** `open` · **Short:** Plugin places in UI · **Size:** M · **Depends on:** 45.2, 40.1, 40.2, 40.4 · **Spec:** [45.3-plugin-places-in-tree.md](45.3-plugin-places-in-tree.md)
-- **Goal:** Render Claude plugin installations as read-only places in the Installed tree and Dashboard with component children, always-on token cost badges, and loose-artifact duplicate detection.
+- **Status:** `open` · **Short:** Posizioni dei plugin nella UI · **Size:** M · **Depends on:** 45.2, 40.1, 40.2, 40.4 · **Spec:** [45.3-plugin-places-in-tree.md](45.3-plugin-places-in-tree.md)
+- **Goal:** Renderizzare le installazioni dei plugin Claude come posizioni di sola lettura nell'albero Installed e nella Dashboard con i componenti figli, i badge del costo in token sempre attivi e il rilevamento dei duplicati rispetto agli artefatti sciolti.
 
-### 45.4 - Actions: enable/disable, update, uninstall
+### 45.4 - Azioni: abilita/disabilita, aggiorna, disinstalla
 
-- **Status:** `open` · **Short:** Claude plugin actions · **Size:** M · **Depends on:** 45.3, 42.3 · **Spec:** [45.4-plugin-actions.md](45.4-plugin-actions.md)
-- **Goal:** Implement `enablePlugin`, `disablePlugin`, `updatePlugin`, and `uninstallPlugin` in `ClaudeCli` and wire them to the sidebar and Dashboard plugin rows.
+- **Status:** `open` · **Short:** Azioni sui plugin di Claude · **Size:** M · **Depends on:** 45.3, 42.3 · **Spec:** [45.4-plugin-actions.md](45.4-plugin-actions.md)
+- **Goal:** Implementare `enablePlugin`, `disablePlugin`, `updatePlugin` e `uninstallPlugin` in `ClaudeCli` e collegarli alle righe dei plugin nella barra laterale e nella Dashboard.
 
-### 45.5 - Install from marketplaces, marketplace sync from our Sources, install-mode choice
+### 45.5 - Installazione dai marketplace, sincronizzazione dei marketplace dalle nostre Sources, scelta della modalità di installazione
 
-- **Status:** `open` · **Short:** Plugin install and marketplaces · **Size:** M · **Depends on:** 45.4 · **Spec:** [45.5-install-and-marketplaces.md](45.5-install-and-marketplaces.md)
-- **Goal:** Support installing Claude plugins natively from marketplaces (with command-source sha256 confirmation), registering/updating Claude marketplaces from Sources, and choosing native plugin vs. loose artifact install mode.
+- **Status:** `open` · **Short:** Installazione plugin e marketplace · **Size:** M · **Depends on:** 45.4 · **Spec:** [45.5-install-and-marketplaces.md](45.5-install-and-marketplaces.md)
+- **Goal:** Supportare l'installazione nativa dei plugin Claude dai marketplace (con conferma dello sha256 per le sorgenti comando), la registrazione/aggiornamento dei marketplace Claude a partire da Sources e la scelta della modalità di installazione tra plugin nativo e artefatti sciolti.
 
 ## Closed
 
-### 45.2 - `ClaudeCli` wrapper + read model (list, details, marketplaces)
+### 45.2 - Wrapper `ClaudeCli` + modello di lettura (list, details, marketplaces)
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** ClaudeCli wrapper and read model · **Size:** M · **Depends on:** 45.1 · **Spec:** [45.2-claude-cli-wrapper.md](45.2-claude-cli-wrapper.md)
-- **Goal:** Implement `src/engine/claudeCli.ts` with binary resolution and typed read functions (`listPlugins`, `listAvailablePlugins`, `pluginDetails`, `listMarketplaces`).
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Wrapper ClaudeCli e modello lettura · **Size:** M · **Depends on:** 45.1 · **Spec:** [45.2-claude-cli-wrapper.md](45.2-claude-cli-wrapper.md)
+- **Goal:** Implementare `src/engine/claudeCli.ts` con risoluzione del binario e funzioni di lettura tipizzate (`listPlugins`, `listAvailablePlugins`, `pluginDetails`, `listMarketplaces`).

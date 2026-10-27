@@ -1,45 +1,45 @@
-# 43 — Disabled state for installed items — Implementation plan
+# 43 — Stato disabilitato per gli elementi installati — Piano di implementazione
 
-> Source: `specs/disabled-state-study.md`; owner decisions 2026-10-08: **D-Q1 a** layout A (`_disabled/<kind>/<name>` as a *sibling* of the scanned dir under each assistant root; fallback B `.ai-swissknife/_disabled/<assistant>/<kind>/<name>` for any assistant the spike shows to scan the sibling), **D-Q2 a** first iteration only skill / agent / command, **D-Q3 a** disabled items stay visible in the Dashboard, muted, with a "Disabled" filter pill and an Enable action, **D-Q4 a** the partial "manual only" mode (`disable-model-invocation`) is out of scope.
-> The spike (43.1) gates everything else, as 19.1 and 21.1 did. Tasks 43.2-43.4 are **outlines**: they are specified in full after 43.1 reports, because the layout depends on its findings.
+> Fonte: `specs/disabled-state-study.md`; decisioni dell'owner del 2026-10-08: **D-Q1 a** layout A (`_disabled/<kind>/<name>` come *fratello* della directory scansionata sotto ciascuna root dell'assistente; fallback B `.ai-swissknife/_disabled/<assistant>/<kind>/<name>` per qualsiasi assistente che secondo lo spike scansioni la cartella sorella), **D-Q2 a** prima iterazione solo skill / agent / command, **D-Q3 a** gli elementi disabilitati restano visibili nella Dashboard, attenuati, con una pill di filtro "Disabled" e un'azione Enable, **D-Q4 a** la modalità parziale "solo manuale" (`disable-model-invocation`) è fuori ambito.
+> Lo spike (43.1) fa da prerequisito a tutto il resto, come fecero 19.1 e 21.1. I task 43.2-43.4 sono **bozze**: verranno specificati per intero dopo il report di 43.1, perché il layout dipende dai suoi risultati.
 
-**Depends on:** 40.1 (place model, for the `disabled` state), 40.2 (rows), 42.3 (action placement). The spike and the engine tasks do not depend on the UI work.
+**Depends on:** 40.1 (modello delle posizioni, per lo stato `disabled`), 40.2 (righe), 42.3 (collocazione delle azioni). Lo spike e i task del motore non dipendono dal lavoro sulla UI.
 
-## Locked-in decisions
+## Decisioni consolidate
 
-- **Claude plugins are out of this initiative** (owner, 2026-10-08, initiative 45): they have a native disable (`claude plugin disable`), so no `_disabled` folder is used for them.
+- **I plugin Claude sono esclusi da questa iniziativa** (owner, 2026-10-08, iniziativa 45): dispongono di una disabilitazione nativa (`claude plugin disable`), quindi per essi non viene usata alcuna cartella `_disabled`.
 
-- Disable and enable are a single `rename` (move, never copy); enable returns the item to the exact original path; nothing is overwritten on enable (name collision -> ask).
-- User-facing vocabulary: states "Disabled" / "Enabled"; scope "Workspace" / "Global" (CONTEXT.md).
-- Managed items keep their record: state gets a `disabled` flag and the updated `path` (state `schemaVersion` bump + migration); unmanaged items are self-described by the folder layout.
-- Discovery/inventory must scan the disabled locations; a disabled path must never be reported as `missing-on-disk`.
+- La disabilitazione e l'abilitazione sono un singolo `rename` (spostamento, mai copia); l'abilitazione riporta l'elemento esattamente al percorso originale; nulla viene sovrascritto durante l'abilitazione (collisione di nomi -> chiedere).
+- Vocabolario visibile all'utente: stati "Disabled" / "Enabled"; ambito "Workspace" / "Global" (CONTEXT.md).
+- Gli elementi gestiti mantengono il proprio record: lo stato riceve un flag `disabled` e il `path` aggiornato (incremento di `schemaVersion` dello stato + migrazione); gli elementi non gestiti sono autodescritti dal layout delle cartelle.
+- La discovery/inventario deve scansionare le posizioni disabilitate; un percorso disabilitato non deve mai essere segnalato come `missing-on-disk`.
 
 ## Tasks
 
-### 43.4 - UI: Disable/Enable action (context menu + detail bar), muted badge, "Disabled" filter pill
+### 43.4 - UI: azione Disable/Enable (menu contestuale + barra di dettaglio), badge attenuato, pill di filtro "Disabled"
 
-- **Status:** `open` (outline only, awaiting 40.2 and 42.3) · **Short:** Disable and enable UI · **Size:** M · **Depends on:** 43.2, 43.3, 40.2, 42.3
-- **Goal:** Add a `Disable`/`Enable` toggle action in the context menu and detail bar, muted/strikethrough rendering for disabled rows, and a "Disabled" filter pill.
+- **Status:** `open` (solo bozza, in attesa di 40.2 e 42.3) · **Short:** UI disabilita e abilita · **Size:** M · **Depends on:** 43.2, 43.3, 40.2, 42.3
+- **Goal:** Aggiungere un'azione di attivazione/disattivazione `Disable`/`Enable` nel menu contestuale e nella barra di dettaglio, rendering attenuato/barrato per le righe disabilitate e una pill di filtro "Disabled".
 
-## Outlines (to be turned into full task files after 43.1)
+## Bozze (da trasformare in file di task completi dopo 43.1)
 
-- **43.2** `src/engine/disable.ts`: `planDisable/applyDisable(place)` and `applyEnable(place)`; target path per adapter via a new `getDisabledPath(kind, name, scope)` on the adapter interface (layout A by default, B where 43.1 says so); rename with rollback if the state write fails; collision prompt data returned to the caller; state `disabled: true` + `path`; migration of old state files (no flag = enabled).
-- **43.3** scan `<root>/_disabled/<kind>/*` per assistant and scope; observed items found there become places with state `disabled` (unmanaged) or are matched to their record (managed); drift ignores disabled paths; update on a disabled managed item updates in place and stays disabled.
-- **43.4** one toggle action `Disable` / `Enable` (icon `$(circle-slash)` / `$(play)`), in the context menu and detail bar (42.3 rules), muted/strikethrough rendering of disabled rows with the usual icons, "Disabled" pill in the Membership-style filter bar (40.5), Install-elsewhere and counts treat a disabled place as present.
+- **43.2** `src/engine/disable.ts`: `planDisable/applyDisable(place)` e `applyEnable(place)`; percorso di destinazione per adapter tramite un nuovo `getDisabledPath(kind, name, scope)` sull'interfaccia dell'adapter (layout A predefinito, B dove indicato da 43.1); rename con rollback se la scrittura dello stato fallisce; dati per il prompt di collisione restituiti al chiamante; stato `disabled: true` + `path`; migrazione dei vecchi file di stato (nessun flag = abilitato).
+- **43.3** scansionare `<root>/_disabled/<kind>/*` per assistente e ambito; gli elementi osservati trovati lì diventano posizioni con stato `disabled` (non gestiti) o vengono associati al proprio record (gestiti); il drift ignora i percorsi disabilitati; l'aggiornamento su un elemento gestito disabilitato aggiorna sul posto e resta disabilitato.
+- **43.4** un'unica azione di attivazione/disattivazione `Disable` / `Enable` (icona `$(circle-slash)` / `$(play)`), nel menu contestuale e nella barra di dettaglio (regole di 42.3), rendering attenuato/barrato delle righe disabilitate con le icone consuete, pill "Disabled" nella barra dei filtri in stile Membership (40.5), Install-elsewhere e i conteggi trattano una posizione disabilitata come presente.
 
 ## Closed
 
-### 43.1 - Spike: verify per assistant that `_disabled/` as a sibling is not loaded
+### 43.1 - Spike: verificare per assistente che `_disabled/` come cartella sorella non venga caricata
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Disabled sibling folder spike · **Size:** S · **Kind:** investigation · **Depends on:** - · **Spec:** [43.1-discovery-spike.md](43.1-discovery-spike.md)
-- **Goal:** Verify per assistant and scope whether a sibling `<assistant root>/_disabled/<kind>/<name>` directory is ignored by discovery and record findings in `notes/43.1-findings.md`.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Spike cartella sorella disabilitata · **Size:** S · **Kind:** investigation · **Depends on:** - · **Spec:** [43.1-discovery-spike.md](43.1-discovery-spike.md)
+- **Goal:** Verificare per assistente e ambito se una directory sorella `<assistant root>/_disabled/<kind>/<name>` venga ignorata dalla discovery e registrare i risultati in `notes/43.1-findings.md`.
 
-### 43.2 - Engine: `disableItem` / `enableItem` for file kinds + state flag + migration
+### 43.2 - Motore: `disableItem` / `enableItem` per i tipi basati su file + flag di stato + migrazione
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Engine disable and enable · **Size:** M · **Depends on:** 43.1 · **Spec:** [43.2-engine-disable-enable.md](43.2-engine-disable-enable.md)
-- **Goal:** Add `getDisabledPath` on adapters and `planDisable`/`applyDisable`/`applyEnable` in `src/engine/disable.ts` with `disabled?: boolean` state persistence and drift awareness.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Disabilita e abilita nel motore · **Size:** M · **Depends on:** 43.1 · **Spec:** [43.2-engine-disable-enable.md](43.2-engine-disable-enable.md)
+- **Goal:** Aggiungere `getDisabledPath` sugli adapter e `planDisable`/`applyDisable`/`applyEnable` in `src/engine/disable.ts` con persistenza dello stato `disabled?: boolean` e gestione del drift.
 
-### 43.3 - Inventory: scan disabled locations, `disabled` place state, no false `missing-on-disk`
+### 43.3 - Inventario: scansione delle posizioni disabilitate, stato posizione `disabled`, nessun falso `missing-on-disk`
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Disabled items inventory scan · **Size:** M · **Depends on:** 43.2, 40.1 · **Spec:** [43.3-inventory-disabled.md](43.3-inventory-disabled.md)
-- **Goal:** Scan adapter `_disabled/<kind>` directories during inventory discovery, support disabling/enabling unmanaged items, and add `disabled` to the `Place` state model.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Scansione inventario disabilitati · **Size:** M · **Depends on:** 43.2, 40.1 · **Spec:** [43.3-inventory-disabled.md](43.3-inventory-disabled.md)
+- **Goal:** Scansionare le directory `_disabled/<kind>` degli adapter durante la discovery dell'inventario, supportare la disabilitazione/abilitazione degli elementi non gestiti e aggiungere `disabled` al modello degli stati di `Place`.
