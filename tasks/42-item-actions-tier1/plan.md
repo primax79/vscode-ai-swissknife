@@ -14,10 +14,27 @@
 
 ## Tasks
 
-| Task | Title | Depends on | Size |
-| --- | --- | --- | --- |
-| [42.1](42.1-restore-from-trash.md) | Restore from trash + Empty trash: engine (`listTrash`, `restoreFromTrash`, `deleteFromTrash`, `emptyTrash`) and commands | 39.2 | M |
-| [42.4](42.4-dashboard-trash-tab.md) | Dashboard Trash tab: list, Restore, Delete permanently, Empty trash | 42.1, 40.4 | M |
-| [42.5](42.5-sidebar-trash-view.md) | Sidebar Trash view (collapsed, only when not empty): list, Restore, Delete permanently, Empty trash | 42.1 | S |
-| [42.2](42.2-navigation-helpers.md) | Navigation helpers: reveal in Finder, copy path, open source repo/commit | 40.2 | S |
-| [42.3](42.3-surface-policy.md) | Fixed inline trio (Favorite/Update/Uninstall; unmanaged: Promote/Diff/Remove) + context menu by state + Dashboard row overflow | 39.2, 40.2, 42.2 | M |
+### 42.1 - Restore from trash + Empty trash: engine (`listTrash`, `restoreFromTrash`, `deleteFromTrash`, `emptyTrash`) and commands
+
+- **Status:** `delivered` (merged bba4c26 2026-10-09) · **Short:** Restore and empty trash · **Size:** M · **Depends on:** 39.2 · **Spec:** [42.1-restore-from-trash.md](42.1-restore-from-trash.md)
+- **Goal:** Add `.origin.json` sidecar tracking and `listTrash`, `restoreFromTrash`, `deleteFromTrash`, and `emptyTrash` engine functions along with `restoreFromTrash` and `emptyTrash` commands.
+
+### 42.4 - Dashboard Trash tab: list, Restore, Delete permanently, Empty trash
+
+- **Status:** `open` · **Short:** Dashboard Trash tab · **Size:** M · **Depends on:** 42.1, 40.4 · **Spec:** [42.4-dashboard-trash-tab.md](42.4-dashboard-trash-tab.md)
+- **Goal:** Add a lazy-loaded fifth Dashboard tab (`Trash`) listing deleted items with Restore, Delete permanently, and Empty trash actions.
+
+### 42.5 - Sidebar Trash view (collapsed, only when not empty): list, Restore, Delete permanently, Empty trash
+
+- **Status:** `open` · **Short:** Sidebar Trash view · **Size:** S · **Depends on:** 42.1 · **Spec:** [42.5-sidebar-trash-view.md](42.5-sidebar-trash-view.md)
+- **Goal:** Add a collapsed-by-default `aiSwissknife.trash` sidebar view visible only when the trash is non-empty, with inline Restore and Delete permanently actions.
+
+### 42.2 - Navigation helpers: reveal in Finder, copy path, open source repo/commit
+
+- **Status:** `open` · **Short:** Navigation helper commands · **Size:** S · **Depends on:** 40.2 · **Spec:** [42.2-navigation-helpers.md](42.2-navigation-helpers.md)
+- **Goal:** Add `revealInOS`, `copyPath`, and `openSourceRepo` commands accessible from the sidebar context menu and Dashboard detail panel.
+
+### 42.3 - Fixed inline trio (Favorite/Update/Uninstall; unmanaged: Promote/Diff/Remove) + context menu by state + Dashboard row overflow
+
+- **Status:** `open` · **Short:** Fixed inline trio and overflow · **Size:** M · **Depends on:** 39.2, 40.2, 42.2 · **Spec:** [42.3-surface-policy.md](42.3-surface-policy.md)
+- **Goal:** Enforce a fixed inline action trio on sidebar and Dashboard rows (Favorite/Update/Uninstall for managed; Promote/Diff/Remove for unmanaged) with remaining state-applicable actions in the context/overflow menu.

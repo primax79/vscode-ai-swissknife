@@ -164,29 +164,29 @@ hands-on testing round.
 | 23 | 23 | [Cross-framework identity lookup + shared content accessor](23-cross-framework-lookup/plan.md) | ✅ done (23.1/23.2/23.3 merged) | 13, 14 | M |
 | 24 | 24 | [Diff-vs-original + preview-before-install](24-diff-and-preview/plan.md) | ✅ done (24.1/24.2 merged) | 23 | M |
 | 25 | 25 | [Move action + Promote disambiguation fix](25-move-and-promote-fix/plan.md) | ✅ done (25.1/25.2/25.3/25.4/25.5 merged) | 14, 18 | M |
-| 26 | 26 | [Dashboard rebuild: unified table, filters, detail](26-dashboard-rebuild/plan.md) | ✅ done (26.1/26.2 merged) | 16, 23, 24, 25 | L |
-| 27 | 27 | [New Dashboard entry points](27-dashboard-entry-points/plan.md) | ✅ done (27.1/27.2 merged) | 22, 26 | S |
-| 28 | 28 | [Sidebar navigation unification](28-sidebar-unification/plan.md) | ✅ done (28.1/28.2) | 16, 22 | M |
-| 29 | 29 | [Adapter registry & enabled-assistants config](29-adapter-registry/plan.md) | ✅ done (29.1-29.5 merged; 29.5 setting reshaped array→object-of-booleans post-testing feedback) | 03, 12, 21 | M |
-| 30 | 30 | [Source-resolver registry](30-source-resolver-registry/plan.md) | ✅ done (30.1-30.4 merged; plan.ts's `resolveArtifactContent` dispatch intentionally out of scope, see note) | 04, 11, 20 | M |
-| 31 | 31 | [Dashboard: provider action-layer decoupling](31-dashboard-action-decoupling/plan.md) | ✅ done (31.1-31.4 merged) | 28, 29, 30 | M |
-| 32 | 32 | [Dashboard: structural skeleton](32-dashboard-skeleton/plan.md) | ✅ done (32.1-32.3 merged) | 28, 29 | M |
-| 33 | 33 | [Dashboard: Sources & Catalog section](33-dashboard-sources-catalog/plan.md) | ✅ done (33.1-33.5 merged) | 31, 32 | L |
-| 34 | 34 | [Dashboard: Recommendations + Installed action parity](34-dashboard-recommendations-parity/plan.md) | ✅ done (34.1-34.3 merged) | 31, 32 | M |
-| 35 | 35 | [Dashboard: hands-on testing fixes](35-dashboard-hands-on-fixes/plan.md) | ✅ done (35.1-35.5 merged) | 31, 32, 33, 34 | M |
-| 36 | 36 | [Add-source wizard](36-add-source-wizard/plan.md) | in progress (36.1 merged; 36.2, 36.3 pending) | 29, 30, 31 | M |
-| 37 | 37 | [Install to multiple assistants and scopes](37-install-multi-target/plan.md) | in progress (37.1 merged; 37.2 ready) | 29, 31 | M |
-| 38 | 38 | [Per-source refresh](38-per-source-refresh/plan.md) | ready to delegate (2 tasks) | 31, 33 | S |
-| 39 | 39 | [Dashboard Installed: bug, action parity, status clarity](39-dashboard-installed-fixes/plan.md) | 39.1 and 39.4 merged; 39.2 waits on 40.2; 39.3 waits on 40.2 | 31, 32, 34, 35 | M |
-| 40 | 40 | [Dashboard Installed: collapsible object tree](40-dashboard-collapsible-objects/plan.md) | ready to delegate after 39.1 (5 tasks) | 35, 39.1 | L |
-| 41 | 41 | [Install elsewhere from a Dashboard row](41-install-elsewhere/plan.md) | planned (2 tasks, no open questions) | 37, 40 | M |
-| 42 | 42 | [Item actions, Tier 1 remainder](42-item-actions-tier1/plan.md) | planned (5 tasks, no open questions) | 39.2, 40 | M |
-| 43 | 43 | [Disabled state for installed items](43-disabled-state/plan.md) | 43.1-43.3 merged (Kilo verified live; Claude unverified); 43.4 (UI) outlined, after 40.2 and 42.3 | 40, 42 | L |
-| 44 | 44 | [Hardening and fixes from the kilocode-dev cross-check](44-hardening-from-kilocode-dev/plan.md) | in progress (44.1 merged; 44.3 P1 next) | 36.1, 38.1 | M |
-| 45 | 45 | [Claude Code plugins, native management](45-claude-plugins/plan.md) | P3, after the rest: spike 45.1 paused (partial findings); CP-Q3/Q5 assumptions unconfirmed | 40, 42 | L |
-| 46 | 46 | [CLI access to the extension](46-cli-access/plan.md) | done except docs follow-ups: 46.1-46.5 merged (CLI: read commands, redistribute, write commands, AGENTS.md) | 37.1, 44.1 | M |
-| 47 | 47 | [Update all](47-update-all/plan.md) | in progress (47.1 merged; 47.4, 47.2, 47.3 specified; UA-Q1, UA-Q2 decided) | 37.1 | M |
-| 48 | 48 | [Maintainer features for the CLI](48-cli-maintainer-features/plan.md) | outline only (from the T012 wishlist; open decision on `replaces`) | 46, 47 | L |
+| 26 | 26 | [Dashboard rebuild: unified table, filters, detail](26-dashboard-rebuild/plan.md) | in progress (to verify: 26.1–26.2) | 16, 23, 24, 25 | L |
+| 27 | 27 | [New Dashboard entry points](27-dashboard-entry-points/plan.md) | in progress (to verify: 27.1–27.2) | 22, 26 | S |
+| 28 | 28 | [Sidebar navigation unification](28-sidebar-unification/plan.md) | in progress (to verify: 28.1–28.2) | 16, 22 | M |
+| 29 | 29 | [Adapter registry & enabled-assistants config](29-adapter-registry/plan.md) | in progress (to verify: 29.1–29.5) | 03, 12, 21 | M |
+| 30 | 30 | [Source-resolver registry](30-source-resolver-registry/plan.md) | in progress (to verify: 30.1–30.4) | 04, 11, 20 | M |
+| 31 | 31 | [Dashboard: provider action-layer decoupling](31-dashboard-action-decoupling/plan.md) | in progress (to verify: 31.1–31.4) | 28, 29, 30 | M |
+| 32 | 32 | [Dashboard: structural skeleton](32-dashboard-skeleton/plan.md) | in progress (to verify: 32.1–32.3) | 28, 29 | M |
+| 33 | 33 | [Dashboard: Sources & Catalog section](33-dashboard-sources-catalog/plan.md) | in progress (to verify: 33.1–33.5) | 31, 32 | L |
+| 34 | 34 | [Dashboard: Recommendations + Installed action parity](34-dashboard-recommendations-parity/plan.md) | in progress (to verify: 34.1–34.3) | 31, 32 | M |
+| 35 | 35 | [Dashboard: hands-on testing fixes](35-dashboard-hands-on-fixes/plan.md) | in progress (to verify: 35.1–35.5) | 31, 32, 33, 34 | M |
+| 36 | 36 | [Add-source wizard](36-add-source-wizard/plan.md) | in progress (to verify: 36.1–36.3) | 29, 30, 31 | M |
+| 37 | 37 | [Install to multiple assistants and scopes](37-install-multi-target/plan.md) | in progress (to verify: 37.1) | 29, 31 | M |
+| 38 | 38 | [Per-source refresh](38-per-source-refresh/plan.md) | in progress (to verify: 38.1–38.2) | 31, 33 | S |
+| 39 | 39 | [Dashboard Installed: bug, action parity, status clarity](39-dashboard-installed-fixes/plan.md) | in progress (running: 39.2; to verify: 39.1, 39.4) | 31, 32, 34, 35 | M |
+| 40 | 40 | [Dashboard Installed: collapsible object tree](40-dashboard-collapsible-objects/plan.md) | in progress (running: 40.3; to verify: 40.1–40.2, 40.4–40.5) | 35, 39.1 | L |
+| 41 | 41 | [Install elsewhere from a Dashboard row](41-install-elsewhere/plan.md) | in progress (running: 41.1) | 37, 40 | M |
+| 42 | 42 | [Item actions, Tier 1 remainder](42-item-actions-tier1/plan.md) | in progress (to verify: 42.1) | 39.2, 40 | M |
+| 43 | 43 | [Disabled state for installed items](43-disabled-state/plan.md) | in progress (to verify: 43.1–43.3) | 40, 42 | L |
+| 44 | 44 | [Hardening and fixes from the kilocode-dev cross-check](44-hardening-from-kilocode-dev/plan.md) | in progress (to verify: 44.1, 44.3–44.6) | 36.1, 38.1 | M |
+| 45 | 45 | [Claude Code plugins, native management](45-claude-plugins/plan.md) | in progress (to verify: 45.2) | 40, 42 | L |
+| 46 | 46 | [CLI access to the extension](46-cli-access/plan.md) | in progress (to verify: 46.1–46.5) | 37.1, 44.1 | M |
+| 47 | 47 | [Update all](47-update-all/plan.md) | in progress (running: 47.3; to verify: 47.1–47.2, 47.4) | 37.1 | M |
+| 48 | 48 | [Maintainer features for the CLI](48-cli-maintainer-features/plan.md) | in progress (to verify: 48.1, 48.1b) | 46, 47 | L |
 <!-- /ai-orch:generated initiatives -->
 
 ## Next up

@@ -31,8 +31,17 @@
 
 ## Tasks
 
-| Task | Title | Depends on | Size |
-| --- | --- | --- | --- |
-| [37.1](37.1-target-matrix.md) | Engine helper: plan the assistant × scope matrix and summarize it | - | M |
-| [37.2](37.2-multi-select-flow.md) | Unified multi-select install flow in `availableView.ts` | 37.1 | M |
-| [37.3](37.3-result-reporting.md) | Per-target outcome reporting and partial-failure handling | 37.2 | S |
+### 37.1 - Engine helper: plan the assistant × scope matrix and summarize it
+
+- **Status:** `delivered` (merged 06d425f 2026-10-08) · **Short:** Install matrix engine helper · **Size:** M · **Depends on:** - · **Spec:** [37.1-target-matrix.md](37.1-target-matrix.md)
+- **Goal:** Create `src/engine/installMatrix.ts` with `planInstallMatrix` and `applyInstallMatrix` to plan and sequentially apply installations across an assistant × scope cross-product.
+
+### 37.2 - Unified multi-select install flow in `availableView.ts`
+
+- **Status:** `open` · **Short:** Multi-select install flow · **Size:** M · **Depends on:** 37.1 · **Spec:** [37.2-multi-select-flow.md](37.2-multi-select-flow.md)
+- **Goal:** Unify `installArtifact` and `installBatch` in `src/ui/availableView.ts` behind a single flow with multi-select assistants, Workspace/Global/Both scope selection, and a summary modal with Preview/Install/Overwrite.
+
+### 37.3 - Per-target outcome reporting and partial-failure handling
+
+- **Status:** `open` · **Short:** Per-target install outcome report · **Size:** S · **Depends on:** 37.2 · **Spec:** [37.3-result-reporting.md](37.3-result-reporting.md)
+- **Goal:** Replace per-flow install notifications with a single summary notification (`applied / skipped / unsupported / failed`), a "Show details" output channel on failure, and a single final refresh.
