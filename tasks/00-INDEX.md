@@ -136,91 +136,112 @@ hands-on testing round.
 `#` is the stable id (folder/task prefix); it is NOT reading order —
 `Priority` is.
 
+<!-- ai-orch:generated initiatives -->
 | Priority | #   | Initiative                                                                                | Status                         | Depends on             | Size |
 | -------- | --- | ----------------------------------------------------------------------------------------- | ------------------------------ | ---------------------- | ---- |
-| 1        | 01  | [Project scaffold](01-project-scaffold/plan.md)                                           | ✅ done                         | —                      | S    |
-| 2        | 02  | [Domain types + registry store](02-domain-and-registry/plan.md)                           | ✅ done (02.3 hardening merged) | 01                     | S    |
-| 3        | 03  | [Claude + Kilo adapters (skill+rule)](03-claude-kilo-adapters/plan.md)                    | ✅ done (03.4 hardening merged) | 02                     | M    |
-| 4        | 04  | [Source resolver (git-custom + local-folder)](04-source-resolver/plan.md)                 | ✅ done (04.3 hardening merged) | 02                     | M    |
-| 5        | 05  | [Canonical model + translator (skill)](05-translator-skill/plan.md)                       | ✅ done (05.2 hardening merged) | 03.4                   | M    |
-| 6        | 06  | [Install engine (pipeline)](06-install-engine/plan.md)                                    | ✅ done (06.1/06.2 merged)      | 05, 02.3, 03.4, 04.3   | M    |
-| 7        | 07  | [Minimal UI (3 views)](07-minimal-ui/plan.md)                                             | ✅ done (07.1/07.2/07.3 merged) | 06                     | M    |
-| 8        | 08  | [Agent artifact support](08-agent-support/plan.md)                                        | ✅ done                         | 07                     | M    |
-| 9        | 09  | [Command artifact support](09-command-support/plan.md)                                    | ✅ done                         | 08                     | M    |
-| 10       | 10  | [MCP-server artifact support](10-mcp-support/plan.md)                                     | ✅ done                         | 08                     | L    |
-| 11       | 11  | [Marketplace sources resolver](11-marketplace-sources/plan.md)                            | ✅ done                         | 08, 09, 10             | M    |
-| 12       | 12  | [GitHub Copilot adapter](12-copilot-adapter/plan.md)                                      | ✅ done                         | 08, 09, 10             | M    |
-| 13       | 13  | [Drift & update detection](13-drift-and-updates/plan.md)                                  | ✅ done                         | 12                     | M    |
-| 14       | 14  | [Discovery & promotion](14-discovery-promotion/plan.md)                                   | ✅ done                         | 13                     | M    |
-| 15       | 15  | [File watchers for consistency](15-file-watchers/plan.md)                                 | ✅ done                         | 13                     | S    |
-| 16       | 16  | [Management dashboard webview](16-dashboard-webview/plan.md)                              | ✅ done                         | 13, 14, 15             | L    |
-| 17       | 17  | [Form editor webview](17-form-editor/plan.md)                                             | ✅ done                         | 08, 09, 10, 16         | M    |
-| 18       | 18  | [Cross-assistant sync](18-cross-assistant-sync/plan.md)                                   | ✅ done                         | 06, 13, 14, 16         | M    |
-| 19       | 19  | [`hook` kind + active `rule` merge](19-hook-and-rule-merge/plan.md)                       | ✅ done                         | 03, 06, 12             | L    |
-| 20       | 20  | [`remote-url` & `git-single-item` sources](20-remote-url-and-single-item-sources/plan.md) | ✅ done                         | 04, 11                 | M    |
-| 21       | 21  | [Codex CLI & Gemini CLI adapters](21-codex-gemini-adapters/plan.md)                       | ✅ done                         | 03, 05, 08, 09, 10, 12 | L    |
-| 22       | 22  | [Project-scoped recommended installations](22-project-recommendations/plan.md)           | ✅ done                         | 02, 06, 07             | M    |
-| 23       | 23  | [Cross-framework identity lookup + shared content accessor](23-cross-framework-lookup/plan.md) | ✅ done (23.1/23.2/23.3 merged)        | 13, 14                 | M    |
-| 24       | 24  | [Diff-vs-original + preview-before-install](24-diff-and-preview/plan.md)                 | ✅ done (24.1/24.2 merged)             | 23                     | M    |
-| 25       | 25  | [Move action + Promote disambiguation fix](25-move-and-promote-fix/plan.md)               | ✅ done (25.1/25.2/25.3/25.4/25.5 merged) | 14, 18              | M    |
-| 26       | 26  | [Dashboard rebuild: unified table, filters, detail](26-dashboard-rebuild/plan.md)          | ✅ done (26.1/26.2 merged)             | 16, 23, 24, 25         | L    |
-| 27       | 27  | [New Dashboard entry points](27-dashboard-entry-points/plan.md)                            | ✅ done (27.1/27.2 merged)             | 22, 26                 | S    |
-| 28       | 28  | [Sidebar navigation unification](28-sidebar-unification/plan.md)                           | ✅ done (28.1/28.2)                    | 16, 22                 | M    |
-| 29       | 29  | [Adapter registry & enabled-assistants config](29-adapter-registry/plan.md)                | ✅ done (29.1-29.5 merged; 29.5 setting reshaped array→object-of-booleans post-testing feedback) | 03, 12, 21             | M    |
-| 30       | 30  | [Source-resolver registry](30-source-resolver-registry/plan.md)                            | ✅ done (30.1-30.4 merged; plan.ts's `resolveArtifactContent` dispatch intentionally out of scope, see note) | 04, 11, 20             | M    |
-| 31       | 31  | [Dashboard: provider action-layer decoupling](31-dashboard-action-decoupling/plan.md)      | ✅ done (31.1-31.4 merged)             | 28, 29, 30             | M    |
-| 32       | 32  | [Dashboard: structural skeleton](32-dashboard-skeleton/plan.md)                            | ✅ done (32.1-32.3 merged)             | 28, 29                 | M    |
-| 33       | 33  | [Dashboard: Sources & Catalog section](33-dashboard-sources-catalog/plan.md)                | ✅ done (33.1-33.5 merged)             | 31, 32                 | L    |
-| 34       | 34  | [Dashboard: Recommendations + Installed action parity](34-dashboard-recommendations-parity/plan.md) | ✅ done (34.1-34.3 merged)   | 31, 32                 | M    |
-| 35       | 35  | [Dashboard: hands-on testing fixes](35-dashboard-hands-on-fixes/plan.md)                   | ✅ done (35.1-35.5 merged)             | 31, 32, 33, 34         | M    |
-| 36       | 36  | [Add-source wizard](36-add-source-wizard/plan.md)                                          | in progress (36.1 merged; 36.2, 36.3 pending) | 29, 30, 31       | M    |
-| 37       | 37  | [Install to multiple assistants and scopes](37-install-multi-target/plan.md)               | in progress (37.1 merged; 37.2 ready) | 29, 31           | M    |
-| 38       | 38  | [Per-source refresh](38-per-source-refresh/plan.md)                                        | ready to delegate (2 tasks) | 31, 33           | S    |
-| 39       | 39  | [Dashboard Installed: bug, action parity, status clarity](39-dashboard-installed-fixes/plan.md) | 39.1 and 39.4 merged; 39.2 waits on 40.2; 39.3 waits on 40.2 | 31, 32, 34, 35 | M    |
-| 40       | 40  | [Dashboard Installed: collapsible object tree](40-dashboard-collapsible-objects/plan.md)   | ready to delegate after 39.1 (5 tasks) | 35, 39.1   | L    |
-| 41       | 41  | [Install elsewhere from a Dashboard row](41-install-elsewhere/plan.md)                      | planned (2 tasks, no open questions) | 37, 40       | M    |
-| 42       | 42  | [Item actions, Tier 1 remainder](42-item-actions-tier1/plan.md)                            | planned (5 tasks, no open questions) | 39.2, 40 | M    |
-| 43       | 43  | [Disabled state for installed items](43-disabled-state/plan.md)                              | 43.1-43.3 merged (Kilo verified live; Claude unverified); 43.4 (UI) outlined, after 40.2 and 42.3 | 40, 42 | L    |
-| 44       | 44  | [Hardening and fixes from the kilocode-dev cross-check](44-hardening-from-kilocode-dev/plan.md) | in progress (44.1 merged; 44.3 P1 next) | 36.1, 38.1 | M    |
-| 45       | 45  | [Claude Code plugins, native management](45-claude-plugins/plan.md)                          | P3, after the rest: spike 45.1 paused (partial findings); CP-Q3/Q5 assumptions unconfirmed | 40, 42 | L    |
-| 46       | 46  | [CLI access to the extension](46-cli-access/plan.md)                                      | done except docs follow-ups: 46.1-46.5 merged (CLI: read commands, redistribute, write commands, AGENTS.md) | 37.1, 44.1 | M    |
-| 47       | 47  | [Update all](47-update-all/plan.md)                                                        | in progress (47.1 merged; 47.4, 47.2, 47.3 specified; UA-Q1, UA-Q2 decided) | 37.1 | M    |
-| 48       | 48  | [Maintainer features for the CLI](48-cli-maintainer-features/plan.md)                      | outline only (from the T012 wishlist; open decision on `replaces`) | 46, 47 | L    |
+| 1 | 01 | [Project scaffold](01-project-scaffold/plan.md) | ✅ done | — | S |
+| 2 | 02 | [Domain types + registry store](02-domain-and-registry/plan.md) | ✅ done (02.3 hardening merged) | 01 | S |
+| 3 | 03 | [Claude + Kilo adapters (skill+rule)](03-claude-kilo-adapters/plan.md) | ✅ done (03.4 hardening merged) | 02 | M |
+| 4 | 04 | [Source resolver (git-custom + local-folder)](04-source-resolver/plan.md) | ✅ done (04.3 hardening merged) | 02 | M |
+| 5 | 05 | [Canonical model + translator (skill)](05-translator-skill/plan.md) | ✅ done (05.2 hardening merged) | 03.4 | M |
+| 6 | 06 | [Install engine (pipeline)](06-install-engine/plan.md) | ✅ done (06.1/06.2 merged) | 05, 02.3, 03.4, 04.3 | M |
+| 7 | 07 | [Minimal UI (3 views)](07-minimal-ui/plan.md) | ✅ done (07.1/07.2/07.3 merged) | 06 | M |
+| 8 | 08 | [Agent artifact support](08-agent-support/plan.md) | ✅ done | 07 | M |
+| 9 | 09 | [Command artifact support](09-command-support/plan.md) | ✅ done | 08 | M |
+| 10 | 10 | [MCP-server artifact support](10-mcp-support/plan.md) | ✅ done | 08 | L |
+| 11 | 11 | [Marketplace sources resolver](11-marketplace-sources/plan.md) | ✅ done | 08, 09, 10 | M |
+| 12 | 12 | [GitHub Copilot adapter](12-copilot-adapter/plan.md) | ✅ done | 08, 09, 10 | M |
+| 13 | 13 | [Drift & update detection](13-drift-and-updates/plan.md) | ✅ done | 12 | M |
+| 14 | 14 | [Discovery & promotion](14-discovery-promotion/plan.md) | ✅ done | 13 | M |
+| 15 | 15 | [File watchers for consistency](15-file-watchers/plan.md) | ✅ done | 13 | S |
+| 16 | 16 | [Management dashboard webview](16-dashboard-webview/plan.md) | ✅ done | 13, 14, 15 | L |
+| 17 | 17 | [Form editor webview](17-form-editor/plan.md) | ✅ done | 08, 09, 10, 16 | M |
+| 18 | 18 | [Cross-assistant sync](18-cross-assistant-sync/plan.md) | ✅ done | 06, 13, 14, 16 | M |
+| 19 | 19 | [`hook` kind + active `rule` merge](19-hook-and-rule-merge/plan.md) | ✅ done | 03, 06, 12 | L |
+| 20 | 20 | [`remote-url` & `git-single-item` sources](20-remote-url-and-single-item-sources/plan.md) | ✅ done | 04, 11 | M |
+| 21 | 21 | [Codex CLI & Gemini CLI adapters](21-codex-gemini-adapters/plan.md) | ✅ done | 03, 05, 08, 09, 10, 12 | L |
+| 22 | 22 | [Project-scoped recommended installations](22-project-recommendations/plan.md) | ✅ done | 02, 06, 07 | M |
+| 23 | 23 | [Cross-framework identity lookup + shared content accessor](23-cross-framework-lookup/plan.md) | ✅ done (23.1/23.2/23.3 merged) | 13, 14 | M |
+| 24 | 24 | [Diff-vs-original + preview-before-install](24-diff-and-preview/plan.md) | ✅ done (24.1/24.2 merged) | 23 | M |
+| 25 | 25 | [Move action + Promote disambiguation fix](25-move-and-promote-fix/plan.md) | ✅ done (25.1/25.2/25.3/25.4/25.5 merged) | 14, 18 | M |
+| 26 | 26 | [Dashboard rebuild: unified table, filters, detail](26-dashboard-rebuild/plan.md) | ✅ done (26.1/26.2 merged) | 16, 23, 24, 25 | L |
+| 27 | 27 | [New Dashboard entry points](27-dashboard-entry-points/plan.md) | ✅ done (27.1/27.2 merged) | 22, 26 | S |
+| 28 | 28 | [Sidebar navigation unification](28-sidebar-unification/plan.md) | ✅ done (28.1/28.2) | 16, 22 | M |
+| 29 | 29 | [Adapter registry & enabled-assistants config](29-adapter-registry/plan.md) | ✅ done (29.1-29.5 merged; 29.5 setting reshaped array→object-of-booleans post-testing feedback) | 03, 12, 21 | M |
+| 30 | 30 | [Source-resolver registry](30-source-resolver-registry/plan.md) | ✅ done (30.1-30.4 merged; plan.ts's `resolveArtifactContent` dispatch intentionally out of scope, see note) | 04, 11, 20 | M |
+| 31 | 31 | [Dashboard: provider action-layer decoupling](31-dashboard-action-decoupling/plan.md) | ✅ done (31.1-31.4 merged) | 28, 29, 30 | M |
+| 32 | 32 | [Dashboard: structural skeleton](32-dashboard-skeleton/plan.md) | ✅ done (32.1-32.3 merged) | 28, 29 | M |
+| 33 | 33 | [Dashboard: Sources & Catalog section](33-dashboard-sources-catalog/plan.md) | ✅ done (33.1-33.5 merged) | 31, 32 | L |
+| 34 | 34 | [Dashboard: Recommendations + Installed action parity](34-dashboard-recommendations-parity/plan.md) | ✅ done (34.1-34.3 merged) | 31, 32 | M |
+| 35 | 35 | [Dashboard: hands-on testing fixes](35-dashboard-hands-on-fixes/plan.md) | ✅ done (35.1-35.5 merged) | 31, 32, 33, 34 | M |
+| 36 | 36 | [Add-source wizard](36-add-source-wizard/plan.md) | in progress (36.1 merged; 36.2, 36.3 pending) | 29, 30, 31 | M |
+| 37 | 37 | [Install to multiple assistants and scopes](37-install-multi-target/plan.md) | in progress (37.1 merged; 37.2 ready) | 29, 31 | M |
+| 38 | 38 | [Per-source refresh](38-per-source-refresh/plan.md) | ready to delegate (2 tasks) | 31, 33 | S |
+| 39 | 39 | [Dashboard Installed: bug, action parity, status clarity](39-dashboard-installed-fixes/plan.md) | 39.1 and 39.4 merged; 39.2 waits on 40.2; 39.3 waits on 40.2 | 31, 32, 34, 35 | M |
+| 40 | 40 | [Dashboard Installed: collapsible object tree](40-dashboard-collapsible-objects/plan.md) | ready to delegate after 39.1 (5 tasks) | 35, 39.1 | L |
+| 41 | 41 | [Install elsewhere from a Dashboard row](41-install-elsewhere/plan.md) | planned (2 tasks, no open questions) | 37, 40 | M |
+| 42 | 42 | [Item actions, Tier 1 remainder](42-item-actions-tier1/plan.md) | planned (5 tasks, no open questions) | 39.2, 40 | M |
+| 43 | 43 | [Disabled state for installed items](43-disabled-state/plan.md) | 43.1-43.3 merged (Kilo verified live; Claude unverified); 43.4 (UI) outlined, after 40.2 and 42.3 | 40, 42 | L |
+| 44 | 44 | [Hardening and fixes from the kilocode-dev cross-check](44-hardening-from-kilocode-dev/plan.md) | in progress (44.1 merged; 44.3 P1 next) | 36.1, 38.1 | M |
+| 45 | 45 | [Claude Code plugins, native management](45-claude-plugins/plan.md) | P3, after the rest: spike 45.1 paused (partial findings); CP-Q3/Q5 assumptions unconfirmed | 40, 42 | L |
+| 46 | 46 | [CLI access to the extension](46-cli-access/plan.md) | done except docs follow-ups: 46.1-46.5 merged (CLI: read commands, redistribute, write commands, AGENTS.md) | 37.1, 44.1 | M |
+| 47 | 47 | [Update all](47-update-all/plan.md) | in progress (47.1 merged; 47.4, 47.2, 47.3 specified; UA-Q1, UA-Q2 decided) | 37.1 | M |
+| 48 | 48 | [Maintainer features for the CLI](48-cli-maintainer-features/plan.md) | outline only (from the T012 wishlist; open decision on `replaces`) | 46, 47 | L |
+<!-- /ai-orch:generated initiatives -->
 
 ## Next up
 
 Emergent tasks (`T###`) sit beside the initiatives; see [`AGENTS.md`](AGENTS.md), "Emergent tasks". None open today: all initiatives are done and the next work is expected from a hands-on testing round.
 
+<!-- ai-orch:generated next-up -->
 | Id | Priority | Task | Executor | Handoff |
 | --- | --- | --- | --- | --- |
+<!-- /ai-orch:generated next-up -->
 
 ## Tasks by category
 
 No emergent tasks yet. Add a category folder (`tasks/<category>/` with a `README.md` and `notes/`) with the first task.
 
+<!-- ai-orch:generated tasks-by-category -->
+
+<!-- /ai-orch:generated tasks-by-category -->
+
 ## Decisions waiting
 
+<!-- ai-orch:generated decisions -->
 | Task | Question (exact) | Decider | Blocks |
 | --- | --- | --- | --- |
+| - | None. | - | - |
+<!-- /ai-orch:generated decisions -->
 
 ## Done
 
-| Id | Task | Closed |
-| --- | --- | --- |
+<!-- ai-orch:generated done -->
+| Id | Task | Result | Closed |
+| --- | --- | --- | --- |
+<!-- /ai-orch:generated done -->
 
 ## Specs
 
+<!-- ai-orch:generated specs -->
 | Spec                                                         | Drives                     |
 | ------------------------------------------------------------ | -------------------------- |
+| [actions-study](specs/actions-study.md) | - |
+| [adapter-and-source-registries](specs/adapter-and-source-registries.md) | 29, 30           |
+| [claude-plugins-study](specs/claude-plugins-study.md) | - |
+| [cli-wishlist-comparison](specs/cli-wishlist-comparison.md) | - |
+| [dev-deploy-study](specs/dev-deploy-study.md) | - |
+| [disabled-state-study](specs/disabled-state-study.md) | - |
 | [foundations](specs/foundations.md)                          | 01, 02, 03, 04, 05, 06, 07 |
+| [mcp-cli-access-study](specs/mcp-cli-access-study.md) | - |
 | [phase-2-spec](specs/phase-2-spec.md)                        | 08, 09, 10, 11, 12         |
 | [phase-3-spec](specs/phase-3-spec.md)                        | 13, 14, 15, 16             |
 | [phase-4-spec](specs/phase-4-spec.md)                        | 17, 18, 19, 20, 21         |
-| [project-recommendations](specs/project-recommendations.md)  | 22                         |
 | [phase-6-spec](specs/phase-6-spec.md)                        | 23, 24, 25, 26, 27         |
 | [phase-7-spec](specs/phase-7-spec.md)                        | 28                         |
-| [adapter-and-source-registries](specs/adapter-and-source-registries.md) | 29, 30           |
 | [phase-9-spec](specs/phase-9-spec.md)                        | 31, 32, 33, 34             |
+| [project-recommendations](specs/project-recommendations.md)  | 22                         |
+<!-- /ai-orch:generated specs -->
 
 ## Dependency graph
 
