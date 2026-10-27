@@ -123,6 +123,7 @@ export interface DriftReport {
   diskHash?: string;
   sourceHash?: string;
   dirty?: boolean;
+  reason?: string;
   details?: string;
   hint?: string;
 }

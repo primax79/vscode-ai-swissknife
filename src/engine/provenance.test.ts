@@ -728,7 +728,6 @@ describe('provenance & update detection — spec §6 acceptance cases', () => {
   // for plugin-b as well!
   it(
     '6. two plugins in a marketplace with a same-name skill -> each installation is compared strictly with its own artifact',
-    { todo: 'fixed by 49.3' },
     async () => {
       const remoteRepoDir = path.join(testWorkspaceDir, 'remotes', 'mkt-same-name');
       initGitRepo(remoteRepoDir);
@@ -813,6 +812,65 @@ describe('provenance & update detection — spec §6 acceptance cases', () => {
         reportAAfterRemoval.status as string,
         'source-unavailable',
         'instA must not fall back to plugin-b skill by name; must report source-unavailable'
+      );
+      assert.strictEqual(
+        reportAAfterRemoval.reason,
+        'artifact mkt-two-plugins:plugin-a:skill:shared-name no longer in source',
+        'Report must carry exact missing-artifact reason'
+      );
+      assert.strictEqual(
+        reportAAfterRemoval.hint,
+        'same name found: mkt-two-plugins:plugin-b:skill:shared-name',
+        'Report must carry same-name hint pointing to plugin-b artifact id'
+      );
+      assert.ok(
+        reportAAfterRemoval.details?.includes('artifact mkt-two-plugins:plugin-a:skill:shared-name no longer in source') &&
+          reportAAfterRemoval.details?.includes('same name found: mkt-two-plugins:plugin-b:skill:shared-name'),
+        `Details must include reason and hint, got: ${reportAAfterRemoval.details}`
+      );
+
+      // planUpdate on instA must also refuse with reason + hint (never falling back to plugin-b)
+      const plannedA = await planUpdate(instA, mktSource, {
+        homeRoot: testHomeDir,
+        projectRoot: testWorkspaceDir,
+      });
+      assert.strictEqual(plannedA.supported, false);
+      if (!plannedA.supported) {
+        assert.ok(
+          plannedA.plan.reason.includes('artifact mkt-two-plugins:plugin-a:skill:shared-name no longer in source'),
+          `planUpdate reason must report missing artifact id, got: ${plannedA.plan.reason}`
+        );
+        assert.ok(
+          plannedA.plan.reason.includes('same name found: mkt-two-plugins:plugin-b:skill:shared-name'),
+          `planUpdate reason must include same-name hint, got: ${plannedA.plan.reason}`
+        );
+      }
+
+      // Deterministic id-shape conversion: an old installation with local-folder path-based artifactId
+      // (`<sourceId>:plugins/<plugin>/skills/<name>:<name>`) for the same plugin (`plugin-b`) is matched deterministically,
+      // while one for removed `plugin-a` is rejected with source-unavailable + hint.
+      const legacyShapeInstB: ManagedInstallation = {
+        ...instB,
+        packageId: 'mkt-two-plugins:plugins/plugin-b/skills/shared-name',
+        artifactId: 'mkt-two-plugins:plugins/plugin-b/skills/shared-name:shared-name',
+      };
+      const reportLegacyB = await checkForUpstreamUpdate(legacyShapeInstB, mktSource, testHomeDir);
+      assert.strictEqual(reportLegacyB.status, 'update-available');
+      assert.ok(
+        reportLegacyB.details?.includes('id-shape conversion'),
+        `Converted id-shape match must note the conversion, got: ${reportLegacyB.details}`
+      );
+
+      const legacyShapeInstA: ManagedInstallation = {
+        ...instA,
+        packageId: 'mkt-two-plugins:plugins/plugin-a/skills/shared-name',
+        artifactId: 'mkt-two-plugins:plugins/plugin-a/skills/shared-name:shared-name',
+      };
+      const reportLegacyA = await checkForUpstreamUpdate(legacyShapeInstA, mktSource, testHomeDir);
+      assert.strictEqual(reportLegacyA.status, 'source-unavailable');
+      assert.strictEqual(
+        reportLegacyA.hint,
+        'same name found: mkt-two-plugins:plugin-b:skill:shared-name'
       );
     }
   );
