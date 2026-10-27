@@ -1,37 +1,37 @@
-# 13 — Drift & update detection — Summary
+# 13 — Rilevamento di drift e aggiornamenti — Riepilogo
 
 > **Shipped on:** 2026-08-19  
-> **Initiative:** 13 — Drift & update detection  
-> **Status:** ✅ Done and merged into main
+> **Initiative:** 13 — Rilevamento di drift e aggiornamenti  
+> **Status:** ✅ Completato e unito in main
 
 ---
 
-## What was built
+## Cosa è stato realizzato
 
-1. **Local Drift Analyzer (13.1)**:
-   - Implemented `analyzeLocalDrift(installation, homeRoot?)` in `src/engine/drift.ts`.
-   - Computes current disk hash across skills, agents, commands, and MCP servers.
-   - Categorizes disk state into `up-to-date`, `modified-locally`, and `missing-on-disk`.
+1. **Analizzatore di drift locale (13.1)**:
+   - Implementato `analyzeLocalDrift(installation, homeRoot?)` in `src/engine/drift.ts`.
+   - Calcola l'hash corrente su disco per skill, agent, command e server MCP.
+   - Classifica lo stato su disco in `up-to-date`, `modified-locally` e `missing-on-disk`.
 
-2. **Upstream Update Checker (13.2)**:
-   - Implemented `checkForUpstreamUpdate(installation, source, homeRoot?)` in `src/engine/drift.ts`.
-   - Resolves latest artifact content and translated hash from source repositories.
-   - Detects `update-available` and `modified-and-update-available` states.
+2. **Verificatore di aggiornamenti upstream (13.2)**:
+   - Implementato `checkForUpstreamUpdate(installation, source, homeRoot?)` in `src/engine/drift.ts`.
+   - Risolve l'ultimo contenuto dell'artefatto e l'hash tradotto dai repository sorgente.
+   - Rileva gli stati `update-available` e `modified-and-update-available`.
 
-3. **UI Integration & Update Workflow (13.3)**:
-   - Status indicators in **Installed** view:
-     - `up-to-date`: checkmark
-     - `modified-locally`: modified icon (`diff-modified`)
-     - `update-available`: update badge (`cloud-download`)
-     - `modified-and-update-available`: warning badge (`warning`)
-     - `missing-on-disk`: error badge (`error`)
-   - Commands:
+3. **Integrazione UI e flusso di aggiornamento (13.3)**:
+   - Indicatori di stato nella vista **Installed**:
+     - `up-to-date`: segno di spunta
+     - `modified-locally`: icona di modifica (`diff-modified`)
+     - `update-available`: badge di aggiornamento (`cloud-download`)
+     - `modified-and-update-available`: badge di avviso (`warning`)
+     - `missing-on-disk`: badge di errore (`error`)
+   - Comandi:
      - `AI Swissknife: Check Drift & Updates` (`aiSwissknife.checkDrift`)
      - `AI Swissknife: Update to Latest Version` (`aiSwissknife.updateItem`)
 
 ## Verification
 
-- Lint (`npm run lint`): 0 errors, 0 warnings.
-- Typecheck (`npm run typecheck`): Clean.
-- Test suite (`npm test`): 124 tests passing out of 124.
-- Build (`npm run build`): Generated bundle `dist/extension.js`.
+- Lint (`npm run lint`): 0 errori, 0 avvisi.
+- Typecheck (`npm run typecheck`): Pulito.
+- Suite di test (`npm test`): 124 test superati su 124.
+- Build (`npm run build`): Generato il bundle `dist/extension.js`.

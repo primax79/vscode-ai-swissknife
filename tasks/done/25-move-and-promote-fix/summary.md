@@ -1,21 +1,21 @@
-# 25 — Move action + Promote disambiguation fix — Summary
+# 25 — Azione Move + correzione della disambiguazione di Promote — Riepilogo
 
-> **Closed on:** 2026-10-27 (registry tidy; verifier ai-coding-tools-c1)  
-> **Initiative:** 25 — Move action + Promote disambiguation fix  
-> **Status:** ✅ Done and merged into main
+> **Closed on:** 2026-10-27 (riordino del registro; verificatore ai-coding-tools-c1)  
+> **Initiative:** 25 — Azione Move + correzione della disambiguazione di Promote  
+> **Status:** ✅ Completato e unito in main
 
-Summary written at closure from the plan and the git history; the per-task specs in this folder hold the detail.
+Riepilogo scritto alla chiusura a partire dal piano e dalla cronologia git; le specifiche dei singoli task in questa cartella contengono i dettagli.
 
-## What was built
+## Cosa è stato realizzato
 
-- **25.1 Discovery: collect all match candidates** — merged 7059e75 2026-09-07; commit 34095c3. Change the discovery matching loop from a single overwritten `match` to a `candidates` list scanning all 5 source types and all packages in each source.
-- **25.2 Promote UI: candidate-based visibility + disambiguation** — merged e920b8e 2026-09-08; commit 5154eb9. Gate Promote action visibility on candidate count (`:one` / `:many`), prompt with a `QuickPick` when multiple candidates match, and remove the `'local-promotion'` fallback.
-- **25.3 promoteAllIdentical: skip multi-candidate items** — merged e920b8e 2026-09-08; absorbed into commit 5154eb9. Make the Dashboard's `promoteAllIdentical` bulk-promote path act only on single-candidate items and report multi-candidate items as skipped.
-- **25.4 Move primitives: removeMcpServer adapter method + soft-delete helper** — merged 6958726 2026-09-07; commit c188f3d. Add `removeMcpServer(id, loc)` to the `Adapter` interface and all 5 adapters, and add `softDeletePath` in `src/engine/softDelete.ts` to move file/directory artifacts into `.ai-swissknife/_deleted/`.
-- **25.5 "Move to..." command** — merged f5abc82 2026-09-08; commit e1fb1ba. Wire the `moveItem` ("Move to...") command in `installedView.ts` using `planSync` for the target install and `25.4`'s primitives for origin removal with `manual-recovery-required` on partial failure.
+- **25.1 Discovery: raccogliere tutti i candidati di corrispondenza** — unito in 7059e75 2026-09-07; commit 34095c3. Modificare il ciclo di corrispondenza del rilevamento da un singolo `match` sovrascritto a un elenco `candidates` che scansiona tutti e 5 i tipi di sorgente e tutti i pacchetti in ciascuna sorgente.
+- **25.2 UI di Promote: visibilità basata sui candidati + disambiguazione** — unito in e920b8e 2026-09-08; commit 5154eb9. Subordinare la visibilità dell'azione Promote al numero di candidati (`:one` / `:many`), mostrare un `QuickPick` quando corrispondono più candidati e rimuovere il fallback `'local-promotion'`.
+- **25.3 promoteAllIdentical: saltare gli elementi con più candidati** — unito in e920b8e 2026-09-08; assorbito nel commit 5154eb9. Fare in modo che il percorso di promozione massiva `promoteAllIdentical` della Dashboard agisca solo sugli elementi a singolo candidato e segnali come saltati gli elementi con più candidati.
+- **25.4 Primitive di Move: metodo removeMcpServer dell'adapter + helper di soft-delete** — unito in 6958726 2026-09-07; commit c188f3d. Aggiungere `removeMcpServer(id, loc)` all'interfaccia `Adapter` e a tutti e 5 gli adapter, e aggiungere `softDeletePath` in `src/engine/softDelete.ts` per spostare gli artefatti su file/directory in `.ai-swissknife/_deleted/`.
+- **25.5 Comando "Move to..."** — unito in f5abc82 2026-09-08; commit e1fb1ba. Collegare il comando `moveItem` ("Move to...") in `installedView.ts` usando `planSync` per l'installazione nella destinazione e le primitive di `25.4` per la rimozione dell'origine con `manual-recovery-required` in caso di fallimento parziale.
 
 ## Verification
 
-- Every task's work is merged into `main` (evidence: the commits named above, from `git log --grep '<id>'`).
-- `npm test` on `main` at 5e85109 (2026-10-27): 577 tests, 576 pass, 0 fail, 1 opt-in skip (`AISK_REAL_KILO=1`).
-- `ai-orch tasks validate --tasks-dir tasks`: 0 errors.
+- Il lavoro di ogni task è stato unito in `main` (evidenza: i commit indicati sopra, da `git log --grep '<id>'`).
+- `npm test` su `main` a 5e85109 (2026-10-27): 577 test, 576 superati, 0 falliti, 1 saltato opzionale (`AISK_REAL_KILO=1`).
+- `ai-orch tasks validate --tasks-dir tasks`: 0 errori.

@@ -1,40 +1,40 @@
-# 25 — Move action + Promote disambiguation fix — Implementation plan
+# 25 — Azione Move + correzione della disambiguazione di Promote — Piano di implementazione
 
 > **Derived from spec:** [`../specs/phase-6-spec.md`](../../specs/phase-6-spec.md) §4.3, §4.4
 
-Tasks (each = one commit):
+Task (ciascuno = un commit):
 
 ## Tasks
 
-## Task order and gating
+## Ordine dei task e vincoli di sequenza
 
-- **25.1 gates 25.2 gates 25.3** — the Promote fix chain.
-- **25.4 gates 25.5** — the Move primitives chain, independent of the Promote chain.
-- 25.1-25.3 and 25.4-25.5 can be dispatched in parallel (two independent worktrees) since they touch different files (`discovery.ts`/`package.json`/`dashboard.ts` vs. `adapters/*.ts`/`installedView.ts`).
+- **25.1 blocca 25.2 che blocca 25.3** — la catena di correzione di Promote.
+- **25.4 blocca 25.5** — la catena delle primitive di Move, indipendente dalla catena di Promote.
+- 25.1-25.3 e 25.4-25.5 possono essere avviati in parallelo (due worktree indipendenti) poiché toccano file diversi (`discovery.ts`/`package.json`/`dashboard.ts` contro `adapters/*.ts`/`installedView.ts`).
 
 ## Closed
 
-### 25.1 - Discovery: collect all match candidates
+### 25.1 - Discovery: raccogliere tutti i candidati di corrispondenza
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Collect all discovery match candidates · **Size:** M · **Depends on:** 14 · **Spec:** [25.1-discovery-candidates.md](25.1-discovery-candidates.md)
-- **Goal:** Change the discovery matching loop from a single overwritten `match` to a `candidates` list scanning all 5 source types and all packages in each source.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Raccolta candidati di discovery · **Size:** M · **Depends on:** 14 · **Spec:** [25.1-discovery-candidates.md](25.1-discovery-candidates.md)
+- **Goal:** Modificare il ciclo di corrispondenza del rilevamento da un singolo `match` sovrascritto a un elenco `candidates` che scansiona tutti e 5 i tipi di sorgente e tutti i pacchetti in ciascuna sorgente.
 
-### 25.2 - Promote UI: candidate-based visibility + disambiguation
+### 25.2 - UI di Promote: visibilità basata sui candidati + disambiguazione
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Promote candidate disambiguation · **Size:** M · **Depends on:** 25.1 · **Spec:** [25.2-promote-ui-fix.md](25.2-promote-ui-fix.md)
-- **Goal:** Gate Promote action visibility on candidate count (`:one` / `:many`), prompt with a `QuickPick` when multiple candidates match, and remove the `'local-promotion'` fallback.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Disambiguazione candidati in Promote · **Size:** M · **Depends on:** 25.1 · **Spec:** [25.2-promote-ui-fix.md](25.2-promote-ui-fix.md)
+- **Goal:** Subordinare la visibilità dell'azione Promote al numero di candidati (`:one` / `:many`), mostrare un `QuickPick` quando corrispondono più candidati e rimuovere il fallback `'local-promotion'`.
 
-### 25.3 - promoteAllIdentical: skip multi-candidate items
+### 25.3 - promoteAllIdentical: saltare gli elementi con più candidati
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Skip multi-candidate bulk promote · **Size:** S · **Depends on:** 25.1, 25.2 · **Spec:** [25.3-promote-all-identical-fix.md](25.3-promote-all-identical-fix.md)
-- **Goal:** Make the Dashboard's `promoteAllIdentical` bulk-promote path act only on single-candidate items and report multi-candidate items as skipped.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Salto multi-candidato in promote massivo · **Size:** S · **Depends on:** 25.1, 25.2 · **Spec:** [25.3-promote-all-identical-fix.md](25.3-promote-all-identical-fix.md)
+- **Goal:** Fare in modo che il percorso di promozione massiva `promoteAllIdentical` della Dashboard agisca solo sugli elementi a singolo candidato e segnali come saltati gli elementi con più candidati.
 
-### 25.4 - Move primitives: removeMcpServer adapter method + soft-delete helper
+### 25.4 - Primitive di Move: metodo removeMcpServer dell'adapter + helper di soft-delete
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Move and soft-delete primitives · **Size:** M · **Depends on:** 10, 21 · **Spec:** [25.4-move-primitives.md](25.4-move-primitives.md)
-- **Goal:** Add `removeMcpServer(id, loc)` to the `Adapter` interface and all 5 adapters, and add `softDeletePath` in `src/engine/softDelete.ts` to move file/directory artifacts into `.ai-swissknife/_deleted/`.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Primitive di Move e soft-delete · **Size:** M · **Depends on:** 10, 21 · **Spec:** [25.4-move-primitives.md](25.4-move-primitives.md)
+- **Goal:** Aggiungere `removeMcpServer(id, loc)` all'interfaccia `Adapter` e a tutti e 5 gli adapter, e aggiungere `softDeletePath` in `src/engine/softDelete.ts` per spostare gli artefatti su file/directory in `.ai-swissknife/_deleted/`.
 
-### 25.5 - "Move to..." command
+### 25.5 - Comando "Move to..."
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Move to command · **Size:** M · **Depends on:** 18, 25.4 · **Spec:** [25.5-move-command.md](25.5-move-command.md)
-- **Goal:** Wire the `moveItem` ("Move to...") command in `installedView.ts` using `planSync` for the target install and `25.4`'s primitives for origin removal with `manual-recovery-required` on partial failure.
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Comando Move to · **Size:** M · **Depends on:** 18, 25.4 · **Spec:** [25.5-move-command.md](25.5-move-command.md)
+- **Goal:** Collegare il comando `moveItem` ("Move to...") in `installedView.ts` usando `planSync` per l'installazione nella destinazione e le primitive di `25.4` per la rimozione dell'origine con `manual-recovery-required` in caso di fallimento parziale.

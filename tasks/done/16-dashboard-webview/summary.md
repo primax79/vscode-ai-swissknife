@@ -1,30 +1,30 @@
-# 16 — Management dashboard webview — Summary
+# 16 — Webview della dashboard di gestione — Riepilogo
 
 > **Shipped on:** 2026-08-19  
-> **Initiative:** 16 — Management dashboard webview  
-> **Status:** ✅ Done and merged into main
+> **Initiative:** 16 — Webview della dashboard di gestione  
+> **Status:** ✅ Completato e unito in main
 
 ---
 
-## What was built
+## Cosa è stato realizzato
 
-1. **DashboardPanel & Webview Lifecycle (16.1)**:
-   - Implemented `DashboardPanel` in `src/ui/dashboard.ts` managing the WebviewPanel singleton, disposal, and message handling.
-   - Live synchronization of sources, managed installations with drift analysis, and unmanaged items.
+1. **DashboardPanel e ciclo di vita della Webview (16.1)**:
+   - Implementato `DashboardPanel` in `src/ui/dashboard.ts` per gestire il singleton del WebviewPanel, il rilascio delle risorse e la gestione dei messaggi.
+   - Sincronizzazione live di sorgenti, installazioni gestite con analisi del drift ed elementi non gestiti.
 
-2. **Responsive Dashboard UI (16.2)**:
-   - Summary metric cards (Total Managed, Updates Available, Modified Locally, Unmanaged Discovered).
-   - Fast client-side search filtering across names, assistants, and scopes.
-   - Filter tabs for artifact kinds (All, Skills, Agents, Commands, MCPs).
-   - Direct promotion buttons for unmanaged items and update triggers.
+2. **UI responsiva della Dashboard (16.2)**:
+   - Schede delle metriche di riepilogo (Totale gestiti, Aggiornamenti disponibili, Modificati localmente, Non gestiti rilevati).
+   - Filtro di ricerca rapido lato client per nome, assistente e scope.
+   - Schede di filtro per tipo di artefatto (All, Skills, Agents, Commands, MCPs).
+   - Pulsanti di promozione diretta per gli elementi non gestiti e comandi di aggiornamento.
 
-3. **Extension & Activity Bar Integration (16.3)**:
-   - Command `AI Swissknife: Open Dashboard` (`aiSwissknife.openDashboard`).
-   - Title bar navigation icon (`$(dashboard)`) across Sources, Available, and Installed tree views.
+3. **Integrazione nell'estensione e nell'Activity Bar (16.3)**:
+   - Comando `AI Swissknife: Open Dashboard` (`aiSwissknife.openDashboard`).
+   - Icona di navigazione nella barra del titolo (`$(dashboard)`) nelle viste ad albero Sources, Available e Installed.
 
 ## Verification
 
-- Lint (`npm run lint`): 0 errors, 0 warnings.
-- Typecheck (`npm run typecheck`): Clean.
-- Test suite (`npm test`): 127 tests passing out of 127.
-- Build (`npm run build`): Generated bundle `dist/extension.js`.
+- Lint (`npm run lint`): 0 errori, 0 avvisi.
+- Typecheck (`npm run typecheck`): Pulito.
+- Suite di test (`npm test`): 127 test superati su 127.
+- Build (`npm run build`): Generato il bundle `dist/extension.js`.
