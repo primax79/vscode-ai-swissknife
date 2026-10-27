@@ -31,8 +31,8 @@
 
 ### 48.7 - Sorgenti CLI: fetch di tutte, N commit indietro, pin
 
-- **Status:** `open` (specificato in 48.7-revision-gap.md, commit 8efb5a1) · **Short:** Divario revisione e sources fetch · **Size:** S · **Depends on:** 46.1, 46.4, 44.1, 47.4 · **Spec:** [48.7-revision-gap.md](48.7-revision-gap.md)
-- **Goal:** Arricchire `updates` con `installedRevision`, `latestRevision`, `commitsBehind` e `behindDays` tramite `src/engine/revisionGap.ts`, e aggiungere un comando CLI `sources fetch`.
+- **Status:** `open` (specificato in 48.7-revision-gap.md, commit 8efb5a1; metà engine `src/engine/revisionGap.ts` + test assorbita in 49.5) · **Short:** Divario revisione e sources fetch · **Size:** S · **Depends on:** 46.1, 46.4, 44.1, 47.4 · **Spec:** [48.7-revision-gap.md](48.7-revision-gap.md)
+- **Goal:** Arricchire `updates` con `installedRevision`, `latestRevision`, `commitsBehind` e `behindDays` tramite `src/engine/revisionGap.ts` (già assorbita e testata in 49.5), e aggiungere un comando CLI `sources fetch`.
 
 ### 48.8 - Estensione di `redistribute <path|item>` con corrispondenza ampliata (`--roots`, copie associate per identità, `ahead`)
 

@@ -117,6 +117,9 @@ export interface CliUpdateItem {
   scope: Scope;
   status: DriftReport['status'];
   sourceId?: string;
+  installedCommit?: string;
+  currentCommit?: string;
+  commitsBehind?: number;
   details?: string;
   workspace?: string | null;
 }

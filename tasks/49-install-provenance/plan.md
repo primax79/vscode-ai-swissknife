@@ -10,8 +10,9 @@ folders read from the live working tree, catalog vs check commit, artifact match
 
 ### 49.5 - Status from commits, then content; sourceContentHash
 
-- **Status:** `open` · **Short:** Commit-based status · **Size:** M · **Depends on:** 49.2, 49.4
+- **Status:** `delivered` (kilo 2026-10-27; commit dall'architetto dopo verifica) · **Short:** Commit-based status · **Size:** M · **Depends on:** 49.2, 49.4
 - **Goal:** spec §2: fast path on unchanged commit, translated-content comparison only when the commit moved; `sourceContentHash` recorded; install resolves at install time (spec §3.4); cases 4, 5, 7 pass.
+- **Result:** Registrato `sourceContentHash` su `ManagedInstallation` al momento dell'installazione (`planInstall`/`applyInstall` e `promoteObservedArtifact`), implementata la risoluzione del ref della sorgente git al momento dell'installazione in `planInstall`, aggiunto il fast path basato sui commit in `checkForUpstreamUpdate` / `checkDriftForAll` (con `installedCommit`, `currentCommit`, `commitsBehind` su `DriftReport` e nell'output CLI di `updates`/`update`), e integrata `src/engine/revisionGap.ts` (adattata per `local-folder` git e chiave cache 49.2) con la relativa suite di test `src/engine/revisionGap.test.ts`; i casi 1b, 4, 4b, 5 e 7 in `src/engine/provenance.test.ts` sono verdi.
 
 ### 49.6 - Migration of existing state
 
@@ -48,3 +49,4 @@ folders read from the live working tree, catalog vs check commit, artifact match
 - **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Local-folder provenance · **Size:** M · **Depends on:** 49.2
 - **Goal:** spec §1 `sourceRevision {commit, dirty}` for git local folders; read at committed HEAD unless `readWorkingTree: true`; case 3 passes.
 - **Result:** Le sorgenti `local-folder` in un repository git registrano `commit` (`HEAD`) e `dirty` (limitato al path dell'artefatto tramite `git status --porcelain -- <path>`) su `pkg.version` e `installation.sourceRevision`, leggono di default il contenuto dal commit `HEAD` (`git ls-tree`/`git cat-file` con mode preservati per le skill e `git show HEAD:<relpath>` per i file singoli), supportano l'opzione `readWorkingTree?: boolean` sul manifest per leggere il working tree riportando `dirty` nel `DriftReport`, e restituiscono `source-unavailable` con l'hint richiesto per gli artefatti untracked; il caso 3 in `src/engine/provenance.test.ts` è verde.
+

@@ -50,6 +50,7 @@ export interface SupportedInstallPlan {
   targetDir: string;
   projectRoot?: string;
   sourceRevision?: ResolvedRevision;
+  sourceContentHash?: string;
   conflict: boolean;
   existingFiles: ExistingFile[];
   proposedFiles: ProposedFile[];
@@ -64,6 +65,7 @@ export type PreparedInstall =
       plan: SupportedInstallPlan;
       content: CanonicalSkill;
       contentHash: string;
+      sourceContentHash?: string;
     }
   | {
       supported: true;
@@ -71,6 +73,7 @@ export type PreparedInstall =
       plan: SupportedInstallPlan;
       content: CanonicalAgent;
       contentHash: string;
+      sourceContentHash?: string;
     }
   | {
       supported: true;
@@ -78,6 +81,7 @@ export type PreparedInstall =
       plan: SupportedInstallPlan;
       content: CanonicalCommand;
       contentHash: string;
+      sourceContentHash?: string;
     }
   | {
       supported: true;
@@ -85,6 +89,7 @@ export type PreparedInstall =
       plan: SupportedInstallPlan;
       content: CanonicalMcpServer;
       contentHash: string;
+      sourceContentHash?: string;
     }
   | {
       supported: true;
@@ -92,6 +97,7 @@ export type PreparedInstall =
       plan: SupportedInstallPlan;
       content: CanonicalHook;
       contentHash: string;
+      sourceContentHash?: string;
     }
   | {
       supported: true;
@@ -99,6 +105,7 @@ export type PreparedInstall =
       plan: SupportedInstallPlan;
       content: CanonicalRule;
       contentHash: string;
+      sourceContentHash?: string;
     };
 
 export type ApplyOutcome =
@@ -122,6 +129,9 @@ export interface DriftReport {
   hasLocalPatch?: boolean;
   diskHash?: string;
   sourceHash?: string;
+  installedCommit?: string;
+  currentCommit?: string;
+  commitsBehind?: number;
   dirty?: boolean;
   reason?: string;
   details?: string;
@@ -151,4 +161,5 @@ export interface PlanInstallParams {
   projectRoot?: string;
   homeRoot?: string;
   resolverOpts?: { cacheDir?: string; homeRoot?: string };
+  skipGitRefresh?: boolean;
 }

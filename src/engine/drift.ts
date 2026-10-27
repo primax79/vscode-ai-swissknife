@@ -30,6 +30,7 @@ import { getAdapter, getAdapterWithHomeRoot } from '../adapters/registry';
 import { getSourceResolver } from '../sources/registry';
 import { isUntrackedArtifactError } from '../sources/localFolder';
 import { resolveAndTranslate } from './plan';
+import { describeRevisionGap } from './revisionGap';
 import type { DriftReport } from './types';
 import type { SourceResolution } from '../sources/types';
 
@@ -693,12 +694,65 @@ export async function checkForUpstreamUpdate(
   const foundArt = matchedArt.artifact;
   const conversionNote = matchedArt.conversionNote;
 
+  const cacheDir =
+    effectiveOpts && 'resolverOpts' in effectiveOpts
+      ? (effectiveOpts as CheckForUpstreamUpdateOptions).resolverOpts?.cacheDir
+      : undefined;
+
+  const installedCommit = installation.sourceRevision?.commit || undefined;
+  let currentCommit = foundPkg.version?.commit || undefined;
+  const isDirtyWorkingTree = Boolean(
+    source.type === 'local-folder' && source.readWorkingTree && foundPkg.version?.dirty
+  );
+  const isDirty = isDirtyWorkingTree || Boolean(installation.sourceRevision?.dirty);
+  const baselineSourceHash = installation.sourceContentHash ?? installation.contentHash;
+
+  let commitsBehind: number | undefined;
+  if (installedCommit && currentCommit) {
+    if (installedCommit === currentCommit) {
+      commitsBehind = 0;
+    } else {
+      try {
+        const gap = await describeRevisionGap(installation, source, {
+          cacheDir,
+          homeRoot: effectiveHomeRoot,
+          currentCommit,
+        });
+        if (gap.commitsBehind !== null && gap.commitsBehind !== undefined) {
+          commitsBehind = gap.commitsBehind;
+        }
+      } catch {
+        // ignore revision gap failure
+      }
+    }
+  }
+
+  // Spec §2 fast path: current source commit == sourceRevision.commit and not dirty -> no update, NO translation/hash of the source
+  if (
+    installedCommit &&
+    currentCommit &&
+    installedCommit === currentCommit &&
+    !isDirty &&
+    baselineSourceHash
+  ) {
+    return {
+      ...localReport,
+      sourceHash: baselineSourceHash,
+      installedCommit,
+      currentCommit,
+      ...(commitsBehind !== undefined ? { commitsBehind } : {}),
+      ...(conversionNote
+        ? {
+            details: localReport.details
+              ? `${localReport.details} (${conversionNote})`
+              : conversionNote,
+          }
+        : {}),
+    };
+  }
+
   let sourceHash: string | undefined;
   try {
-    const cacheDir =
-      effectiveOpts && 'resolverOpts' in effectiveOpts
-        ? (effectiveOpts as CheckForUpstreamUpdateOptions).resolverOpts?.cacheDir
-        : undefined;
     const result = await resolveAndTranslate(
       source,
       foundPkg,
@@ -706,6 +760,10 @@ export async function checkForUpstreamUpdate(
       installation.assistant,
       { cacheDir, homeRoot: effectiveHomeRoot }
     );
+
+    if (!currentCommit && foundPkg.version?.commit) {
+      currentCommit = foundPkg.version.commit;
+    }
 
     if (foundArt.kind === 'skill') {
       sourceHash = canonicalSkillHash(result.translated as CanonicalSkill);
@@ -727,18 +785,33 @@ export async function checkForUpstreamUpdate(
         status: 'source-unavailable',
         hasLocalPatch: localReport.hasLocalPatch,
         diskHash: localReport.diskHash,
+        ...(installedCommit ? { installedCommit } : {}),
+        ...(currentCommit ? { currentCommit } : {}),
+        ...(commitsBehind !== undefined ? { commitsBehind } : {}),
         details: err.message,
         hint: err.hint,
       };
     }
-    return localReport;
+    return {
+      ...localReport,
+      ...(installedCommit ? { installedCommit } : {}),
+      ...(currentCommit ? { currentCommit } : {}),
+      ...(commitsBehind !== undefined ? { commitsBehind } : {}),
+    };
   }
 
-  const isDirtyWorkingTree = Boolean(
+  const effectiveDirtyWorkingTree = Boolean(
     source.type === 'local-folder' && source.readWorkingTree && foundPkg.version?.dirty
   );
+  const effectiveDirty = effectiveDirtyWorkingTree || Boolean(installation.sourceRevision?.dirty);
 
-  if (sourceHash && installation.contentHash && sourceHash !== installation.contentHash) {
+  const commitFields = {
+    ...(installedCommit ? { installedCommit } : {}),
+    ...(currentCommit ? { currentCommit } : {}),
+    ...(commitsBehind !== undefined ? { commitsBehind } : {}),
+  };
+
+  if (sourceHash && baselineSourceHash && sourceHash !== baselineSourceHash) {
     if (localReport.status === 'modified-locally') {
       const baseDetails = localReport.hasLocalPatch
         ? 'Upstream source has a newer version and local adaptation patch is applied'
@@ -749,8 +822,9 @@ export async function checkForUpstreamUpdate(
         hasLocalPatch: localReport.hasLocalPatch,
         diskHash: localReport.diskHash,
         sourceHash,
-        ...(isDirtyWorkingTree ? { dirty: true } : {}),
-        details: withNotes(baseDetails, isDirtyWorkingTree, conversionNote),
+        ...commitFields,
+        ...(effectiveDirtyWorkingTree ? { dirty: true } : {}),
+        details: withNotes(baseDetails, effectiveDirtyWorkingTree, conversionNote),
       };
     }
     const baseDetails = 'A newer version is available from upstream source';
@@ -759,16 +833,17 @@ export async function checkForUpstreamUpdate(
       status: 'update-available',
       diskHash: localReport.diskHash,
       sourceHash,
-      ...(isDirtyWorkingTree ? { dirty: true } : {}),
-      details: withNotes(baseDetails, isDirtyWorkingTree, conversionNote),
+      ...commitFields,
+      ...(effectiveDirtyWorkingTree ? { dirty: true } : {}),
+      details: withNotes(baseDetails, effectiveDirtyWorkingTree, conversionNote),
     };
   }
 
-  const isDirty = isDirtyWorkingTree || Boolean(installation.sourceRevision?.dirty);
   return {
     ...localReport,
     sourceHash,
-    ...(isDirty ? { dirty: true } : {}),
+    ...commitFields,
+    ...(effectiveDirty ? { dirty: true } : {}),
     ...(conversionNote
       ? {
           details: localReport.details

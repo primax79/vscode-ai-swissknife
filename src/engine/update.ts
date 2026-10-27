@@ -218,7 +218,9 @@ export async function planUpdate(
     targetAdapter,
     targetScope: inst.scope,
     projectRoot: inst.scope === 'project' ? (inst.projectPath ?? options?.projectRoot) : undefined,
+    homeRoot: options?.homeRoot,
     resolverOpts: options?.resolverOpts,
+    skipGitRefresh: Boolean(resolution),
   });
 }
 
@@ -393,11 +395,12 @@ export async function planUpdateAll(params: PlanUpdateAllParams): Promise<PlanUp
       report.status === 'modified-locally' ||
       report.status === 'modified-and-update-available';
 
+    const baselineSourceHash = inst.sourceContentHash ?? inst.contentHash;
     const hasUpdate =
       report.status === 'update-available' ||
       report.status === 'modified-and-update-available' ||
       (report.status === 'modified-locally' &&
-        Boolean(report.sourceHash && report.sourceHash !== inst.contentHash));
+        Boolean(report.sourceHash && baselineSourceHash && report.sourceHash !== baselineSourceHash));
 
     if (!hasUpdate) {
       if (isModified) {
