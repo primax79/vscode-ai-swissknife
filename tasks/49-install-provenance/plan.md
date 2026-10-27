@@ -1,0 +1,44 @@
+# 49 — Install provenance and update detection — Implementation plan
+
+**Spec:** [`specs/install-provenance-and-update-detection.md`](../specs/install-provenance-and-update-detection.md)
+**Why:** freshly installed skills show Update everywhere; root causes in spec §0 (source identity by bare id, local
+folders read from the live working tree, catalog vs check commit, artifact match by name).
+**Depends on:** 13 (drift), 47.1 (update engine). Touches `src/domain/types.ts`, `src/engine/{drift,update,plan,apply,pendingCounts}.ts`,
+`src/sources/{gitProcess,gitMarketplace,gitCustom,localFolder}.ts`, `src/ui/{dashboard,installedView}.ts`, `src/cli/commands.ts`.
+
+## Tasks
+
+### 49.1 - Regression tests that reproduce the false Update
+
+- **Status:** `open` · **Short:** False Update tests · **Size:** M · **Depends on:** -
+- **Goal:** spec §6 cases 1-8 as tests on temp fixtures (git sources in temp repos, local-folder sources, two manifests with the same id); they fail on HEAD 41a4fb4 for the right reason (assert the failure message), marked expected-fail until the fixing task lands.
+
+### 49.2 - Source identity in the provenance record and in every lookup
+
+- **Status:** `open` · **Short:** Source identity · **Size:** L · **Depends on:** 49.1
+- **Goal:** spec §1 `source {id, scope, type, location}` written at install; one engine status function used by Dashboard, sidebar, pendingCounts and CLI (no UI-side merging, no first-id match); git cache keyed by id + location hash; spec §6 cases 1, 2 pass; CLI/UI parity test.
+
+### 49.3 - Exact artifact match
+
+- **Status:** `open` · **Short:** Exact artifact match · **Size:** S · **Depends on:** 49.2
+- **Goal:** spec §3.5 in `checkForUpstreamUpdate` and `planUpdate`; name fallback removed, replaced by `source-unavailable` with a same-name hint; case 6 passes.
+
+### 49.4 - Commit provenance for local-folder sources; committed HEAD by default
+
+- **Status:** `open` · **Short:** Local-folder provenance · **Size:** M · **Depends on:** 49.2
+- **Goal:** spec §1 `sourceRevision {commit, dirty}` for git local folders; read at committed HEAD unless `readWorkingTree: true`; case 3 passes.
+
+### 49.5 - Status from commits, then content; sourceContentHash
+
+- **Status:** `open` · **Short:** Commit-based status · **Size:** M · **Depends on:** 49.2, 49.4
+- **Goal:** spec §2: fast path on unchanged commit, translated-content comparison only when the commit moved; `sourceContentHash` recorded; install resolves at install time (spec §3.4); cases 4, 5, 7 pass.
+
+### 49.6 - Migration of existing state
+
+- **Status:** `open` · **Short:** State migration · **Size:** M · **Depends on:** 49.2, 49.5
+- **Goal:** spec §5 with backup of the old state file; `provenance-unknown` + re-link / reinstall actions; case 8 passes; verified on a copy of the real `~/.ai-swissknife/state.json`.
+
+### 49.7 - Explain the state in UI and CLI
+
+- **Status:** `open` · **Short:** Explain state · **Size:** S · **Depends on:** 49.5
+- **Goal:** spec §4: tooltip/detail panel and `status --explain` show source, installed and current commit, both hashes, state and reason; owner validates by use (fresh install shows up to date; an edit in the working copy no longer flips items).
