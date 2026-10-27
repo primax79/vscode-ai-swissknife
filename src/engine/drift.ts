@@ -1,7 +1,10 @@
+import * as child_process from 'child_process';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import {
   toInstallationSourceIdentity,
+  type AssistantId,
   type ManagedInstallation,
   type ResolvedRevision,
   type Source,
@@ -10,6 +13,7 @@ import {
 } from '../domain/types';
 import type {
   CanonicalSkill,
+  CanonicalSkillFile,
   CanonicalAgent,
   CanonicalCommand,
   CanonicalMcpServer,
@@ -25,11 +29,22 @@ import {
   canonicalRuleHash,
   readSkill,
 } from '../adapters/codec';
-import { parseClaudeAgentMarkdown, parseClaudeCommandMarkdown } from '../adapters/claude';
+import {
+  parseSkillMarkdown,
+  parseClaudeAgentMarkdown,
+  parseClaudeCommandMarkdown,
+} from '../adapters/claude';
 import { parseKiloAgentMarkdown, parseKiloCommandMarkdown } from '../adapters/kilo';
 import { getAdapter, getAdapterWithHomeRoot } from '../adapters/registry';
 import { getSourceResolver } from '../sources/registry';
 import { isUntrackedArtifactError } from '../sources/localFolder';
+import { runGit, resolveAndValidateCacheDir } from '../sources/gitProcess';
+import { translateSkill } from '../translator/skill';
+import { translateAgent } from '../translator/agent';
+import { translateCommand } from '../translator/command';
+import { translateMcpServer } from '../translator/mcp';
+import { translateHook } from '../translator/hook';
+import { translateRule } from '../translator/rule';
 import { resolveAndTranslate } from './plan';
 import { describeRevisionGap } from './revisionGap';
 import type { DriftReport } from './types';
@@ -56,6 +71,7 @@ export type ProvenanceUnknownReason =
   | 'source-not-in-manifest'
   | 'needs-fetch'
   | 'artifact-not-in-source'
+  | 'ambiguous-source'
   | 'hash-mismatch'
   | 'ambiguous-sources-hash-mismatch'
   | 'ambiguous-multiple-matches';
@@ -64,13 +80,15 @@ export interface ProvenanceCandidateMatch {
   source: Source;
   pkg: Package;
   artifact: Artifact;
-  sourceHash: string;
+  sourceHash?: string;
   revision?: ResolvedRevision;
+  sourceContentHash?: string;
 }
 
 export type ProvenanceEvaluationResult =
   | {
       outcome: 'adopted';
+      adoptionMode: 'adopted-with-commit' | 'adopted-source-only';
       match: ProvenanceCandidateMatch;
     }
   | {
@@ -968,12 +986,611 @@ function computeCanonicalHash(kind: Artifact['kind'], translated: unknown): stri
   }
 }
 
+const MAX_HISTORY_COMMITS = 200;
+
+export interface ProvenanceHistoryCaches {
+  blobCache: Map<string, Buffer>;
+  gitLogCache: Map<string, string[]>;
+  gitCtxCache: Map<string, { repoPrefix: string; headCommit: string } | null>;
+  rawArtifactAtCommitCache: Map<
+    string,
+    CanonicalSkill | CanonicalAgent | CanonicalCommand | CanonicalMcpServer | CanonicalHook | CanonicalRule
+  >;
+  translationHashCache: Map<string, string>;
+}
+
+export function createProvenanceHistoryCaches(): ProvenanceHistoryCaches {
+  return {
+    blobCache: new Map(),
+    gitLogCache: new Map(),
+    gitCtxCache: new Map(),
+    rawArtifactAtCommitCache: new Map(),
+    translationHashCache: new Map(),
+  };
+}
+
+function isIgnoredHistorySkillSegment(name: string): boolean {
+  return (
+    name === '.git' ||
+    name === 'node_modules' ||
+    name === 'index.json' ||
+    name === 'local.patch' ||
+    name.endsWith('.patch') ||
+    name === '.DS_Store' ||
+    name === 'Thumbs.db'
+  );
+}
+
+function isValidHistorySkillRelativePath(p: string): boolean {
+  if (!p || p === '.' || p === 'SKILL.md') return false;
+  if (path.isAbsolute(p)) return false;
+  if (p.includes('\0')) return false;
+  for (const seg of p.split('/')) {
+    if (seg === '..') return false;
+  }
+  const resolved = path.posix.resolve('/root', p);
+  return resolved.startsWith('/root/') && resolved !== '/root/SKILL.md' && resolved !== '/root';
+}
+
+function readGitBlobBuffer(
+  repoDir: string,
+  blobSha: string,
+  blobCache: Map<string, Buffer>
+): Promise<Buffer> {
+  const key = `${repoDir}::${blobSha}`;
+  const cached = blobCache.get(key);
+  if (cached) {
+    return Promise.resolve(cached);
+  }
+  return new Promise((resolve, reject) => {
+    child_process.execFile(
+      'git',
+      ['cat-file', 'blob', blobSha],
+      {
+        cwd: repoDir,
+        encoding: 'buffer',
+        maxBuffer: 50 * 1024 * 1024,
+        timeout: 30_000,
+      },
+      (err, stdout) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        blobCache.set(key, stdout);
+        resolve(stdout);
+      }
+    );
+  });
+}
+
+async function resolveGitHistoryPathAndRepo(
+  source: Source,
+  pkg: Package,
+  artifact: Artifact,
+  options: {
+    homeRoot?: string;
+    cacheDir?: string;
+    gitCtxCache: Map<string, { repoPrefix: string; headCommit: string } | null>;
+  }
+): Promise<{ repoDir: string; repoRelPath: string; logPathSpec: string } | null> {
+  const prefix = `${source.id}:`;
+  const pathId = pkg.id.startsWith(prefix) ? pkg.id.slice(prefix.length) : '';
+
+  if (source.type === 'local-folder') {
+    if (!source.localPath || !fs.existsSync(source.localPath)) {
+      return null;
+    }
+    const resolvedLocal = path.resolve(source.localPath);
+    let gitCtx = options.gitCtxCache.get(resolvedLocal);
+    if (gitCtx === undefined) {
+      try {
+        const { stdout: prefixOut } = await runGit(
+          ['rev-parse', '--show-prefix'],
+          resolvedLocal
+        );
+        const { stdout: headOut } = await runGit(['rev-parse', 'HEAD'], resolvedLocal);
+        gitCtx = {
+          repoPrefix: prefixOut.replace(/\r?\n$/, ''),
+          headCommit: headOut.trim(),
+        };
+      } catch {
+        gitCtx = null;
+      }
+      options.gitCtxCache.set(resolvedLocal, gitCtx);
+    }
+    if (!gitCtx) {
+      return null;
+    }
+
+    let relFromSource = '';
+    if (artifact.path) {
+      const absArt = path.isAbsolute(artifact.path)
+        ? artifact.path
+        : path.join(resolvedLocal, artifact.path);
+      relFromSource = path
+        .relative(resolvedLocal, path.resolve(absArt))
+        .split(path.sep)
+        .join('/');
+      if (artifact.kind === 'skill' && relFromSource.endsWith('/SKILL.md')) {
+        relFromSource = relFromSource.slice(0, -'/SKILL.md'.length);
+      } else if (artifact.kind === 'skill' && relFromSource === 'SKILL.md') {
+        relFromSource = '';
+      }
+    } else if (artifact.kind === 'mcp-server') {
+      relFromSource = pathId.split(':')[0];
+    } else if (artifact.kind === 'skill') {
+      if (pathId && fs.existsSync(path.join(resolvedLocal, pathId, 'SKILL.md'))) {
+        relFromSource = pathId === '.' ? '' : pathId;
+      } else {
+        relFromSource = '';
+      }
+    } else {
+      relFromSource = pathId;
+    }
+
+    if (relFromSource === '.') {
+      relFromSource = '';
+    }
+    const repoRelPath =
+      relFromSource === ''
+        ? gitCtx.repoPrefix.replace(/\/$/, '')
+        : `${gitCtx.repoPrefix}${relFromSource}`;
+    const logPathSpec = relFromSource === '' ? '.' : relFromSource;
+
+    return {
+      repoDir: resolvedLocal,
+      repoRelPath,
+      logPathSpec,
+    };
+  }
+
+  if (
+    source.type === 'git-custom' ||
+    source.type === 'git-marketplace' ||
+    source.type === 'git-single-item'
+  ) {
+    const baseCacheDir =
+      options.cacheDir ??
+      path.join(options.homeRoot ?? os.homedir(), '.ai-swissknife', 'cache', 'sources');
+    const { targetDir } = resolveAndValidateCacheDir(baseCacheDir, source.id, source.url);
+    if (!fs.existsSync(path.join(targetDir, '.git'))) {
+      return null;
+    }
+    const resolvedTarget = path.resolve(targetDir);
+
+    if (source.type === 'git-single-item') {
+      return {
+        repoDir: resolvedTarget,
+        repoRelPath: '',
+        logPathSpec: '.',
+      };
+    }
+
+    let repoRelPath = '';
+    if (artifact.path) {
+      const absArt = path.isAbsolute(artifact.path)
+        ? artifact.path
+        : path.join(resolvedTarget, artifact.path);
+      const rel = path
+        .relative(resolvedTarget, path.resolve(absArt))
+        .split(path.sep)
+        .join('/');
+      if (!rel.startsWith('..')) {
+        repoRelPath = rel;
+        if (artifact.kind === 'skill' && repoRelPath.endsWith('/SKILL.md')) {
+          repoRelPath = repoRelPath.slice(0, -'/SKILL.md'.length);
+        } else if (artifact.kind === 'skill' && repoRelPath === 'SKILL.md') {
+          repoRelPath = '';
+        }
+      }
+    }
+
+    if (!repoRelPath) {
+      if (source.type === 'git-marketplace') {
+        const pluginCandidates = pathId
+          ? [
+              `plugins/${pathId}`,
+              pathId,
+              '.',
+            ]
+          : ['.'];
+        for (const pRoot of pluginCandidates) {
+          const base = pRoot === '.' ? '' : `${pRoot}/`;
+          if (artifact.kind === 'skill') {
+            for (const cand of [`${base}skills/${artifact.name}`, `${base}${artifact.name}`]) {
+              if (fs.existsSync(path.join(resolvedTarget, cand, 'SKILL.md'))) {
+                repoRelPath = cand;
+                break;
+              }
+            }
+          } else if (artifact.kind === 'agent') {
+            for (const cand of [`${base}agents/${artifact.name}.md`, `${base}${artifact.name}.md`]) {
+              if (fs.existsSync(path.join(resolvedTarget, cand))) {
+                repoRelPath = cand;
+                break;
+              }
+            }
+          } else if (artifact.kind === 'command') {
+            for (const cand of [
+              `${base}commands/${artifact.name}.md`,
+              `${base}command/${artifact.name}.md`,
+              `${base}${artifact.name}.md`,
+            ]) {
+              if (fs.existsSync(path.join(resolvedTarget, cand))) {
+                repoRelPath = cand;
+                break;
+              }
+            }
+          } else if (artifact.kind === 'mcp-server') {
+            for (const cand of [`${base}.mcp.json`, `${base}mcp.json`]) {
+              if (fs.existsSync(path.join(resolvedTarget, cand))) {
+                repoRelPath = cand;
+                break;
+              }
+            }
+          }
+          if (repoRelPath) break;
+        }
+      } else {
+        if (artifact.kind === 'skill') {
+          if (pathId && fs.existsSync(path.join(resolvedTarget, pathId, 'SKILL.md'))) {
+            repoRelPath = pathId === '.' ? '' : pathId;
+          } else if (fs.existsSync(path.join(resolvedTarget, 'skills', artifact.name, 'SKILL.md'))) {
+            repoRelPath = `skills/${artifact.name}`;
+          } else {
+            repoRelPath = '';
+          }
+        } else if (artifact.kind === 'mcp-server') {
+          repoRelPath = pathId.split(':')[0];
+        } else {
+          repoRelPath = pathId;
+        }
+      }
+    }
+
+    if (repoRelPath === '.') {
+      repoRelPath = '';
+    }
+    return {
+      repoDir: resolvedTarget,
+      repoRelPath,
+      logPathSpec: repoRelPath === '' ? '.' : repoRelPath,
+    };
+  }
+
+  return null;
+}
+
+async function readCanonicalArtifactAtCommit(
+  repoDir: string,
+  repoRelPath: string,
+  commit: string,
+  artifact: Artifact,
+  caches: ProvenanceHistoryCaches
+): Promise<
+  CanonicalSkill | CanonicalAgent | CanonicalCommand | CanonicalMcpServer | CanonicalHook | CanonicalRule
+> {
+  const rawKey = `${repoDir}::${commit}::${artifact.kind}::${repoRelPath}::${artifact.name}`;
+  const cachedRaw = caches.rawArtifactAtCommitCache.get(rawKey);
+  if (cachedRaw) {
+    return cachedRaw;
+  }
+
+  if (artifact.kind === 'skill') {
+    const treeSpec = repoRelPath ? `${commit}:${repoRelPath}` : commit;
+    const { stdout: lsOut } = await runGit(
+      ['ls-tree', '--full-tree', '-r', '-z', treeSpec],
+      repoDir
+    );
+    const entries = lsOut.split('\0').filter((e) => e.length > 0);
+    let skillMdBlobSha: string | undefined;
+    const fileEntries: Array<{ relPath: string; blobSha: string; mode: number }> = [];
+
+    for (const entry of entries) {
+      const match = entry.match(/^([0-7]+) (\w+) ([0-9a-f]{40})\t([\s\S]+)$/);
+      if (!match) continue;
+      const [, modeStr, objType, blobSha, relPath] = match;
+      const segments = relPath.split('/');
+      if (segments.some(isIgnoredHistorySkillSegment)) {
+        continue;
+      }
+      if (modeStr === '120000' || objType !== 'blob') {
+        throw new Error(`Unsupported file type at ${relPath}`);
+      }
+      if (relPath === 'SKILL.md') {
+        skillMdBlobSha = blobSha;
+        continue;
+      }
+      if (!isValidHistorySkillRelativePath(relPath)) {
+        throw new Error(`Invalid path: ${relPath}`);
+      }
+      fileEntries.push({
+        relPath,
+        blobSha,
+        mode: parseInt(modeStr, 8),
+      });
+    }
+
+    if (!skillMdBlobSha) {
+      throw new Error(`SKILL.md not found in ${treeSpec}`);
+    }
+
+    const skillMdBuf = await readGitBlobBuffer(repoDir, skillMdBlobSha, caches.blobCache);
+    const doc = parseSkillMarkdown(skillMdBuf.toString('utf-8'));
+
+    const files: CanonicalSkillFile[] = [];
+    const seenPaths = new Set<string>();
+    for (const f of fileEntries) {
+      const norm = path.posix.normalize(f.relPath);
+      if (seenPaths.has(norm)) {
+        throw new Error(`Duplicate normalized path: ${norm}`);
+      }
+      seenPaths.add(norm);
+      const buf = await readGitBlobBuffer(repoDir, f.blobSha, caches.blobCache);
+      files.push({
+        path: f.relPath,
+        content: buf,
+        mode: f.mode,
+      });
+    }
+
+    const skill: CanonicalSkill = {
+      ...doc,
+      files,
+    };
+    caches.rawArtifactAtCommitCache.set(rawKey, skill);
+    return skill;
+  }
+
+  const objectSpec = `${commit}:${repoRelPath}`;
+  const { stdout: rawContent } = await runGit(['show', objectSpec], repoDir);
+
+  if (artifact.kind === 'agent') {
+    const agent = parseClaudeAgentMarkdown(rawContent);
+    caches.rawArtifactAtCommitCache.set(rawKey, agent);
+    return agent;
+  }
+
+  if (artifact.kind === 'command') {
+    const command = parseClaudeCommandMarkdown(rawContent, artifact.name);
+    caches.rawArtifactAtCommitCache.set(rawKey, command);
+    return command;
+  }
+
+  if (artifact.kind === 'mcp-server') {
+    const parsed = JSON.parse(rawContent);
+    const serverConfig = (parsed.mcpServers?.[artifact.name] ??
+      parsed.mcp?.[artifact.name] ??
+      (parsed.command || parsed.url ? parsed : {})) as Record<string, unknown>;
+    const extraFields: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(serverConfig)) {
+      if (!['id', 'type', 'command', 'args', 'url', 'env', 'headers'].includes(k)) {
+        extraFields[k] = v;
+      }
+    }
+    const mcp: CanonicalMcpServer = {
+      id: artifact.name,
+      type:
+        (serverConfig.type as 'stdio' | 'http' | 'sse') ??
+        (serverConfig.command ? 'stdio' : 'sse'),
+      ...(serverConfig.command ? { command: String(serverConfig.command) } : {}),
+      ...(Array.isArray(serverConfig.args) ? { args: serverConfig.args.map(String) } : {}),
+      ...(serverConfig.url ? { url: String(serverConfig.url) } : {}),
+      ...(serverConfig.env ? { env: serverConfig.env as Record<string, string> } : {}),
+      ...(serverConfig.headers
+        ? { headers: serverConfig.headers as Record<string, string> }
+        : {}),
+      extraFields,
+    };
+    caches.rawArtifactAtCommitCache.set(rawKey, mcp);
+    return mcp;
+  }
+
+  if (artifact.kind === 'hook') {
+    const parsed = JSON.parse(rawContent);
+    const hook: CanonicalHook = {
+      name: artifact.name,
+      event: parsed.event ?? 'PreToolUse',
+      command: parsed.command ?? '',
+      timeout: parsed.timeout,
+      extraFields: { ...parsed },
+    };
+    caches.rawArtifactAtCommitCache.set(rawKey, hook);
+    return hook;
+  }
+
+  const rule: CanonicalRule = {
+    name: artifact.name,
+    content: rawContent,
+  };
+  caches.rawArtifactAtCommitCache.set(rawKey, rule);
+  return rule;
+}
+
+function translateCanonicalArtifactForAssistant(
+  kind: Artifact['kind'],
+  rawContent:
+    | CanonicalSkill
+    | CanonicalAgent
+    | CanonicalCommand
+    | CanonicalMcpServer
+    | CanonicalHook
+    | CanonicalRule,
+  assistant: AssistantId
+): unknown {
+  switch (kind) {
+    case 'skill': {
+      const tr = translateSkill(rawContent as CanonicalSkill, assistant);
+      if (tr.overall === 'unsupported') throw new Error('Unsupported translation');
+      return tr.value;
+    }
+    case 'agent': {
+      const tr = translateAgent(rawContent as CanonicalAgent, assistant);
+      if (tr.overall === 'unsupported') throw new Error('Unsupported translation');
+      return tr.value;
+    }
+    case 'command': {
+      const tr = translateCommand(rawContent as CanonicalCommand, assistant);
+      if (tr.overall === 'unsupported') throw new Error('Unsupported translation');
+      return tr.value;
+    }
+    case 'mcp-server': {
+      const tr = translateMcpServer(rawContent as CanonicalMcpServer, assistant);
+      if (tr.overall === 'unsupported') throw new Error('Unsupported translation');
+      return tr.value;
+    }
+    case 'hook': {
+      const tr = translateHook(rawContent as CanonicalHook, assistant);
+      if (tr.overall === 'unsupported') throw new Error('Unsupported translation');
+      return tr.value;
+    }
+    case 'rule': {
+      const tr = translateRule(rawContent as CanonicalRule, assistant);
+      if (tr.overall === 'unsupported') throw new Error('Unsupported translation');
+      return tr.value;
+    }
+  }
+}
+
+async function hashArtifactAtCommit(
+  sourceKey: string,
+  repoDir: string,
+  repoRelPath: string,
+  commit: string,
+  artifact: Artifact,
+  assistant: AssistantId,
+  caches: ProvenanceHistoryCaches
+): Promise<string> {
+  const cacheKey = `${sourceKey}::${commit}::${artifact.id}::${assistant}`;
+  const cached = caches.translationHashCache.get(cacheKey);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const raw = await readCanonicalArtifactAtCommit(
+    repoDir,
+    repoRelPath,
+    commit,
+    artifact,
+    caches
+  );
+  const translated = translateCanonicalArtifactForAssistant(artifact.kind, raw, assistant);
+  const hash = computeCanonicalHash(artifact.kind, translated);
+  caches.translationHashCache.set(cacheKey, hash);
+  return hash;
+}
+
+async function findInstallCommitInHistory(
+  source: Source,
+  effectiveCandidate: Source,
+  pkg: Package,
+  artifact: Artifact,
+  installation: ManagedInstallation,
+  options: {
+    homeRoot?: string;
+    cacheDir?: string;
+    caches: ProvenanceHistoryCaches;
+  }
+): Promise<{ matchedHash: boolean; commit?: string; sourceHash?: string }> {
+  if (!installation.contentHash) {
+    return { matchedHash: false };
+  }
+
+  const sourceKey = sourceResolutionKey(effectiveCandidate);
+  const gitInfo = await resolveGitHistoryPathAndRepo(
+    effectiveCandidate,
+    pkg,
+    artifact,
+    {
+      homeRoot: options.homeRoot,
+      cacheDir: options.cacheDir,
+      gitCtxCache: options.caches.gitCtxCache,
+    }
+  );
+
+  if (!gitInfo) {
+    // Non-git source (e.g. plain local-folder): compare against current content hash
+    const hashKey = `${sourceKey}::CURRENT::${pkg.id}::${artifact.id}::${installation.assistant}`;
+    let currentHash = options.caches.translationHashCache.get(hashKey);
+    if (currentHash === undefined) {
+      const { translated } = await resolveAndTranslate(
+        effectiveCandidate,
+        pkg,
+        artifact,
+        installation.assistant,
+        {
+          homeRoot: options.homeRoot,
+          cacheDir: options.cacheDir,
+        }
+      );
+      currentHash = computeCanonicalHash(artifact.kind, translated);
+      options.caches.translationHashCache.set(hashKey, currentHash);
+    }
+    return {
+      matchedHash: currentHash === installation.contentHash,
+      commit: pkg.version?.commit,
+      sourceHash: currentHash,
+    };
+  }
+
+  const logKey = `${gitInfo.repoDir}::${gitInfo.logPathSpec}`;
+  let commits = options.caches.gitLogCache.get(logKey);
+  if (!commits) {
+    try {
+      const { stdout } = await runGit(
+        ['log', '--format=%H', '-n', String(MAX_HISTORY_COMMITS), '--', gitInfo.logPathSpec],
+        gitInfo.repoDir
+      );
+      commits = stdout
+        .trim()
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+    } catch {
+      commits = [];
+    }
+    if (commits.length === 0 && pkg.version?.commit) {
+      commits = [pkg.version.commit];
+    }
+    options.caches.gitLogCache.set(logKey, commits);
+  }
+
+  for (const commit of commits.slice(0, MAX_HISTORY_COMMITS)) {
+    try {
+      const h = await hashArtifactAtCommit(
+        sourceKey,
+        gitInfo.repoDir,
+        gitInfo.repoRelPath,
+        commit,
+        artifact,
+        installation.assistant,
+        options.caches
+      );
+      if (h === installation.contentHash) {
+        return {
+          matchedHash: true,
+          commit,
+          sourceHash: h,
+        };
+      }
+    } catch {
+      // Artifact may not exist or be valid at an older rename/commit; continue walking history
+    }
+  }
+
+  return { matchedHash: false };
+}
+
 /**
- * Evaluates candidate sources for a legacy installation that lacks `installation.source`.
- * Adopts a candidate ONLY if it is the ONLY one whose current artifact (exact `artifactId`,
- * deterministic 49.3 id-shape conversion, or unambiguous `kind + name`) hashes to
- * `installation.contentHash` at a reachable commit (cached clone HEAD or source HEAD;
- * for git local folders, committed HEAD).
+ * Evaluates candidate sources for a legacy installation that lacks `installation.source`:
+ * 1. Single candidate containing the artifact (exact `artifactId` or 49.3 id-shape conversion):
+ *    adopts that source identity even if the current content hash differs, then walks up to 200
+ *    git commits of the artifact to recover `sourceRevision.commit` and `sourceContentHash`
+ *    (leaving them unset when not found so normal content comparison reports `update-available`).
+ * 2. Multiple candidates (same `sourceId` in both scopes): adopts the unique candidate whose
+ *    git history (or current content) contains `installation.contentHash`; if both or neither
+ *    match, returns `provenance-unknown` with `reason: 'ambiguous-source'` and both candidates in `hint`.
+ * 3. `source-not-in-manifest` and `artifact-not-in-source` remain `provenance-unknown`.
  */
 export async function evaluateProvenanceCandidates(
   installation: ManagedInstallation,
@@ -984,6 +1601,7 @@ export async function evaluateProvenanceCandidates(
     offline?: boolean;
     preResolved?: Map<string, { resolution?: SourceResolution; error?: Error }>;
     hashCache?: Map<string, string>;
+    historyCaches?: ProvenanceHistoryCaches;
   }
 ): Promise<ProvenanceEvaluationResult> {
   if (!installation.sourceId) {
@@ -991,14 +1609,6 @@ export async function evaluateProvenanceCandidates(
       outcome: 'unknown',
       reason: 'no-source-id',
       details: `No sourceId recorded for "${installation.name}" — re-link to a source or reinstall.`,
-    };
-  }
-
-  if (!installation.contentHash) {
-    return {
-      outcome: 'unknown',
-      reason: 'no-content-hash',
-      details: `No contentHash recorded for "${installation.name}" — re-link to a source or reinstall.`,
     };
   }
 
@@ -1013,11 +1623,18 @@ export async function evaluateProvenanceCandidates(
 
   const preResolved =
     options?.preResolved ?? new Map<string, { resolution?: SourceResolution; error?: Error }>();
-  const hashCache = options?.hashCache ?? new Map<string, string>();
+  const caches = options?.historyCaches ?? createProvenanceHistoryCaches();
+  if (options?.hashCache) {
+    caches.translationHashCache = options.hashCache;
+  }
 
   let needsFetch = false;
-  let artifactFoundCount = 0;
-  const matchingCandidates: ProvenanceCandidateMatch[] = [];
+  const candidatesWithArtifact: Array<{
+    source: Source;
+    effectiveCandidate: Source;
+    pkg: Package;
+    artifact: Artifact;
+  }> = [];
 
   for (const candidate of candidates) {
     const effectiveCandidate: Source =
@@ -1058,39 +1675,12 @@ export async function evaluateProvenanceCandidates(
       continue;
     }
 
-    artifactFoundCount++;
-
-    const hashKey = `${key}::${matched.pkg.id}::${matched.artifact.id}::${installation.assistant}`;
-    let sourceHash = hashCache.get(hashKey);
-    if (sourceHash === undefined) {
-      try {
-        const { translated } = await resolveAndTranslate(
-          effectiveCandidate,
-          matched.pkg,
-          matched.artifact,
-          installation.assistant,
-          {
-            homeRoot: options?.homeRoot,
-            cacheDir: options?.cacheDir,
-          }
-        );
-        sourceHash = computeCanonicalHash(matched.artifact.kind, translated);
-        hashCache.set(hashKey, sourceHash);
-      } catch {
-        needsFetch = true;
-        continue;
-      }
-    }
-
-    if (sourceHash === installation.contentHash) {
-      matchingCandidates.push({
-        source: candidate,
-        pkg: matched.pkg,
-        artifact: matched.artifact,
-        sourceHash,
-        revision: matched.pkg.version,
-      });
-    }
+    candidatesWithArtifact.push({
+      source: candidate,
+      effectiveCandidate,
+      pkg: matched.pkg,
+      artifact: matched.artifact,
+    });
   }
 
   if (needsFetch) {
@@ -1102,22 +1692,7 @@ export async function evaluateProvenanceCandidates(
     };
   }
 
-  if (matchingCandidates.length === 1) {
-    return {
-      outcome: 'adopted',
-      match: matchingCandidates[0],
-    };
-  }
-
-  if (matchingCandidates.length > 1) {
-    return {
-      outcome: 'unknown',
-      reason: 'ambiguous-multiple-matches',
-      details: `Multiple registered sources with id "${installation.sourceId}" match "${installation.name}" — re-link to a source or reinstall.`,
-    };
-  }
-
-  if (artifactFoundCount === 0) {
+  if (candidatesWithArtifact.length === 0) {
     return {
       outcome: 'unknown',
       reason: 'artifact-not-in-source',
@@ -1125,12 +1700,153 @@ export async function evaluateProvenanceCandidates(
     };
   }
 
-  const reason: ProvenanceUnknownReason =
-    candidates.length > 1 ? 'ambiguous-sources-hash-mismatch' : 'hash-mismatch';
+  // Case 1: Single candidate source with that sourceId across both scopes, and it contains the artifact
+  if (candidates.length === 1 && candidatesWithArtifact.length === 1) {
+    const single = candidatesWithArtifact[0];
+    const historyRes = await findInstallCommitInHistory(
+      single.source,
+      single.effectiveCandidate,
+      single.pkg,
+      single.artifact,
+      installation,
+      {
+        homeRoot: options?.homeRoot,
+        cacheDir: options?.cacheDir,
+        caches,
+      }
+    );
+
+    if (historyRes.matchedHash && historyRes.commit) {
+      return {
+        outcome: 'adopted',
+        adoptionMode: 'adopted-with-commit',
+        match: {
+          source: single.source,
+          pkg: single.pkg,
+          artifact: single.artifact,
+          sourceHash: historyRes.sourceHash,
+          revision: {
+            commit: historyRes.commit,
+            ...(single.pkg.version?.requestedRef
+              ? { requestedRef: single.pkg.version.requestedRef }
+              : {}),
+          },
+          sourceContentHash: installation.contentHash,
+        },
+      };
+    }
+
+    if (historyRes.matchedHash && !historyRes.commit) {
+      return {
+        outcome: 'adopted',
+        adoptionMode: 'adopted-source-only',
+        match: {
+          source: single.source,
+          pkg: single.pkg,
+          artifact: single.artifact,
+          sourceHash: historyRes.sourceHash,
+          revision: undefined,
+          sourceContentHash: installation.contentHash,
+        },
+      };
+    }
+
+    // Single candidate whose current content and 200-commit history do not match contentHash:
+    // adopt source identity, leave sourceRevision empty and sourceContentHash unset.
+    return {
+      outcome: 'adopted',
+      adoptionMode: 'adopted-source-only',
+      match: {
+        source: single.source,
+        pkg: single.pkg,
+        artifact: single.artifact,
+        revision: undefined,
+        sourceContentHash: undefined,
+      },
+    };
+  }
+
+  // Case 2: Multiple candidates with the same sourceId in both scopes
+  const formatCandidatesHint = (cands: Source[]): string => {
+    const labels = cands.map((c) => {
+      const sc = c.scope === 'project' ? 'workspace' : 'global';
+      const loc = c.type === 'local-folder' ? (c.localPath ?? '') : (c.url ?? '');
+      return `${sc}:${c.id} (${loc})`;
+    });
+    return `candidates: ${labels.join(', ')}`;
+  };
+
+  if (!installation.contentHash) {
+    const hint = formatCandidatesHint(candidates);
+    return {
+      outcome: 'unknown',
+      reason: 'ambiguous-source',
+      hint,
+      details: `Ambiguous source "${installation.sourceId}" for "${installation.name}" (${hint}) — re-link to a source or reinstall.`,
+    };
+  }
+
+  const historyMatches: Array<{
+    source: Source;
+    pkg: Package;
+    artifact: Artifact;
+    commit?: string;
+    sourceHash?: string;
+  }> = [];
+
+  for (const cand of candidatesWithArtifact) {
+    const historyRes = await findInstallCommitInHistory(
+      cand.source,
+      cand.effectiveCandidate,
+      cand.pkg,
+      cand.artifact,
+      installation,
+      {
+        homeRoot: options?.homeRoot,
+        cacheDir: options?.cacheDir,
+        caches,
+      }
+    );
+    if (historyRes.matchedHash) {
+      historyMatches.push({
+        source: cand.source,
+        pkg: cand.pkg,
+        artifact: cand.artifact,
+        commit: historyRes.commit,
+        sourceHash: historyRes.sourceHash,
+      });
+    }
+  }
+
+  if (historyMatches.length === 1) {
+    const winner = historyMatches[0];
+    return {
+      outcome: 'adopted',
+      adoptionMode: winner.commit ? 'adopted-with-commit' : 'adopted-source-only',
+      match: {
+        source: winner.source,
+        pkg: winner.pkg,
+        artifact: winner.artifact,
+        sourceHash: winner.sourceHash,
+        revision: winner.commit
+          ? {
+              commit: winner.commit,
+              ...(winner.pkg.version?.requestedRef
+                ? { requestedRef: winner.pkg.version.requestedRef }
+                : {}),
+            }
+          : undefined,
+        sourceContentHash: installation.contentHash,
+      },
+    };
+  }
+
+  const hint = formatCandidatesHint(candidates);
   return {
     outcome: 'unknown',
-    reason,
-    details: `Installed content hash of "${installation.name}" does not match current HEAD of source "${installation.sourceId}" — re-link to a source or reinstall.`,
+    reason: 'ambiguous-source',
+    hint,
+    details: `Ambiguous source "${installation.sourceId}" for "${installation.name}" (${hint}) — re-link to a source or reinstall.`,
   };
 }
 
@@ -1144,7 +1860,7 @@ export function applyProvenanceEvaluation(
   homeRoot?: string
 ): boolean {
   if (evalResult.outcome === 'adopted') {
-    const { source, pkg, artifact, revision } = evalResult.match;
+    const { source, pkg, artifact, revision, sourceContentHash } = evalResult.match;
     inst.source = toInstallationSourceIdentity(source, homeRoot);
     inst.sourceId = source.id;
     inst.packageId = pkg.id;
@@ -1154,8 +1870,14 @@ export function applyProvenanceEvaluation(
         commit: revision.commit,
         ...(revision.requestedRef ? { requestedRef: revision.requestedRef } : {}),
       };
+    } else {
+      delete inst.sourceRevision;
     }
-    inst.sourceContentHash = inst.contentHash;
+    if (sourceContentHash !== undefined) {
+      inst.sourceContentHash = sourceContentHash;
+    } else {
+      delete inst.sourceContentHash;
+    }
     delete inst.provenance;
     delete inst.provenanceReason;
     delete inst.provenanceHint;
@@ -1276,7 +1998,7 @@ export async function checkDriftForAll(
 
   await Promise.all(workers);
 
-  const hashCache = new Map<string, string>();
+  const historyCaches = createProvenanceHistoryCaches();
 
   // 3. Check drift for each installation
   const reports = await Promise.all(
@@ -1329,7 +2051,7 @@ export async function checkDriftForAll(
             cacheDir: opts?.resolverOpts?.cacheDir,
             offline: false,
             preResolved: resolutions,
-            hashCache,
+            historyCaches,
           });
           applyProvenanceEvaluation(inst, evalResult, homeRoot);
           if (evalResult.outcome === 'adopted') {

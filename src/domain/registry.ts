@@ -14,6 +14,7 @@ import {
   evaluateProvenanceCandidates,
   applyProvenanceEvaluation,
   setProvenanceResolvedCallback,
+  createProvenanceHistoryCaches,
 } from '../engine/drift';
 import type { SourceResolution } from '../sources/types';
 
@@ -327,8 +328,15 @@ export interface StateMigrationEntryReport {
   scope: Scope;
   kind: ItemKind;
   sourceId?: string;
-  outcome: 'already-has-source' | 'adopted' | 'provenance-unknown';
+  outcome:
+    | 'already-has-source'
+    | 'adopted'
+    | 'adopted-with-commit'
+    | 'adopted-source-only'
+    | 'provenance-unknown';
+  adoptionMode?: 'adopted-with-commit' | 'adopted-source-only';
   adoptedSource?: InstallationSourceIdentity;
+  commit?: string;
   reason?: string;
   hint?: string;
 }
@@ -339,6 +347,8 @@ export interface StateMigrationReport {
   totalInstallations: number;
   alreadyHadSource: number;
   adoptedCount: number;
+  adoptedWithCommitCount: number;
+  adoptedSourceOnlyCount: number;
   unknownCount: number;
   reasons: Record<string, number>;
   entries: StateMigrationEntryReport[];
@@ -419,6 +429,8 @@ export async function migrateStateFile(
         totalInstallations: 0,
         alreadyHadSource: 0,
         adoptedCount: 0,
+        adoptedWithCommitCount: 0,
+        adoptedSourceOnlyCount: 0,
         unknownCount: 0,
         reasons: {},
         entries: [],
@@ -446,10 +458,12 @@ export async function migrateStateFile(
   );
 
   const preResolved = new Map<string, { resolution?: SourceResolution; error?: Error }>();
-  const hashCache = new Map<string, string>();
+  const historyCaches = createProvenanceHistoryCaches();
 
   let alreadyHadSource = 0;
   let adoptedCount = 0;
+  let adoptedWithCommitCount = 0;
+  let adoptedSourceOnlyCount = 0;
   let unknownCount = 0;
   let anyChanged = false;
   const reasons: Record<string, number> = {};
@@ -475,7 +489,7 @@ export async function migrateStateFile(
       cacheDir: options?.cacheDir,
       offline: true,
       preResolved,
-      hashCache,
+      historyCaches,
     });
     const changed = applyProvenanceEvaluation(inst, evalResult, homeRoot);
     if (changed) {
@@ -484,14 +498,21 @@ export async function migrateStateFile(
 
     if (evalResult.outcome === 'adopted') {
       adoptedCount++;
+      if (evalResult.adoptionMode === 'adopted-with-commit') {
+        adoptedWithCommitCount++;
+      } else {
+        adoptedSourceOnlyCount++;
+      }
       entries.push({
         name: inst.name,
         assistant: inst.assistant,
         scope: inst.scope,
         kind: inst.kind,
         sourceId: inst.sourceId,
-        outcome: 'adopted',
+        outcome: evalResult.adoptionMode,
+        adoptionMode: evalResult.adoptionMode,
         adoptedSource: inst.source,
+        commit: evalResult.match.revision?.commit,
       });
     } else {
       unknownCount++;
@@ -527,6 +548,8 @@ export async function migrateStateFile(
     totalInstallations: installations.length,
     alreadyHadSource,
     adoptedCount,
+    adoptedWithCommitCount,
+    adoptedSourceOnlyCount,
     unknownCount,
     reasons,
     entries,
@@ -595,7 +618,7 @@ export async function readState(
     );
 
     const preResolved = new Map<string, { resolution?: SourceResolution; error?: Error }>();
-    const hashCache = new Map<string, string>();
+    const historyCaches = createProvenanceHistoryCaches();
     let anyChanged = false;
 
     for (const inst of installations) {
@@ -610,7 +633,7 @@ export async function readState(
         cacheDir: options?.cacheDir,
         offline: true,
         preResolved,
-        hashCache,
+        historyCaches,
       });
       const changed = applyProvenanceEvaluation(inst, evalResult, homeRoot);
       if (changed) {

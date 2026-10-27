@@ -1301,4 +1301,254 @@ describe('provenance & update detection — spec §6 acceptance cases', () => {
       assert.strictEqual(reinstallRes.installation.provenance, undefined);
     }
   );
+
+  it(
+    '8c. follow-up 49.6 rules: single candidate moved source -> adopted + update-available; history hit -> commit recorded + up-to-date; two candidates with one history hit -> adopted; two without -> ambiguous-source with both candidates in hint',
+    async () => {
+      // (A) Single candidate with moved source (hash not in history) -> adopted-source-only, status update-available
+      const singleMovedId = 'single-moved-src';
+      const singleFolder = path.join(testWorkspaceDir, 'single-moved-folder');
+      writeSkillFile(singleFolder, 'skills/moved-skill', 'moved-skill', 'v1', '# Content v1');
+      const singleSource: Source = {
+        id: singleMovedId,
+        type: 'local-folder',
+        scope: 'project',
+        projectPath: testWorkspaceDir,
+        localPath: singleFolder,
+      };
+      const { installation: instMoved } = await resolveAndInstallSkill({
+        source: singleSource,
+        skillName: 'moved-skill',
+      });
+      // Now source moves to v2 (plain non-git folder, so v1 is no longer in history)
+      writeSkillFile(singleFolder, 'skills/moved-skill', 'moved-skill', 'v2', '# Content v2');
+
+      await writeManifest(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          sources: [toDesiredSource(singleSource, testWorkspaceDir, testHomeDir)],
+          desiredInstallations: [],
+        },
+        testWorkspaceDir,
+        testHomeDir
+      );
+      await writeState(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          installations: [
+            {
+              assistant: instMoved.assistant,
+              scope: instMoved.scope,
+              projectPath: instMoved.projectPath,
+              kind: instMoved.kind,
+              name: instMoved.name,
+              path: instMoved.path,
+              sourceId: singleMovedId,
+              artifactId: instMoved.artifactId,
+              installedAt: '2026-09-01T00:00:00.000Z',
+              contentHash: instMoved.contentHash,
+            },
+          ],
+        },
+        testWorkspaceDir,
+        testHomeDir
+      );
+
+      const stateA = await readState('project', testWorkspaceDir, testHomeDir);
+      const adoptedA = stateA.installations[0];
+      assert.ok(adoptedA.source, 'Single candidate must be adopted even when hash differs');
+      assert.strictEqual(adoptedA.source?.id, singleMovedId);
+      assert.strictEqual(adoptedA.source?.scope, 'workspace');
+      assert.strictEqual(adoptedA.sourceRevision, undefined, 'sourceRevision must be left empty when commit is not found');
+      assert.strictEqual(adoptedA.sourceContentHash, undefined, 'sourceContentHash must be left unset when commit is not found');
+      assert.strictEqual(adoptedA.provenance, undefined);
+
+      const driftA = await checkDriftForAll([adoptedA], [singleSource], testHomeDir);
+      assert.strictEqual(driftA[0].status, 'update-available');
+
+      // (B) History hit -> commit recorded, status up-to-date
+      const histId = 'history-hit-src';
+      const histRepo = path.join(testHomeDir, 'history-hit-repo');
+      initGitRepo(histRepo);
+      writeSkillFile(histRepo, 'skills/hist-skill', 'hist-skill', 'v1', '# Hist skill v1');
+      const histInstallCommit = commitAll(histRepo, 'Add hist-skill v1');
+      const histSource: Source = {
+        id: histId,
+        type: 'local-folder',
+        scope: 'global',
+        localPath: histRepo,
+      };
+      const { installation: instHist } = await resolveAndInstallSkill({
+        source: histSource,
+        skillName: 'hist-skill',
+      });
+      // Advance repo HEAD on another skill so repo HEAD != histInstallCommit, while hist-skill's latest commit in git log is histInstallCommit
+      writeSkillFile(histRepo, 'skills/other-skill', 'other-skill', 'other', '# Other skill');
+      const newerRepoHead = commitAll(histRepo, 'Add other-skill');
+      assert.notStrictEqual(newerRepoHead, histInstallCommit);
+
+      await writeManifest(
+        'global',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          sources: [toDesiredSource(histSource, undefined, testHomeDir)],
+          desiredInstallations: [],
+        },
+        undefined,
+        testHomeDir
+      );
+      await writeState(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          installations: [
+            {
+              assistant: instHist.assistant,
+              scope: instHist.scope,
+              projectPath: instHist.projectPath,
+              kind: instHist.kind,
+              name: instHist.name,
+              path: instHist.path,
+              sourceId: histId,
+              artifactId: instHist.artifactId,
+              installedAt: '2026-09-01T00:00:00.000Z',
+              contentHash: instHist.contentHash,
+            },
+          ],
+        },
+        testWorkspaceDir,
+        testHomeDir
+      );
+
+      const stateB = await readState('project', testWorkspaceDir, testHomeDir);
+      const adoptedB = stateB.installations[0];
+      assert.strictEqual(adoptedB.source?.id, histId);
+      assert.strictEqual(adoptedB.source?.scope, 'global');
+      assert.strictEqual(adoptedB.sourceRevision?.commit, histInstallCommit);
+      assert.strictEqual(adoptedB.sourceContentHash, instHist.contentHash);
+
+      const driftB = await checkDriftForAll([adoptedB], [histSource], testHomeDir);
+      assert.strictEqual(driftB[0].status, 'up-to-date');
+
+      // (C) Two candidates (same id in both scopes), one with the hash in its older git history (after moving to v2) -> adopts that one
+      const dualId = 'dual-hist-src';
+      const globalDualRepo = path.join(testHomeDir, 'dual-global-repo');
+      initGitRepo(globalDualRepo);
+      writeSkillFile(globalDualRepo, 'skills/dual-skill', 'dual-skill', 'v1', '# Dual v1 in global history');
+      const globalV1Commit = commitAll(globalDualRepo, 'Global dual-skill v1');
+      const globalDualSource: Source = {
+        id: dualId,
+        type: 'local-folder',
+        scope: 'global',
+        localPath: globalDualRepo,
+      };
+      const { installation: instDual } = await resolveAndInstallSkill({
+        source: globalDualSource,
+        skillName: 'dual-skill',
+      });
+      // Advance globalDualRepo to v2 so HEAD no longer matches v1, but v1 is in its git history!
+      writeSkillFile(globalDualRepo, 'skills/dual-skill', 'dual-skill', 'v2', '# Dual v2 in global HEAD');
+      commitAll(globalDualRepo, 'Global dual-skill v2');
+
+      // Workspace candidate with same id, only has v3 in its history
+      const wsDualRepo = path.join(testWorkspaceDir, 'dual-ws-repo');
+      initGitRepo(wsDualRepo);
+      writeSkillFile(wsDualRepo, 'skills/dual-skill', 'dual-skill', 'v3', '# Dual v3 in workspace');
+      commitAll(wsDualRepo, 'Workspace dual-skill v3');
+      const wsDualSource: Source = {
+        id: dualId,
+        type: 'local-folder',
+        scope: 'project',
+        projectPath: testWorkspaceDir,
+        localPath: wsDualRepo,
+      };
+
+      await writeManifest(
+        'global',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          sources: [toDesiredSource(globalDualSource, undefined, testHomeDir)],
+          desiredInstallations: [],
+        },
+        undefined,
+        testHomeDir
+      );
+      await writeManifest(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          sources: [toDesiredSource(wsDualSource, testWorkspaceDir, testHomeDir)],
+          desiredInstallations: [],
+        },
+        testWorkspaceDir,
+        testHomeDir
+      );
+      await writeState(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          installations: [
+            {
+              assistant: instDual.assistant,
+              scope: instDual.scope,
+              projectPath: instDual.projectPath,
+              kind: instDual.kind,
+              name: instDual.name,
+              path: instDual.path,
+              sourceId: dualId,
+              artifactId: instDual.artifactId,
+              installedAt: '2026-09-01T00:00:00.000Z',
+              contentHash: instDual.contentHash,
+            },
+          ],
+        },
+        testWorkspaceDir,
+        testHomeDir
+      );
+
+      const stateC = await readState('project', testWorkspaceDir, testHomeDir);
+      const adoptedC = stateC.installations[0];
+      assert.strictEqual(adoptedC.source?.scope, 'global', 'Must adopt the candidate whose git history contains the installed hash');
+      assert.strictEqual(adoptedC.source?.id, dualId);
+      assert.strictEqual(adoptedC.sourceRevision?.commit, globalV1Commit);
+      assert.strictEqual(adoptedC.sourceContentHash, instDual.contentHash);
+
+      // (D) Two candidates without the hash in history -> provenance-unknown with reason ambiguous-source and both candidates in hint
+      await writeState(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          installations: [
+            {
+              assistant: instDual.assistant,
+              scope: instDual.scope,
+              projectPath: instDual.projectPath,
+              kind: instDual.kind,
+              name: instDual.name,
+              path: instDual.path,
+              sourceId: dualId,
+              artifactId: instDual.artifactId,
+              installedAt: '2026-09-01T00:00:00.000Z',
+              contentHash: '0000000000000000000000000000000000000000000000000000000000000000',
+            },
+          ],
+        },
+        testWorkspaceDir,
+        testHomeDir
+      );
+
+      const stateD = await readState('project', testWorkspaceDir, testHomeDir);
+      const unknownD = stateD.installations[0];
+      assert.strictEqual(unknownD.source, undefined);
+      assert.strictEqual(unknownD.provenance, 'unknown');
+      assert.strictEqual(unknownD.provenanceReason, 'ambiguous-source');
+      assert.ok(
+        unknownD.provenanceHint?.includes(`global:${dualId}`) &&
+          unknownD.provenanceHint?.includes(`workspace:${dualId}`),
+        `Expected hint to list both candidates, got: "${unknownD.provenanceHint}"`
+      );
+    }
+  );
 });
