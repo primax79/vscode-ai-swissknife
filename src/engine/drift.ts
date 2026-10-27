@@ -28,6 +28,7 @@ import { parseClaudeAgentMarkdown, parseClaudeCommandMarkdown } from '../adapter
 import { parseKiloAgentMarkdown, parseKiloCommandMarkdown } from '../adapters/kilo';
 import { getAdapter, getAdapterWithHomeRoot } from '../adapters/registry';
 import { getSourceResolver } from '../sources/registry';
+import { isUntrackedArtifactError } from '../sources/localFolder';
 import { resolveAndTranslate } from './plan';
 import type { DriftReport } from './types';
 import type { SourceResolution } from '../sources/types';
@@ -568,6 +569,12 @@ export async function analyzeLocalDrift(
  * Checks whether an installed item has a newer version available from its upstream source.
  * Accepts an optional pre-resolved SourceResolution (or a per-run cache object) to avoid re-resolving.
  */
+/** Appends the dirty-working-tree and id-conversion notes to a drift detail message. */
+function withNotes(base: string, dirtyWorkingTree: boolean, conversionNote?: string): string {
+  const notes = [dirtyWorkingTree ? 'dirty working tree' : undefined, conversionNote].filter(Boolean);
+  return notes.length ? `${base} (${notes.join('; ')})` : base;
+}
+
 export async function checkForUpstreamUpdate(
   installation: ManagedInstallation,
   source: Source,
@@ -713,9 +720,23 @@ export async function checkForUpstreamUpdate(
     } else if (foundArt.kind === 'rule') {
       sourceHash = canonicalRuleHash(result.translated as CanonicalRule);
     }
-  } catch {
+  } catch (err: unknown) {
+    if (isUntrackedArtifactError(err)) {
+      return {
+        installation,
+        status: 'source-unavailable',
+        hasLocalPatch: localReport.hasLocalPatch,
+        diskHash: localReport.diskHash,
+        details: err.message,
+        hint: err.hint,
+      };
+    }
     return localReport;
   }
+
+  const isDirtyWorkingTree = Boolean(
+    source.type === 'local-folder' && source.readWorkingTree && foundPkg.version?.dirty
+  );
 
   if (sourceHash && installation.contentHash && sourceHash !== installation.contentHash) {
     if (localReport.status === 'modified-locally') {
@@ -728,7 +749,8 @@ export async function checkForUpstreamUpdate(
         hasLocalPatch: localReport.hasLocalPatch,
         diskHash: localReport.diskHash,
         sourceHash,
-        details: conversionNote ? `${baseDetails} (${conversionNote})` : baseDetails,
+        ...(isDirtyWorkingTree ? { dirty: true } : {}),
+        details: withNotes(baseDetails, isDirtyWorkingTree, conversionNote),
       };
     }
     const baseDetails = 'A newer version is available from upstream source';
@@ -737,13 +759,16 @@ export async function checkForUpstreamUpdate(
       status: 'update-available',
       diskHash: localReport.diskHash,
       sourceHash,
-      details: conversionNote ? `${baseDetails} (${conversionNote})` : baseDetails,
+      ...(isDirtyWorkingTree ? { dirty: true } : {}),
+      details: withNotes(baseDetails, isDirtyWorkingTree, conversionNote),
     };
   }
 
+  const isDirty = isDirtyWorkingTree || Boolean(installation.sourceRevision?.dirty);
   return {
     ...localReport,
     sourceHash,
+    ...(isDirty ? { dirty: true } : {}),
     ...(conversionNote
       ? {
           details: localReport.details

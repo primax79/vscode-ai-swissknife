@@ -3,6 +3,7 @@ import * as path from 'path';
 import type { Source, Package, Artifact, ResolvedArtifact } from '../domain/types';
 import type {
   CanonicalSkill,
+  CanonicalSkillFile,
   CanonicalAgent,
   CanonicalCommand,
   CanonicalMcpServer,
@@ -11,8 +12,13 @@ import type {
 } from '../adapters/types';
 import type { SourceResolution, SourceResolver } from './types';
 import { readSkill } from '../adapters/codec';
-import { parseClaudeAgentMarkdown, parseClaudeCommandMarkdown } from '../adapters/claude';
 import {
+  parseSkillMarkdown,
+  parseClaudeAgentMarkdown,
+  parseClaudeCommandMarkdown,
+} from '../adapters/claude';
+import {
+  extractSkillFrontmatter,
   findSkillDirs,
   findAgentFiles,
   findCommandFiles,
@@ -20,6 +26,218 @@ import {
   findHookFiles,
   findRuleFiles,
 } from './detect';
+import { runGit } from './gitProcess';
+
+export class UntrackedArtifactError extends Error {
+  readonly code = 'UNTRACKED_ARTIFACT';
+  readonly hint: string;
+  readonly folder: string;
+
+  constructor(artifactName: string, folder: string) {
+    const hint = `not committed in ${folder}; commit it or set readWorkingTree`;
+    super(`Artifact "${artifactName}" is ${hint}`);
+    this.name = 'UntrackedArtifactError';
+    this.folder = folder;
+    this.hint = hint;
+  }
+}
+
+export function isUntrackedArtifactError(err: unknown): err is UntrackedArtifactError {
+  return (
+    err instanceof UntrackedArtifactError ||
+    (typeof err === 'object' &&
+      err !== null &&
+      (err as { code?: string }).code === 'UNTRACKED_ARTIFACT' &&
+      typeof (err as { hint?: string }).hint === 'string')
+  );
+}
+
+interface LocalGitContext {
+  headCommit: string;
+  repoPrefix: string;
+}
+
+async function detectGitContext(localPath: string): Promise<LocalGitContext | null> {
+  try {
+    const { stdout: headOut } = await runGit(['rev-parse', 'HEAD'], localPath);
+    const headCommit = headOut.trim();
+    if (!/^[0-9a-f]{40}$/i.test(headCommit)) {
+      return null;
+    }
+    const { stdout: prefixOut } = await runGit(['rev-parse', '--show-prefix'], localPath);
+    const repoPrefix = prefixOut.replace(/\r?\n$/, '');
+    return { headCommit, repoPrefix };
+  } catch {
+    return null;
+  }
+}
+
+function toRelativeFromSourcePosix(localPath: string, targetPath: string): string {
+  return path.relative(path.resolve(localPath), path.resolve(targetPath)).split(path.sep).join('/');
+}
+
+function toRepoRelativePath(gitCtx: LocalGitContext, localPath: string, targetPath: string): string {
+  const relFromLocal = toRelativeFromSourcePosix(localPath, targetPath);
+  if (relFromLocal === '') {
+    return gitCtx.repoPrefix.replace(/\/$/, '');
+  }
+  return `${gitCtx.repoPrefix}${relFromLocal}`;
+}
+
+async function isArtifactDirty(localPath: string, artifactPath: string): Promise<boolean> {
+  const relFromLocal = toRelativeFromSourcePosix(localPath, artifactPath);
+  const pathSpec = relFromLocal === '' ? '.' : relFromLocal;
+  const { stdout } = await runGit(['status', '--porcelain', '--', pathSpec], localPath);
+  return stdout.trim().length > 0;
+}
+
+function isIgnoredSkillSegment(name: string): boolean {
+  return (
+    name === '.git' ||
+    name === 'node_modules' ||
+    name === 'index.json' ||
+    name === 'local.patch' ||
+    name.endsWith('.patch') ||
+    name === '.DS_Store' ||
+    name === 'Thumbs.db'
+  );
+}
+
+function isValidSkillRelativePath(p: string): boolean {
+  if (!p || p === '.' || p === 'SKILL.md') return false;
+  if (path.isAbsolute(p)) return false;
+  if (p.includes('\0')) return false;
+
+  const segments = p.split('/');
+  for (const seg of segments) {
+    if (seg === '..') return false;
+  }
+
+  const resolved = path.posix.resolve('/root', p);
+  if (!resolved.startsWith('/root/') || resolved === '/root/SKILL.md' || resolved === '/root') {
+    return false;
+  }
+
+  return true;
+}
+
+async function readSkillFromGitHead(
+  localPath: string,
+  repoRelDir: string,
+  artifactName: string,
+  existsInWorkingTree: boolean
+): Promise<CanonicalSkill> {
+  const treeSpec = repoRelDir ? `HEAD:${repoRelDir}` : 'HEAD';
+  let lsOut: string;
+  try {
+    const res = await runGit(['ls-tree', '--full-tree', '-r', '-z', treeSpec], localPath);
+    lsOut = res.stdout;
+  } catch {
+    if (existsInWorkingTree) {
+      throw new UntrackedArtifactError(artifactName, localPath);
+    }
+    throw new Error(`Cannot locate skill directory for artifact "${artifactName}" in "${localPath}"`);
+  }
+
+  const entries = lsOut.split('\0').filter((e) => e.length > 0);
+  let skillMdBlobSha: string | undefined;
+  const fileEntries: Array<{ relPath: string; blobSha: string; mode: number }> = [];
+
+  for (const entry of entries) {
+    const match = entry.match(/^([0-7]+) (\w+) ([0-9a-f]{40})\t([\s\S]+)$/);
+    if (!match) continue;
+    const [, modeStr, objType, blobSha, relPath] = match;
+
+    const segments = relPath.split('/');
+    if (segments.some(isIgnoredSkillSegment)) {
+      continue;
+    }
+
+    if (modeStr === '120000' || objType !== 'blob') {
+      throw new Error(`Unsupported file type at ${relPath}`);
+    }
+
+    if (relPath === 'SKILL.md') {
+      skillMdBlobSha = blobSha;
+      continue;
+    }
+
+    if (!isValidSkillRelativePath(relPath)) {
+      throw new Error(`Invalid path: ${relPath}`);
+    }
+
+    fileEntries.push({
+      relPath,
+      blobSha,
+      mode: parseInt(modeStr, 8),
+    });
+  }
+
+  if (!skillMdBlobSha) {
+    if (existsInWorkingTree) {
+      throw new UntrackedArtifactError(artifactName, localPath);
+    }
+    throw new Error(`Cannot locate skill directory for artifact "${artifactName}" in "${localPath}"`);
+  }
+
+  const { stdout: skillMdContent } = await runGit(['cat-file', 'blob', skillMdBlobSha], localPath);
+  const doc = parseSkillMarkdown(skillMdContent);
+
+  const files: CanonicalSkillFile[] = [];
+  const seenPaths = new Set<string>();
+
+  for (const f of fileEntries) {
+    const norm = path.posix.normalize(f.relPath);
+    if (seenPaths.has(norm)) {
+      throw new Error(`Duplicate normalized path: ${norm}`);
+    }
+    seenPaths.add(norm);
+
+    const { stdout: blobContent } = await runGit(['cat-file', 'blob', f.blobSha], localPath);
+    files.push({
+      path: f.relPath,
+      content: Buffer.from(blobContent, 'utf-8'),
+      mode: f.mode,
+    });
+  }
+
+  return {
+    ...doc,
+    files,
+  };
+}
+
+async function readSingleFileForArtifact(
+  source: Source,
+  pkg: Package,
+  artifact: Artifact,
+  targetFile: string,
+  gitCtx: LocalGitContext | null
+): Promise<string> {
+  const localPath = source.localPath!;
+  if (!gitCtx) {
+    return await fs.promises.readFile(targetFile, 'utf-8');
+  }
+
+  const dirty = await isArtifactDirty(localPath, targetFile);
+  pkg.version = {
+    commit: gitCtx.headCommit,
+    requestedRef: 'HEAD',
+    dirty,
+  };
+
+  if (source.readWorkingTree) {
+    return await fs.promises.readFile(targetFile, 'utf-8');
+  }
+
+  const repoRelFile = toRepoRelativePath(gitCtx, localPath, targetFile);
+  try {
+    const { stdout } = await runGit(['show', `HEAD:${repoRelFile}`], localPath);
+    return stdout;
+  } catch {
+    throw new UntrackedArtifactError(artifact.name, localPath);
+  }
+}
 
 /**
  * Resolves a `Source` of type `local-folder` detecting skills, agents, commands, mcp servers, hooks, and rules.
@@ -201,15 +419,44 @@ export async function resolveLocalFolder(source: Source): Promise<SourceResoluti
     return pkg;
   });
 
+  const allPackages = [
+    ...skillPackages,
+    ...agentPackages,
+    ...commandPackages,
+    ...mcpPackages,
+    ...hookPackages,
+    ...rulePackages,
+  ];
+
+  const gitCtx = await detectGitContext(source.localPath);
+  if (gitCtx) {
+    for (const pkg of allPackages) {
+      const art = pkg.artifacts[0];
+      if (!art?.path) continue;
+      const dirty = await isArtifactDirty(source.localPath, art.path);
+      pkg.version = {
+        commit: gitCtx.headCommit,
+        requestedRef: 'HEAD',
+        dirty,
+      };
+      if (dirty && !source.readWorkingTree && (art.kind === 'skill' || art.kind === 'agent' || art.kind === 'command')) {
+        const mdFile = art.kind === 'skill' ? path.join(art.path, 'SKILL.md') : art.path;
+        const repoRelMd = toRepoRelativePath(gitCtx, source.localPath, mdFile);
+        try {
+          const { stdout } = await runGit(['show', `HEAD:${repoRelMd}`], source.localPath);
+          const fm = extractSkillFrontmatter(stdout);
+          if (fm.description !== undefined) {
+            art.description = fm.description;
+          }
+        } catch {
+          // Untracked in HEAD: keep working-tree metadata so item remains discoverable and surfaces UntrackedArtifactError on content resolution
+        }
+      }
+    }
+  }
+
   return {
-    packages: [
-      ...skillPackages,
-      ...agentPackages,
-      ...commandPackages,
-      ...mcpPackages,
-      ...hookPackages,
-      ...rulePackages,
-    ],
+    packages: allPackages,
     diagnostics: [
       ...skillDetection.diagnostics,
       ...agentDetection.diagnostics,
@@ -244,20 +491,47 @@ export async function resolveArtifactContent(
 
   const prefix = `${source.id}:`;
   const pathId = pkg.id.startsWith(prefix) ? pkg.id.slice(prefix.length) : '';
+  const gitCtx = await detectGitContext(source.localPath);
 
   if (artifact.kind === 'skill') {
     const candidate1 = path.join(source.localPath, pathId);
     let skillDir: string;
+    let existsInWorkingTree = false;
 
     if (fs.existsSync(path.join(candidate1, 'SKILL.md'))) {
       skillDir = candidate1;
+      existsInWorkingTree = true;
     } else if (fs.existsSync(path.join(source.localPath, 'SKILL.md'))) {
       skillDir = source.localPath;
+      existsInWorkingTree = true;
+    } else if (gitCtx && !source.readWorkingTree && pathId) {
+      skillDir = candidate1;
+      existsInWorkingTree = false;
     } else {
       throw new Error(`Cannot locate skill directory for artifact "${artifact.name}" in "${source.localPath}"`);
     }
 
-    const content = await readSkill(skillDir);
+    if (gitCtx) {
+      const dirty = await isArtifactDirty(source.localPath, skillDir);
+      pkg.version = {
+        commit: gitCtx.headCommit,
+        requestedRef: 'HEAD',
+        dirty,
+      };
+    }
+
+    if (!gitCtx || source.readWorkingTree) {
+      const content = await readSkill(skillDir);
+      return { artifact, content };
+    }
+
+    const repoRelDir = toRepoRelativePath(gitCtx, source.localPath, skillDir);
+    const content = await readSkillFromGitHead(
+      source.localPath,
+      repoRelDir,
+      artifact.name,
+      existsInWorkingTree
+    );
     return { artifact, content };
   }
 
@@ -277,7 +551,7 @@ export async function resolveArtifactContent(
       throw new Error(`Cannot locate agent file for "${artifact.name}" in "${source.localPath}"`);
     }
 
-    const raw = await fs.promises.readFile(agentFile, 'utf-8');
+    const raw = await readSingleFileForArtifact(source, pkg, artifact, agentFile, gitCtx);
     const content = parseClaudeAgentMarkdown(raw);
     return { artifact, content };
   }
@@ -299,7 +573,7 @@ export async function resolveArtifactContent(
       throw new Error(`Cannot locate command file for "${artifact.name}" in "${source.localPath}"`);
     }
 
-    const raw = await fs.promises.readFile(cmdFile, 'utf-8');
+    const raw = await readSingleFileForArtifact(source, pkg, artifact, cmdFile, gitCtx);
     const content = parseClaudeCommandMarkdown(raw, artifact.name);
     return { artifact, content };
   }
@@ -310,18 +584,26 @@ export async function resolveArtifactContent(
     const candidate3 = path.join(source.localPath, 'mcps', `${artifact.name}.json`);
     const candidate4 = path.join(source.localPath, pathId.split(':')[0]);
 
-    let raw = '';
+    let mcpFile = '';
     for (const cand of [candidate1, candidate2, candidate3, candidate4]) {
       if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
-        raw = await fs.promises.readFile(cand, 'utf-8');
+        mcpFile = cand;
         break;
       }
     }
-    if (!raw) {
+    if (!mcpFile) {
       throw new Error(`Cannot locate MCP server definition for "${artifact.name}" in "${source.localPath}"`);
     }
 
+    const raw = await readSingleFileForArtifact(source, pkg, artifact, mcpFile, gitCtx);
     const parsed = JSON.parse(raw);
+    const hasNamedServer =
+      parsed.mcpServers?.[artifact.name] !== undefined || parsed.mcp?.[artifact.name] !== undefined;
+    const isDirectServer = Boolean(parsed.command || parsed.url);
+    if (gitCtx && !source.readWorkingTree && !hasNamedServer && !isDirectServer) {
+      throw new UntrackedArtifactError(artifact.name, source.localPath);
+    }
+
     const serverConfig = (parsed.mcpServers?.[artifact.name] ?? parsed.mcp?.[artifact.name] ?? (parsed.command || parsed.url ? parsed : {})) as Record<string, unknown>;
     const extraFields: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(serverConfig)) {
@@ -359,7 +641,7 @@ export async function resolveArtifactContent(
       throw new Error(`Cannot locate hook file for "${artifact.name}" in "${source.localPath}"`);
     }
 
-    const raw = await fs.promises.readFile(hookFile, 'utf-8');
+    const raw = await readSingleFileForArtifact(source, pkg, artifact, hookFile, gitCtx);
     const parsed = JSON.parse(raw);
     const content: CanonicalHook = {
       name: artifact.name,
@@ -387,7 +669,7 @@ export async function resolveArtifactContent(
       throw new Error(`Cannot locate rule file for "${artifact.name}" in "${source.localPath}"`);
     }
 
-    const raw = await fs.promises.readFile(ruleFile, 'utf-8');
+    const raw = await readSingleFileForArtifact(source, pkg, artifact, ruleFile, gitCtx);
     const content: CanonicalRule = {
       name: artifact.name,
       content: raw,
