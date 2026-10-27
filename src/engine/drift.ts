@@ -1,6 +1,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { toInstallationSourceIdentity, type ManagedInstallation, type Source } from '../domain/types';
+import {
+  toInstallationSourceIdentity,
+  type ManagedInstallation,
+  type Source,
+  type Package,
+  type Artifact,
+} from '../domain/types';
 import type {
   CanonicalSkill,
   CanonicalAgent,
@@ -150,6 +156,224 @@ export function resolveInstallationSource(
 
   return {
     unavailable: `Source "${sourceId}" not found in manifest.`,
+  };
+}
+
+export type MatchedInstallationArtifact =
+  | {
+      matched: true;
+      pkg: Package;
+      artifact: Artifact;
+      convertedFromId?: string;
+      conversionNote?: string;
+    }
+  | {
+      matched: false;
+      reason: string;
+      hint?: string;
+    };
+
+/**
+ * Deterministically converts an installation's recorded `artifactId` across source id-shapes
+ * (e.g. `local-folder` / `git-custom` / fallback `git-marketplace` path-based ids vs `git-marketplace` plugin-manifest ids)
+ * when and only when the conversion preserves the exact same sourceId, plugin, kind, and artifact name.
+ */
+function findDeterministicIdShapeMatch(
+  installation: ManagedInstallation,
+  source: Source,
+  packages: Package[]
+): { pkg: Package; artifact: Artifact; note: string } | undefined {
+  const rawId = installation.artifactId;
+  if (!rawId) return undefined;
+
+  const prefix = `${source.id}:`;
+  if (!rawId.startsWith(prefix)) return undefined;
+  const rest = rawId.slice(prefix.length);
+
+  const kindSegment = installation.kind === 'mcp-server' ? 'mcp' : installation.kind;
+  const candidateIds = new Set<string>();
+
+  // Direction A: path-based id (local-folder / git-custom / marketplace fallback) -> git-marketplace manifest id
+  // e.g. `<sourceId>:plugins/<plugin>/skills/<name>:<name>` -> `<sourceId>:<plugin>:skill:<name>`
+  //      `<sourceId>:plugins/<plugin>/agents/<name>.md:<name>` -> `<sourceId>:<plugin>:agent:<name>`
+  //      `<sourceId>:plugins/<plugin>/commands/<name>.md:<name>` -> `<sourceId>:<plugin>:command:<name>`
+  //      `<sourceId>:plugins/<plugin>/(.)mcp.json:<name>:<name>` -> `<sourceId>:<plugin>:mcp:<name>`
+  const skillPathMatch = rest.match(/^(?:plugins\/)?([^/:]+)\/skills\/([^/:]+):\2$/);
+  if (skillPathMatch && installation.kind === 'skill' && skillPathMatch[2] === installation.name) {
+    const [, pluginName, skillName] = skillPathMatch;
+    candidateIds.add(`${source.id}:${pluginName}:skill:${skillName}`);
+  }
+
+  const agentPathMatch = rest.match(/^(?:(?:plugins\/)?([^/:]+)\/)?(?:agents?\/)?([^/:]+?)(?:\.agent)?\.md:([^/:]+)$/);
+  if (agentPathMatch && installation.kind === 'agent' && agentPathMatch[3] === installation.name) {
+    const [, pluginName, , agentName] = agentPathMatch;
+    if (pluginName) {
+      candidateIds.add(`${source.id}:${pluginName}:agent:${agentName}`);
+    } else {
+      candidateIds.add(`${source.id}:agents/${agentName}.md:${agentName}`);
+      candidateIds.add(`${source.id}:${agentName}.md:${agentName}`);
+    }
+  }
+
+  const agentBareMatch = rest.match(/^([^/:]+):\1$/);
+  if (agentBareMatch && installation.kind === 'agent' && agentBareMatch[1] === installation.name) {
+    const agentName = agentBareMatch[1];
+    candidateIds.add(`${source.id}:agents/${agentName}.md:${agentName}`);
+    candidateIds.add(`${source.id}:${agentName}.md:${agentName}`);
+  }
+
+  const cmdPathMatch = rest.match(/^(?:(?:plugins\/)?([^/:]+)\/)?(?:commands?\/)?([^/:]+?)(?:\.command)?\.md:([^/:]+)$/);
+  if (cmdPathMatch && installation.kind === 'command' && cmdPathMatch[3] === installation.name) {
+    const [, pluginName, , cmdName] = cmdPathMatch;
+    if (pluginName) {
+      candidateIds.add(`${source.id}:${pluginName}:command:${cmdName}`);
+    } else {
+      candidateIds.add(`${source.id}:commands/${cmdName}.md:${cmdName}`);
+      candidateIds.add(`${source.id}:command/${cmdName}.md:${cmdName}`);
+      candidateIds.add(`${source.id}:${cmdName}.md:${cmdName}`);
+    }
+  }
+
+  const cmdBareMatch = rest.match(/^([^/:]+):\1$/);
+  if (cmdBareMatch && installation.kind === 'command' && cmdBareMatch[1] === installation.name) {
+    const cmdName = cmdBareMatch[1];
+    candidateIds.add(`${source.id}:commands/${cmdName}.md:${cmdName}`);
+    candidateIds.add(`${source.id}:command/${cmdName}.md:${cmdName}`);
+    candidateIds.add(`${source.id}:${cmdName}.md:${cmdName}`);
+  }
+
+  const hookBareMatch = rest.match(/^([^/:]+):\1$/);
+  if (hookBareMatch && installation.kind === 'hook' && hookBareMatch[1] === installation.name) {
+    const hookName = hookBareMatch[1];
+    candidateIds.add(`${source.id}:hooks/${hookName}.json:${hookName}`);
+    candidateIds.add(`${source.id}:${hookName}.json:${hookName}`);
+  }
+
+  const ruleBareMatch = rest.match(/^([^/:]+):\1$/);
+  if (ruleBareMatch && installation.kind === 'rule' && ruleBareMatch[1] === installation.name) {
+    const ruleName = ruleBareMatch[1];
+    candidateIds.add(`${source.id}:rules/${ruleName}.md:${ruleName}`);
+    candidateIds.add(`${source.id}:${ruleName}.md:${ruleName}`);
+  }
+
+  const mcpPathMatch = rest.match(/^(?:plugins\/)?([^/:]+)\/(?:\.?mcp\.json|mcps\/[^/:]+\.json):([^/:]+):\2$/);
+  if (mcpPathMatch && installation.kind === 'mcp-server' && mcpPathMatch[2] === installation.name) {
+    const [, pluginName, mcpId] = mcpPathMatch;
+    candidateIds.add(`${source.id}:${pluginName}:mcp:${mcpId}`);
+  }
+
+  // Direction B: git-marketplace manifest id -> path-based id (local-folder / git-custom / marketplace fallback)
+  // e.g. `<sourceId>:<plugin>:<kindSegment>:<name>` -> `<sourceId>:plugins/<plugin>/skills/<name>:<name>` (or `<plugin>/skills/<name>:<name>`)
+  const mktMatch = rest.match(/^([^/:]+):(skill|agent|command|mcp):([^/:]+)$/);
+  if (mktMatch && mktMatch[2] === kindSegment && mktMatch[3] === installation.name) {
+    const [, pluginName, , artName] = mktMatch;
+    if (installation.kind === 'skill') {
+      candidateIds.add(`${source.id}:plugins/${pluginName}/skills/${artName}:${artName}`);
+      candidateIds.add(`${source.id}:${pluginName}/skills/${artName}:${artName}`);
+    } else if (installation.kind === 'agent') {
+      candidateIds.add(`${source.id}:plugins/${pluginName}/agents/${artName}.md:${artName}`);
+      candidateIds.add(`${source.id}:${pluginName}/agents/${artName}.md:${artName}`);
+    } else if (installation.kind === 'command') {
+      candidateIds.add(`${source.id}:plugins/${pluginName}/commands/${artName}.md:${artName}`);
+      candidateIds.add(`${source.id}:${pluginName}/commands/${artName}.md:${artName}`);
+    } else if (installation.kind === 'mcp-server') {
+      candidateIds.add(`${source.id}:plugins/${pluginName}/mcp.json:${artName}:${artName}`);
+      candidateIds.add(`${source.id}:plugins/${pluginName}/.mcp.json:${artName}:${artName}`);
+      candidateIds.add(`${source.id}:${pluginName}/mcp.json:${artName}:${artName}`);
+      candidateIds.add(`${source.id}:${pluginName}/.mcp.json:${artName}:${artName}`);
+    }
+  }
+
+  if (candidateIds.size === 0) return undefined;
+
+  const hits: Array<{ pkg: Package; artifact: Artifact }> = [];
+  for (const pkg of packages) {
+    for (const art of pkg.artifacts) {
+      if (
+        candidateIds.has(art.id) &&
+        art.kind === installation.kind &&
+        art.name === installation.name
+      ) {
+        hits.push({ pkg, artifact: art });
+      }
+    }
+  }
+
+  if (hits.length === 1) {
+    const hit = hits[0];
+    return {
+      pkg: hit.pkg,
+      artifact: hit.artifact,
+      note: `matched via deterministic id-shape conversion (${rawId} -> ${hit.artifact.id})`,
+    };
+  }
+
+  return undefined;
+}
+
+/**
+ * Matches an installed item to its upstream artifact in `resolution` (spec §3 rule 5):
+ * - Matches strictly by exact `installation.artifactId` (or deterministic id-shape conversion
+ *   preserving sourceId, plugin, kind, and name).
+ * - Never falls back to `kind && name` across plugins/packages.
+ * - When not found, returns `matched: false` with reason `"artifact <id> no longer in source"`
+ *   and, if an artifact with the same `kind + name` exists, a hint `"same name found: <its id>"`.
+ */
+export function matchInstallationArtifact(
+  installation: ManagedInstallation,
+  source: Source,
+  resolution: SourceResolution
+): MatchedInstallationArtifact {
+  const recordedId = installation.artifactId;
+
+  if (recordedId) {
+    for (const pkg of resolution.packages) {
+      for (const art of pkg.artifacts) {
+        if (art.id === recordedId) {
+          return { matched: true, pkg, artifact: art };
+        }
+      }
+    }
+
+    const converted = findDeterministicIdShapeMatch(installation, source, resolution.packages);
+    if (converted) {
+      return {
+        matched: true,
+        pkg: converted.pkg,
+        artifact: converted.artifact,
+        convertedFromId: recordedId,
+        conversionNote: converted.note,
+      };
+    }
+  }
+
+  const sameNameArtifacts: Artifact[] = [];
+  for (const pkg of resolution.packages) {
+    for (const art of pkg.artifacts) {
+      if (art.kind === installation.kind && art.name === installation.name) {
+        sameNameArtifacts.push(art);
+      }
+    }
+  }
+
+  // Legacy installations without `artifactId`: accept only if there is a single unambiguous artifact in the source
+  if (!recordedId && sameNameArtifacts.length === 1) {
+    const art = sameNameArtifacts[0];
+    const pkg = resolution.packages.find((p) => p.artifacts.includes(art))!;
+    return { matched: true, pkg, artifact: art };
+  }
+
+  const displayId = recordedId ?? `${source.id}:${installation.name}`;
+  const reason = `artifact ${displayId} no longer in source`;
+  const hint =
+    sameNameArtifacts.length > 0
+      ? `same name found: ${sameNameArtifacts.map((a) => a.id).join(', ')}`
+      : undefined;
+
+  return {
+    matched: false,
+    reason,
+    ...(hint ? { hint } : {}),
   };
 }
 
@@ -441,27 +665,26 @@ export async function checkForUpstreamUpdate(
     }
   }
 
-  // Find matching package & artifact in resolution
-  let foundPkg;
-  let foundArt;
-
-  for (const pkg of resolution.packages) {
-    for (const art of pkg.artifacts) {
-      if (
-        (installation.artifactId && art.id === installation.artifactId) ||
-        (art.kind === installation.kind && art.name === installation.name)
-      ) {
-        foundPkg = pkg;
-        foundArt = art;
-        break;
-      }
-    }
-    if (foundArt) break;
+  // Find matching package & artifact in resolution (spec §3 rule 5: exact artifactId, no kind+name fallback)
+  const matchedArt = matchInstallationArtifact(installation, source, resolution);
+  if (!matchedArt.matched) {
+    const details = matchedArt.hint
+      ? `${matchedArt.reason}; ${matchedArt.hint}`
+      : matchedArt.reason;
+    return {
+      installation,
+      status: 'source-unavailable',
+      hasLocalPatch: localReport.hasLocalPatch,
+      diskHash: localReport.diskHash,
+      reason: matchedArt.reason,
+      details,
+      ...(matchedArt.hint ? { hint: matchedArt.hint } : {}),
+    };
   }
 
-  if (!foundPkg || !foundArt) {
-    return localReport;
-  }
+  const foundPkg = matchedArt.pkg;
+  const foundArt = matchedArt.artifact;
+  const conversionNote = matchedArt.conversionNote;
 
   let sourceHash: string | undefined;
   try {
@@ -496,29 +719,38 @@ export async function checkForUpstreamUpdate(
 
   if (sourceHash && installation.contentHash && sourceHash !== installation.contentHash) {
     if (localReport.status === 'modified-locally') {
+      const baseDetails = localReport.hasLocalPatch
+        ? 'Upstream source has a newer version and local adaptation patch is applied'
+        : 'Local files were modified and upstream source has a newer version';
       return {
         installation,
         status: 'modified-and-update-available',
         hasLocalPatch: localReport.hasLocalPatch,
         diskHash: localReport.diskHash,
         sourceHash,
-        details: localReport.hasLocalPatch
-          ? 'Upstream source has a newer version and local adaptation patch is applied'
-          : 'Local files were modified and upstream source has a newer version',
+        details: conversionNote ? `${baseDetails} (${conversionNote})` : baseDetails,
       };
     }
+    const baseDetails = 'A newer version is available from upstream source';
     return {
       installation,
       status: 'update-available',
       diskHash: localReport.diskHash,
       sourceHash,
-      details: 'A newer version is available from upstream source',
+      details: conversionNote ? `${baseDetails} (${conversionNote})` : baseDetails,
     };
   }
 
   return {
     ...localReport,
     sourceHash,
+    ...(conversionNote
+      ? {
+          details: localReport.details
+            ? `${localReport.details} (${conversionNote})`
+            : conversionNote,
+        }
+      : {}),
   };
 }
 
@@ -620,6 +852,7 @@ export async function checkDriftForAll(
             status: 'source-unavailable' as const,
             hasLocalPatch: localReport.hasLocalPatch,
             diskHash: localReport.diskHash,
+            reason: resolvedSrc.unavailable,
             details: resolvedSrc.hint
               ? `${resolvedSrc.unavailable} ${resolvedSrc.hint}`
               : resolvedSrc.unavailable,

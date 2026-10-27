@@ -389,21 +389,85 @@ export async function resolveArtifactContent(
     const prefix = `${source.id}:`;
     const pathId = pkg.id.startsWith(prefix) ? pkg.id.slice(prefix.length) : '';
 
-    if (artifact.kind === 'skill') {
-      const candidates = [
-        path.join(targetDir, pathId, 'skills', artifact.name),
-        path.join(targetDir, pathId, artifact.name),
-        path.join(targetDir, 'plugins', pathId, 'skills', artifact.name),
-        path.join(targetDir, 'plugins', pathId, artifact.name),
-        path.join(targetDir, 'skills', artifact.name),
-        path.join(targetDir, pathId),
-      ];
+    // Resolve the plugin's own root directory inside `targetDir` when `pathId` identifies a plugin
+    // so that fallback walks never cross into a sibling plugin directory.
+    let pluginSearchRoot = targetDir;
+    if (pathId) {
+      let resolvedPluginRel: string | undefined;
+      for (const mPath of [
+        path.join(targetDir, '.claude-plugin', 'marketplace.json'),
+        path.join(targetDir, 'marketplace.json'),
+      ]) {
+        if (fs.existsSync(mPath) && fs.statSync(mPath).isFile()) {
+          try {
+            const parsedManifest = JSON.parse(fs.readFileSync(mPath, 'utf-8')) as ClaudeMarketplaceManifest;
+            const matchedPlugin = parsedManifest.plugins?.find((p) => p.name === pathId);
+            if (matchedPlugin) {
+              resolvedPluginRel =
+                typeof matchedPlugin.source === 'string'
+                  ? matchedPlugin.source
+                  : typeof matchedPlugin.source === 'object' && matchedPlugin.source?.path
+                  ? matchedPlugin.source.path
+                  : matchedPlugin.name;
+            }
+            break;
+          } catch {
+            // ignore
+          }
+        }
+      }
 
-      let skillDir = '';
-      for (const cand of candidates) {
-        if (fs.existsSync(path.join(cand, 'SKILL.md'))) {
-          skillDir = cand;
+      const pluginRootCandidates = [
+        ...(resolvedPluginRel ? [path.join(targetDir, resolvedPluginRel)] : []),
+        path.join(targetDir, pathId),
+        path.join(targetDir, 'plugins', pathId),
+      ];
+      for (const pCand of pluginRootCandidates) {
+        if (fs.existsSync(pCand) && fs.statSync(pCand).isDirectory()) {
+          pluginSearchRoot = pCand;
           break;
+        }
+      }
+    }
+
+    const resolveRecordedPath = (recordedPath?: string): string | undefined => {
+      if (!recordedPath) return undefined;
+      if (path.isAbsolute(recordedPath)) {
+        const resolvedRec = path.resolve(recordedPath);
+        const resolvedTarget = path.resolve(targetDir);
+        if (resolvedRec === resolvedTarget || resolvedRec.startsWith(resolvedTarget + path.sep)) {
+          return resolvedRec;
+        }
+        return undefined;
+      }
+      return path.join(targetDir, recordedPath);
+    };
+
+    const recordedTarget = resolveRecordedPath(artifact.path);
+
+    if (artifact.kind === 'skill') {
+      let skillDir = '';
+      if (recordedTarget && fs.existsSync(path.join(recordedTarget, 'SKILL.md'))) {
+        skillDir = recordedTarget;
+      }
+
+      if (!skillDir) {
+        const candidates = [
+          path.join(pluginSearchRoot, 'skills', artifact.name),
+          path.join(pluginSearchRoot, artifact.name),
+          path.join(targetDir, pathId, 'skills', artifact.name),
+          path.join(targetDir, pathId, artifact.name),
+          path.join(targetDir, 'plugins', pathId, 'skills', artifact.name),
+          path.join(targetDir, 'plugins', pathId, artifact.name),
+          ...(pathId ? [] : [path.join(targetDir, 'skills', artifact.name)]),
+          path.join(targetDir, pathId),
+        ];
+
+        for (const cand of candidates) {
+          if (fs.existsSync(path.join(cand, 'SKILL.md'))) {
+            skillDir = cand;
+            break;
+          }
         }
       }
 
@@ -425,7 +489,7 @@ export async function resolveArtifactContent(
           }
           return null;
         };
-        skillDir = walkSkill(targetDir) ?? '';
+        skillDir = walkSkill(pluginSearchRoot) ?? '';
       }
 
       if (!skillDir) {
@@ -437,20 +501,32 @@ export async function resolveArtifactContent(
     }
 
     if (artifact.kind === 'agent') {
-      const candidates = [
-        path.join(targetDir, pathId, 'agents', `${artifact.name}.md`),
-        path.join(targetDir, pathId, `${artifact.name}.md`),
-        path.join(targetDir, 'plugins', pathId, 'agents', `${artifact.name}.md`),
-        path.join(targetDir, 'plugins', pathId, `${artifact.name}.md`),
-        path.join(targetDir, 'agents', `${artifact.name}.md`),
-        path.join(targetDir, `${artifact.name}.md`),
-      ];
-
       let agentFile = '';
-      for (const cand of candidates) {
-        if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
-          agentFile = cand;
-          break;
+      if (recordedTarget && fs.existsSync(recordedTarget) && fs.statSync(recordedTarget).isFile()) {
+        agentFile = recordedTarget;
+      }
+
+      if (!agentFile) {
+        const candidates = [
+          path.join(pluginSearchRoot, 'agents', `${artifact.name}.md`),
+          path.join(pluginSearchRoot, `${artifact.name}.md`),
+          path.join(targetDir, pathId, 'agents', `${artifact.name}.md`),
+          path.join(targetDir, pathId, `${artifact.name}.md`),
+          path.join(targetDir, 'plugins', pathId, 'agents', `${artifact.name}.md`),
+          path.join(targetDir, 'plugins', pathId, `${artifact.name}.md`),
+          ...(pathId
+            ? []
+            : [
+                path.join(targetDir, 'agents', `${artifact.name}.md`),
+                path.join(targetDir, `${artifact.name}.md`),
+              ]),
+        ];
+
+        for (const cand of candidates) {
+          if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
+            agentFile = cand;
+            break;
+          }
         }
       }
 
@@ -472,7 +548,7 @@ export async function resolveArtifactContent(
           }
           return null;
         };
-        agentFile = walkAgent(targetDir) ?? '';
+        agentFile = walkAgent(pluginSearchRoot) ?? '';
       }
 
       if (!agentFile) {
@@ -485,20 +561,32 @@ export async function resolveArtifactContent(
     }
 
     if (artifact.kind === 'command') {
-      const candidates = [
-        path.join(targetDir, pathId, 'commands', `${artifact.name}.md`),
-        path.join(targetDir, pathId, `${artifact.name}.md`),
-        path.join(targetDir, 'plugins', pathId, 'commands', `${artifact.name}.md`),
-        path.join(targetDir, 'plugins', pathId, `${artifact.name}.md`),
-        path.join(targetDir, 'commands', `${artifact.name}.md`),
-        path.join(targetDir, `${artifact.name}.md`),
-      ];
-
       let cmdFile = '';
-      for (const cand of candidates) {
-        if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
-          cmdFile = cand;
-          break;
+      if (recordedTarget && fs.existsSync(recordedTarget) && fs.statSync(recordedTarget).isFile()) {
+        cmdFile = recordedTarget;
+      }
+
+      if (!cmdFile) {
+        const candidates = [
+          path.join(pluginSearchRoot, 'commands', `${artifact.name}.md`),
+          path.join(pluginSearchRoot, `${artifact.name}.md`),
+          path.join(targetDir, pathId, 'commands', `${artifact.name}.md`),
+          path.join(targetDir, pathId, `${artifact.name}.md`),
+          path.join(targetDir, 'plugins', pathId, 'commands', `${artifact.name}.md`),
+          path.join(targetDir, 'plugins', pathId, `${artifact.name}.md`),
+          ...(pathId
+            ? []
+            : [
+                path.join(targetDir, 'commands', `${artifact.name}.md`),
+                path.join(targetDir, `${artifact.name}.md`),
+              ]),
+        ];
+
+        for (const cand of candidates) {
+          if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
+            cmdFile = cand;
+            break;
+          }
         }
       }
 
@@ -520,7 +608,7 @@ export async function resolveArtifactContent(
           }
           return null;
         };
-        cmdFile = walkCmd(targetDir) ?? '';
+        cmdFile = walkCmd(pluginSearchRoot) ?? '';
       }
 
       if (!cmdFile) {
@@ -533,20 +621,32 @@ export async function resolveArtifactContent(
     }
 
     if (artifact.kind === 'mcp-server') {
-      const candidates = [
-        path.join(targetDir, pathId, '.mcp.json'),
-        path.join(targetDir, pathId, 'mcp.json'),
-        path.join(targetDir, 'plugins', pathId, '.mcp.json'),
-        path.join(targetDir, 'plugins', pathId, 'mcp.json'),
-        path.join(targetDir, '.mcp.json'),
-        path.join(targetDir, 'mcp.json'),
-      ];
-
       let raw = '';
-      for (const cand of candidates) {
-        if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
-          raw = await fs.promises.readFile(cand, 'utf-8');
-          break;
+      if (recordedTarget && fs.existsSync(recordedTarget) && fs.statSync(recordedTarget).isFile()) {
+        raw = await fs.promises.readFile(recordedTarget, 'utf-8');
+      }
+
+      if (!raw) {
+        const candidates = [
+          path.join(pluginSearchRoot, '.mcp.json'),
+          path.join(pluginSearchRoot, 'mcp.json'),
+          path.join(targetDir, pathId, '.mcp.json'),
+          path.join(targetDir, pathId, 'mcp.json'),
+          path.join(targetDir, 'plugins', pathId, '.mcp.json'),
+          path.join(targetDir, 'plugins', pathId, 'mcp.json'),
+          ...(pathId
+            ? []
+            : [
+                path.join(targetDir, '.mcp.json'),
+                path.join(targetDir, 'mcp.json'),
+              ]),
+        ];
+
+        for (const cand of candidates) {
+          if (fs.existsSync(cand) && fs.statSync(cand).isFile()) {
+            raw = await fs.promises.readFile(cand, 'utf-8');
+            break;
+          }
         }
       }
 
@@ -576,7 +676,7 @@ export async function resolveArtifactContent(
           }
           return null;
         };
-        raw = walkMcp(targetDir) ?? '';
+        raw = walkMcp(pluginSearchRoot) ?? '';
       }
 
       if (!raw) {
