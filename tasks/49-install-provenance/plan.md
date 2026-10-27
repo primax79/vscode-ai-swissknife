@@ -8,12 +8,6 @@ folders read from the live working tree, catalog vs check commit, artifact match
 
 ## Tasks
 
-### 49.1 - Regression tests that reproduce the false Update
-
-- **Status:** `delivered` · **Short:** False Update tests · **Size:** M · **Depends on:** -
-- **Goal:** spec §6 cases 1-8 as tests on temp fixtures (git sources in temp repos, local-folder sources, two manifests with the same id); they fail on HEAD 41a4fb4 for the right reason (assert the failure message), marked expected-fail until the fixing task lands.
-- **Result:** Added `src/engine/provenance.test.ts` covering spec §6 cases 1–8 on isolated temp git/local-folder/manifest fixtures (cases 5 and 7 pass on main; cases 1–4, 6, 8 reproduce the bugs and are marked `{ todo: 'fixed by 49.x' }`).
-
 ### 49.2 - Source identity in the provenance record and in every lookup
 
 - **Status:** `open` · **Short:** Source identity · **Size:** L · **Depends on:** 49.1
@@ -43,3 +37,11 @@ folders read from the live working tree, catalog vs check commit, artifact match
 
 - **Status:** `open` · **Short:** Explain state · **Size:** S · **Depends on:** 49.5
 - **Goal:** spec §4: tooltip/detail panel and `status --explain` show source, installed and current commit, both hashes, state and reason; owner validates by use (fresh install shows up to date; an edit in the working copy no longer flips items).
+
+## Closed
+
+### 49.1 - Regression tests that reproduce the false Update
+
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** False Update tests · **Size:** M · **Depends on:** -
+- **Goal:** spec §6 cases 1-8 as tests on temp fixtures (git sources in temp repos, local-folder sources, two manifests with the same id); they fail on HEAD 41a4fb4 for the right reason (assert the failure message), marked expected-fail until the fixing task lands.
+- **Result:** Added `src/engine/provenance.test.ts` covering spec §6 cases 1–8 on isolated temp git/local-folder/manifest fixtures (cases 5 and 7 pass on main; cases 1–4, 6, 8 reproduce the bugs and are marked `{ todo: 'fixed by 49.x' }`).

@@ -6,13 +6,14 @@
 - priority: P3
 - priority-reason: Le prove degli use case UC008, UC019, UC029 falliscono con una HOME isolata; il prodotto funziona, il test no
 - next-up: no
-- state: delivered
+- state: done
 - executor: kilo
 - depends-on: -
 - decider: -
 - sources: verifica degli use case 2026-10-27 (ai-coding-tools-c1)
 - paths: src/engine/discovery.test.ts
 - handoff: Read tasks/tests/T001-test-di-discovery-indipendenti-dalla-home-reale.md, do the open steps, run the Verification, update the task and the registry.
+- verifier: ai-coding-tools-c1
 - short: Test senza HOME reale
 
 ## Goal
@@ -34,4 +35,6 @@ Il test 'attempts to resolve git-single-item and remote-url sources' (src/engine
 
 ## Log
 
+- 2026-10-27, ai-coding-tools-c1: state `verified` -> `done`
+- 2026-10-27, ai-coding-tools-c1: state `delivered` -> `verified`
 - 2026-10-27, kilo: state `open` -> `delivered` — risolta dipendenza da HOME reale in discovery iniettando homeRoot in resolveAndTranslate e aggiunto script test:isolated

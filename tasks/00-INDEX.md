@@ -187,7 +187,7 @@ hands-on testing round.
 | 46 | 46 | [CLI access to the extension](done/46-cli-access/plan.md) | done | 37.1, 44.1 | M |
 | 47 | 47 | [Update all](done/47-update-all/plan.md) | done | 37.1 | M |
 | 48 | 48 | [Maintainer features for the CLI](48-cli-maintainer-features/plan.md) | in progress (done: 48.1, 48.1b; next: 48.2–48.8) | 46, 47 | L |
-| 49 | 49 | [Install provenance and update detection — Implementation plan](49-install-provenance/plan.md) | open | - | - |
+| 49 | 49 | [Install provenance and update detection — Implementation plan](49-install-provenance/plan.md) | in progress (done: 49.1; next: 49.2–49.7) | - | - |
 <!-- /ai-orch:generated initiatives -->
 
 ## Next up
@@ -204,13 +204,7 @@ Emergent tasks (`T###`) sit beside the initiatives; see [`AGENTS.md`](AGENTS.md)
 No emergent tasks yet. Add a category folder (`tasks/<category>/` with a `README.md` and `notes/`) with the first task.
 
 <!-- ai-orch:generated tasks-by-category -->
-### tests
 
-Tasks in `tests`. Owner session: unassigned ([README](tests/README.md)).
-
-| Id | Priority | Task | State | Executor | Depends on |
-| --- | --- | --- | --- | --- | --- |
-| T001 (Test senza HOME reale) | P3 | [Test di discovery indipendenti dalla HOME reale](tests/T001-test-di-discovery-indipendenti-dalla-home-reale.md) | open | kilo | - |
 <!-- /ai-orch:generated tasks-by-category -->
 
 ## Decisions waiting
@@ -226,6 +220,7 @@ Tasks in `tests`. Owner session: unassigned ([README](tests/README.md)).
 <!-- ai-orch:generated done -->
 | Id | Task | Result | Closed |
 | --- | --- | --- | --- |
+| T001 (Test senza HOME reale) | [Test di discovery indipendenti dalla HOME reale](done/tests/T001-test-di-discovery-indipendenti-dalla-home-reale.md) | done | 2026-10-27 |
 <!-- /ai-orch:generated done -->
 
 ## Specs
