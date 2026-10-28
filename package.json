@@ -2,7 +2,7 @@
   "name": "ai-swissknife",
   "displayName": "AI Swissknife",
   "description": "Cross-assistant marketplace and management for custom skill/agent/mcp/rule repositories (Claude Code, Kilo Code, and more).",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "publisher": "AlfredoOliviero",
   "license": "MIT",
   "icon": "resources/icon.png",
