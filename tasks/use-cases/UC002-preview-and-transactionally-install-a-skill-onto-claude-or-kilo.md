@@ -3,9 +3,9 @@
 - id: UC002
 - title: Preview and transactionally install a skill onto Claude or Kilo
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P1
-- linked-tasks: 03, 05, 06, 07
+- linked-tasks: 03.1, 03.2, 03.3, 03.4, 05.1, 05.2, 06.1, 06.2, 07.1, 07.2, 07.3
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

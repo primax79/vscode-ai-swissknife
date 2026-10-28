@@ -3,13 +3,13 @@
 - id: UC032
 - title: Execute plan-first CLI write commands with state locking and code gates
 - actor: Operator
-- status: draft
+- approval: proposed
 - priority: P1
-- linked-tasks: 46
+- linked-tasks: 46.1, 46.2, 46.3, 46.4, 46.5
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -
-- short: CLI write commands & state lock
+- short: CLI writes and state lock
 
 ## Description & Business Value
 Allows an operator or agent to install, update, uninstall, manage sources, and manage trash from the CLI using a plan-first contract (read-only preview unless --write is passed), refusing hook and mcp-server kinds without --allow-code-kinds and serializing concurrent writers via a cross-process state lock. Source: tasks/specs/mcp-cli-access-study.md §3, §4

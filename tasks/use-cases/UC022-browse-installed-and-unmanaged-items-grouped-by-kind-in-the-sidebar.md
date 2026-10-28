@@ -3,9 +3,9 @@
 - id: UC022
 - title: Browse installed and unmanaged items grouped by kind in the sidebar
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P2
-- linked-tasks: 28
+- linked-tasks: 28.1, 28.2
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

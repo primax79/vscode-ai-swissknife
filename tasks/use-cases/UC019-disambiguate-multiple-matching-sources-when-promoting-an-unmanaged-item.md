@@ -3,9 +3,9 @@
 - id: UC019
 - title: Disambiguate multiple matching sources when promoting an unmanaged item
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P1
-- linked-tasks: 25
+- linked-tasks: 25.1, 25.2, 25.3, 25.4, 25.5
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

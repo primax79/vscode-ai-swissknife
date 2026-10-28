@@ -51,15 +51,15 @@ Decisioni condivise per questa iniziativa che ogni task deve rispettare:
 
 ### 07.1 - Contenitore Activity Bar + vista Sources
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Activity Bar e vista Sources · **Size:** M · **Depends on:** 02.3 · **Spec:** [07.1-sources-view.md](07.1-sources-view.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Activity Bar e vista Sources · **Size:** M · **Depends on:** 02.3 · **Use cases:** UC001, UC002, UC003 · **Spec:** [07.1-sources-view.md](07.1-sources-view.md)
 - **Goal:** Aggiungere il contenitore dell'Activity Bar `ai-swissknife`, il selettore riutilizzabile della cartella per workspace multi-root e il `SourcesTreeDataProvider` basato sul registro con i comandi di aggiunta/rimozione/ricaricamento.
 
 ### 07.2 - Vista Available (navigazione + comando di installazione)
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Vista Available e comando install · **Size:** M · **Depends on:** 04.3, 06.1, 06.2, 07.1 · **Spec:** [07.2-available-view.md](07.2-available-view.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Vista Available e comando install · **Size:** M · **Depends on:** 04.3, 06.1, 06.2, 07.1 · **Use cases:** UC001, UC002, UC003 · **Spec:** [07.2-available-view.md](07.2-available-view.md)
 - **Goal:** Implementare `AvailableTreeDataProvider` mostrando i pacchetti risolti, gli artefatti e le diagnostiche con anteprima e installazione controllata rispetto ai conflitti.
 
 ### 07.3 - Vista Installed (basata sul registro)
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Vista Installed basata sul registro · **Size:** S · **Depends on:** 02.3, 07.1, 07.2 · **Spec:** [07.3-installed-view.md](07.3-installed-view.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Vista Installed basata sul registro · **Size:** S · **Depends on:** 02.3, 07.1, 07.2 · **Use cases:** UC001, UC002, UC003 · **Spec:** [07.3-installed-view.md](07.3-installed-view.md)
 - **Goal:** Implementare `InstalledTreeDataProvider` elencando i record `ManagedInstallation` da `state.json` raggruppati per assistente e scope.

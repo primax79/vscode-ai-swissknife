@@ -3,9 +3,9 @@
 - id: UC009
 - title: Inspect and manage inventory from the Management Dashboard webview
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P2
-- linked-tasks: 16, 15
+- linked-tasks: 15.1, 15.2, 16.1, 16.2, 16.3
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

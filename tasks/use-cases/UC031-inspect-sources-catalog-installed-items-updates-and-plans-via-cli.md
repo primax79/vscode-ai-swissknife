@@ -3,9 +3,9 @@
 - id: UC031
 - title: Inspect sources, catalog, installed items, updates, and plans via CLI
 - actor: Operator
-- status: draft
+- approval: proposed
 - priority: P1
-- linked-tasks: 46
+- linked-tasks: 46.1, 46.2, 46.3, 46.4, 46.5
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

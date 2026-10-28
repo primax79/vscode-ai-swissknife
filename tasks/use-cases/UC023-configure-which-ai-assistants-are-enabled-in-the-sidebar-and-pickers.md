@@ -3,9 +3,9 @@
 - id: UC023
 - title: Configure which AI assistants are enabled in the sidebar and pickers
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P2
-- linked-tasks: 29, 30
+- linked-tasks: 29.1, 29.2, 29.3, 29.4, 29.5, 30.1, 30.2, 30.3, 30.4
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

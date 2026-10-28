@@ -35,10 +35,10 @@ Decisioni condivise per questa iniziativa che ogni task deve rispettare:
 
 ### 05.1 - Traduttore + diagnostiche di conversione
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Traduttore per skill e regole · **Size:** S · **Depends on:** 03.1 · **Spec:** [05.1-translator.md](05.1-translator.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Traduttore per skill e regole · **Size:** S · **Depends on:** 03.1 · **Use cases:** UC002 · **Spec:** [05.1-translator.md](05.1-translator.md)
 - **Goal:** Implementare `translateSkill` e `translateRule` in `src/translator/skill.ts` restituendo gli oggetti canonici tradotti insieme a `ConversionDiagnostic`.
 
 ### 05.2 - Diagnostiche per campo (hardening)
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Diagnostiche per campo per destinazione · **Size:** M · **Depends on:** 05.1, 03.4 · **Spec:** [05.2-hardening.md](05.2-hardening.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Diagnostiche per campo per destinazione · **Size:** M · **Depends on:** 05.1, 03.4 · **Use cases:** UC002 · **Spec:** [05.2-hardening.md](05.2-hardening.md)
 - **Goal:** Modificare `translateSkill` e `translateRule` affinché accettino solo `targetAssistant: AssistantId` e restituiscano un `TranslationResult<T>` strutturato con diagnostiche per campo e file ausiliari della skill preservati.

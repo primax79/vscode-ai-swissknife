@@ -51,20 +51,20 @@ Decisioni condivise per questa iniziativa che ogni task deve rispettare:
 
 ### 03.1 - Interfaccia Adapter
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Interfaccia condivisa Adapter · **Size:** S · **Depends on:** 02.1 · **Spec:** [03.1-adapter-interface.md](03.1-adapter-interface.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Interfaccia condivisa Adapter · **Size:** S · **Depends on:** 02.1 · **Use cases:** UC002 · **Spec:** [03.1-adapter-interface.md](03.1-adapter-interface.md)
 - **Goal:** Definire il contratto condiviso `Adapter` e i modelli canonici in memoria (`CanonicalSkill`, `CanonicalRule`, `ConversionDiagnostic`) in `src/adapters/types.ts`.
 
 ### 03.2 - Adapter Claude Code
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Adapter Claude Code · **Size:** M · **Depends on:** 03.1 · **Spec:** [03.2-claude-adapter.md](03.2-claude-adapter.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Adapter Claude Code · **Size:** M · **Depends on:** 03.1 · **Use cases:** UC002 · **Spec:** [03.2-claude-adapter.md](03.2-claude-adapter.md)
 - **Goal:** Implementare `ClaudeAdapter` in `src/adapters/claude.ts` coprendo lettura/scrittura/elenco di `skill` e `rule` negli scope globale e di progetto.
 
 ### 03.3 - Adapter Kilo Code
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Adapter Kilo Code · **Size:** M · **Depends on:** 03.1 · **Spec:** [03.3-kilo-adapter.md](03.3-kilo-adapter.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Adapter Kilo Code · **Size:** M · **Depends on:** 03.1 · **Use cases:** UC002 · **Spec:** [03.3-kilo-adapter.md](03.3-kilo-adapter.md)
 - **Goal:** Implementare `KiloAdapter` in `src/adapters/kilo.ts` coprendo lettura/scrittura/elenco di `skill` e `rule` negli scope globale e di progetto.
 
 ### 03.4 - Codec condiviso delle skill, validazione dei percorsi, payload della directory (hardening)
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Hardening codec skill condiviso · **Size:** M · **Depends on:** 03.2, 03.3 · **Spec:** [03.4-hardening.md](03.4-hardening.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Hardening codec skill condiviso · **Size:** M · **Depends on:** 03.2, 03.3 · **Use cases:** UC002 · **Spec:** [03.4-hardening.md](03.4-hardening.md)
 - **Goal:** Creare un codec condiviso delle skill in `src/adapters/codec.ts` che carichi l'intero payload della directory della skill (`files` + permessi di esecuzione), validi percorsi relativi sicuri ed esponga le skill malformate come diagnostiche strutturate.

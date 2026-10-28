@@ -18,7 +18,7 @@
 
 ### 43.4 - UI: azione Disable/Enable (menu contestuale + barra di dettaglio), badge attenuato, pill di filtro "Disabled"
 
-- **Status:** `open` (solo bozza, in attesa di 40.2 e 42.3) · **Short:** UI disabilita e abilita · **Size:** M · **Depends on:** 43.2, 43.3, 40.2, 42.3
+- **Status:** `open` (solo bozza, in attesa di 40.2 e 42.3) · **Short:** UI disabilita e abilita · **Size:** M · **Depends on:** 43.2, 43.3, 40.2, 42.3 · **Use cases:** UC029
 - **Goal:** Aggiungere un'azione di attivazione/disattivazione `Disable`/`Enable` nel menu contestuale e nella barra di dettaglio, rendering attenuato/barrato per le righe disabilitate e una pill di filtro "Disabled".
 
 ## Bozze (da trasformare in file di task completi dopo 43.1)
@@ -31,15 +31,15 @@
 
 ### 43.1 - Spike: verificare per assistente che `_disabled/` come cartella sorella non venga caricata
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Spike cartella sorella disabilitata · **Size:** S · **Kind:** investigation · **Depends on:** - · **Spec:** [43.1-discovery-spike.md](43.1-discovery-spike.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Spike cartella sorella disabilitata · **Size:** S · **Kind:** investigation · **Depends on:** - · **Use cases:** UC029 · **Spec:** [43.1-discovery-spike.md](43.1-discovery-spike.md)
 - **Goal:** Verificare per assistente e ambito se una directory sorella `<assistant root>/_disabled/<kind>/<name>` venga ignorata dalla discovery e registrare i risultati in `notes/43.1-findings.md`.
 
 ### 43.2 - Motore: `disableItem` / `enableItem` per i tipi basati su file + flag di stato + migrazione
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Disabilita e abilita nel motore · **Size:** M · **Depends on:** 43.1 · **Spec:** [43.2-engine-disable-enable.md](43.2-engine-disable-enable.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Disabilita e abilita nel motore · **Size:** M · **Depends on:** 43.1 · **Use cases:** UC029 · **Spec:** [43.2-engine-disable-enable.md](43.2-engine-disable-enable.md)
 - **Goal:** Aggiungere `getDisabledPath` sugli adapter e `planDisable`/`applyDisable`/`applyEnable` in `src/engine/disable.ts` con persistenza dello stato `disabled?: boolean` e gestione del drift.
 
 ### 43.3 - Inventario: scansione delle posizioni disabilitate, stato posizione `disabled`, nessun falso `missing-on-disk`
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Scansione inventario disabilitati · **Size:** M · **Depends on:** 43.2, 40.1 · **Spec:** [43.3-inventory-disabled.md](43.3-inventory-disabled.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Scansione inventario disabilitati · **Size:** M · **Depends on:** 43.2, 40.1 · **Use cases:** UC029 · **Spec:** [43.3-inventory-disabled.md](43.3-inventory-disabled.md)
 - **Goal:** Scansionare le directory `_disabled/<kind>` degli adapter durante la discovery dell'inventario, supportare la disabilitazione/abilitazione degli elementi non gestiti e aggiungere `disabled` al modello degli stati di `Place`.

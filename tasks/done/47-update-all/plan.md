@@ -23,20 +23,20 @@ L'aggiornamento avviene un elemento alla volta: `InstalledTreeDataProvider.doUpd
 
 ### 47.1 - Motore: `planUpdate` estratto dalla UI, `planUpdateAll` / `applyUpdateAll`
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Motore di update all · **Size:** M · **Depends on:** 37.1 · **Spec:** [47.1-engine-update-all.md](47.1-engine-update-all.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Motore di update all · **Size:** M · **Depends on:** 37.1 · **Use cases:** UC027 · **Spec:** [47.1-engine-update-all.md](47.1-engine-update-all.md)
 - **Goal:** Estrarre `planUpdate` in `src/engine/update.ts` e implementare `planUpdateAll` e `applyUpdateAll` con risoluzione una sola volta per sorgente e backup nel cestino per gli elementi modificati localmente.
 
 ### 47.2 - UI: comando, pulsante nella barra laterale per ambiente, pulsante nella Dashboard sulla selezione filtrata, modale di riepilogo e report dei risultati
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Attivatori UI di update all · **Size:** M · **Depends on:** 47.1 · **Spec:** [47.2-ui-update-all.md](47.2-ui-update-all.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Attivatori UI di update all · **Size:** M · **Depends on:** 47.1 · **Use cases:** UC027 · **Spec:** [47.2-ui-update-all.md](47.2-ui-update-all.md)
 - **Goal:** Aggiungere il comando `aiSwissknife.updateAll`, i pulsanti nella barra laterale per ambiente e gli attivatori nella barra degli strumenti/scheda statistica della Dashboard con una modale di riepilogo di conferma e un report dei risultati per elemento.
 
 ### 47.3 - Bloccare (hold) un elemento escludendolo da Update all (flag, contenitore nel motore, toggle e indicatore nella UI)
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Blocco elemento da update all · **Size:** S · **Depends on:** 47.1, 47.2 · **Spec:** [47.3-hold.md](47.3-hold.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Blocco elemento da update all · **Size:** S · **Depends on:** 47.1, 47.2 · **Use cases:** UC027 · **Spec:** [47.3-hold.md](47.3-hold.md)
 - **Goal:** Aggiungere un flag opzionale `held` su `ManagedInstallation`, un contenitore `held` in `planUpdateAll`, e i toggle UI Hold/Release e gli indicatori a spillo così che gli elementi bloccati vengano saltati da Update all.
 
 ### 47.4 - Il controllo di drift risolve ciascuna sorgente una sola volta (prima era una per elemento: N git fetch)
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Risoluzione unica sorgenti nel drift · **Size:** S · **Depends on:** 47.1 · **Spec:** [47.4-drift-resolve-once.md](47.4-drift-resolve-once.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Risoluzione unica sorgenti nel drift · **Size:** S · **Depends on:** 47.1 · **Use cases:** UC027 · **Spec:** [47.4-drift-resolve-once.md](47.4-drift-resolve-once.md)
 - **Goal:** Aggiungere `checkDriftForAll` in `src/engine/drift.ts` così che un controllo di drift su più installazioni risolva ciascuna sorgente una sola volta per esecuzione invece di una volta per elemento.

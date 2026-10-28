@@ -3,9 +3,9 @@
 - id: UC003
 - title: Separate shared manifest intent from machine-local install state
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P1
-- linked-tasks: 02, 06, 07
+- linked-tasks: 02.1, 02.2, 02.3, 06.1, 06.2, 07.1, 07.2, 07.3
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

@@ -3,9 +3,9 @@
 - id: UC018
 - title: Move an installed artifact to another assistant or scope with soft-delete
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P1
-- linked-tasks: 25
+- linked-tasks: 25.1, 25.2, 25.3, 25.4, 25.5
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

@@ -3,9 +3,9 @@
 - id: UC027
 - title: Batch-update all outdated managed items while protecting local edits
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P1
-- linked-tasks: 47
+- linked-tasks: 47.1, 47.2, 47.3, 47.4
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

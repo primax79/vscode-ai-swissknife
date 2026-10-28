@@ -3,9 +3,9 @@
 - id: UC010
 - title: Create or edit artifacts via the structured Form Editor webview
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P2
-- linked-tasks: 17
+- linked-tasks: 17.1, 17.2, 17.3
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

@@ -44,15 +44,15 @@ le domande meno informative (id, nome) per prime e quella più informativa
 
 ### 36.1 - Helper puro: validazione della posizione + derivazione di id/nome
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Valida posizione e deriva default · **Size:** S · **Depends on:** - · **Spec:** [36.1-derive-source-defaults.md](36.1-derive-source-defaults.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Valida posizione e deriva default · **Size:** S · **Depends on:** - · **Use cases:** UC028 · **Spec:** [36.1-derive-source-defaults.md](36.1-derive-source-defaults.md)
 - **Goal:** Creare `src/sources/sourceDefaults.ts` che esporta `validateLocation` e `deriveSourceDefaults` per validare URL/percorsi e derivare `id` e `name` della sorgente senza importare `vscode`.
 
 ### 36.2 - Riscrittura di `addSource` come wizard tipo → scope → posizione → dettagli (scope singolo)
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Flusso wizard aggiunta sorgente · **Size:** M · **Depends on:** 36.1 · **Spec:** [36.2-wizard-flow.md](36.2-wizard-flow.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Flusso wizard aggiunta sorgente · **Size:** M · **Depends on:** 36.1 · **Use cases:** UC028 · **Spec:** [36.2-wizard-flow.md](36.2-wizard-flow.md)
 - **Goal:** Riscrivere `SourcesProvider.addSource(forceScope?)` in un flusso wizard tipo → scope → posizione → id/nome precompilati con assunzione del branch di default e fissaggio opzionale di branch/tag.
 
 ### 36.3 - Selezione multi-scope (una scrittura per scope, percorsi locali per scope) + gestione degli id duplicati
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Wizard aggiunta sorgente multi-scope · **Size:** S · **Depends on:** 36.2 · **Spec:** [36.3-scope-both.md](36.3-scope-both.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Wizard aggiunta sorgente multi-scope · **Size:** S · **Depends on:** 36.2 · **Use cases:** UC028 · **Spec:** [36.3-scope-both.md](36.3-scope-both.md)
 - **Goal:** Trasformare il passo dello scope di aggiunta sorgente in una selezione multipla (Global e/o Workspace), chiedere percorsi per scope per `local-folder` e chiedere "Replace?" in caso di ID sorgente duplicati per scope.

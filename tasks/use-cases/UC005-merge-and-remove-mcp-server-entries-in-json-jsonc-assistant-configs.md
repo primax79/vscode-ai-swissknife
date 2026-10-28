@@ -3,9 +3,9 @@
 - id: UC005
 - title: Merge and remove MCP server entries in JSON/JSONC assistant configs
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P1
-- linked-tasks: 10, 12, 44
+- linked-tasks: 10.1, 10.2, 10.3, 12.1, 12.2, 12.3, 44.1, 44.2, 44.3, 44.4, 44.5, 44.6
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

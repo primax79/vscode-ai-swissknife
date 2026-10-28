@@ -30,20 +30,20 @@ La sezione Ambito di ciascun task sottostante descrive la struttura di destinazi
 
 ### 31.1 - `doUpdateInstallation`/`doUninstallItem`
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** doUpdate e doUninstall in Installed · **Size:** S · **Depends on:** 28, 29, 30 · **Spec:** [31.1-installed-do-methods.md](31.1-installed-do-methods.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** doUpdate e doUninstall in Installed · **Size:** S · **Depends on:** 28, 29, 30 · **Use cases:** UC024, UC025 · **Spec:** [31.1-installed-do-methods.md](31.1-installed-do-methods.md)
 - **Goal:** Estrarre i metodi pubblici che accettano un semplice `ManagedInstallation`, `doUpdateInstallation` e `doUninstallItem`, su `InstalledTreeDataProvider` così che i messaggi della webview possano invocarli.
 
 ### 31.2 - Disaccoppiare i metodi di installazione di `availableView.ts`
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Disaccoppiamento install in Available · **Size:** M · **Depends on:** 28, 29, 30 · **Spec:** [31.2-available-decouple-install.md](31.2-available-decouple-install.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Disaccoppiamento install in Available · **Size:** M · **Depends on:** 28, 29, 30 · **Use cases:** UC024, UC025 · **Spec:** [31.2-available-decouple-install.md](31.2-available-decouple-install.md)
 - **Goal:** Fornire a `installFolder`, `installSourceGroup` e `installArtifact` punti di ingresso basati su identificatori semplici su `AvailableTreeDataProvider` e rendere pubblico `installBatch`.
 
 ### 31.3 - Gestori recommend/unrecommend basati su identificatori
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Gestori suggerimenti per id · **Size:** S · **Depends on:** 28, 29, 30 · **Spec:** [31.3-recommendation-handlers.md](31.3-recommendation-handlers.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Gestori suggerimenti per id · **Size:** S · **Depends on:** 28, 29, 30 · **Use cases:** UC024, UC025 · **Spec:** [31.3-recommendation-handlers.md](31.3-recommendation-handlers.md)
 - **Goal:** Estrarre i gestori recommend e unrecommend basati su identificatori in `src/ui/recommendations.ts` affinché non dipendano da verifiche su `TreeItem` tramite `instanceof`.
 
 ### 31.4 - Identità stabile degli elementi + verifica di non regressione
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Identità composita e regressione · **Size:** M · **Depends on:** 31.1, 31.2, 31.3 · **Spec:** [31.4-identity-and-regression.md](31.4-identity-and-regression.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Identità composita e regressione · **Size:** M · **Depends on:** 31.1, 31.2, 31.3 · **Use cases:** UC024, UC025 · **Spec:** [31.4-identity-and-regression.md](31.4-identity-and-regression.md)
 - **Goal:** Introdurre una chiave di identità composita `{assistant, scope, kind, name}` con nuova risoluzione lato server e verificare la piena parità delle azioni della sidebar.

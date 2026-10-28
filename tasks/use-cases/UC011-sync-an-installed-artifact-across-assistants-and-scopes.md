@@ -3,9 +3,9 @@
 - id: UC011
 - title: Sync an installed artifact across assistants and scopes
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P1
-- linked-tasks: 18
+- linked-tasks: 18.1, 18.2, 18.3
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

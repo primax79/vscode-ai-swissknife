@@ -3,9 +3,9 @@
 - id: UC034
 - title: Scan multiple workspace roots via CLI with depth and ignore rules
 - actor: Operator
-- status: draft
+- approval: proposed
 - priority: P2
-- linked-tasks: 48
+- linked-tasks: 48.1, 48.1b, 48.2, 48.3, 48.4, 48.5, 48.6, 48.7, 48.8
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

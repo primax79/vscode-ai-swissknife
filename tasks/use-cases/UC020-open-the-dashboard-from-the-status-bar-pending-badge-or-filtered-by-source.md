@@ -3,9 +3,9 @@
 - id: UC020
 - title: Open the Dashboard from the status bar pending badge or filtered by source
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P2
-- linked-tasks: 26, 27
+- linked-tasks: 26.1, 26.2, 27.1, 27.2
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

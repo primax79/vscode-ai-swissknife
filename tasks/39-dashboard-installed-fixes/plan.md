@@ -31,22 +31,22 @@
 
 ### 39.2 - Parità delle azioni della Dashboard con la barra laterale (preview, diff, sync, recommend, edit, delete)
 
-- **Status:** `in progress` (eliminazione/anteprima non gestiti aggiunti in 5e97e59 2026-10-15; mancano tabella di parità, Edit/Sync non gestiti, Recommend gestito nel dettaglio e modale Remove soft/hard su Uninstall gestito) · **Short:** Parità azioni della Dashboard · **Size:** M · **Depends on:** 39.1, 39.4, 40.2 · **Spec:** [39.2-action-parity.md](39.2-action-parity.md)
+- **Status:** `in progress` (eliminazione/anteprima non gestiti aggiunti in 5e97e59 2026-10-15; mancano tabella di parità, Edit/Sync non gestiti, Recommend gestito nel dettaglio e modale Remove soft/hard su Uninstall gestito) · **Short:** Parità azioni della Dashboard · **Size:** M · **Depends on:** 39.1, 39.4, 40.2 · **Use cases:** UC026 · **Spec:** [39.2-action-parity.md](39.2-action-parity.md)
 - **Goal:** Portare le azioni delle righe e del pannello di dettaglio della Dashboard alla piena parità con la barra laterale (Preview, Diff, Sync, Move, Edit, Update, Recommend/Unrecommend, Promote e Remove soft/hard).
 
 ### 39.3 - Verificare i dati di "differs", poi chiarire i badge identical/differs
 
-- **Status:** `open` · **Short:** Chiarire badge identical e differs · **Size:** S · **Depends on:** 39.1, 40.2 · **Spec:** [39.3-status-clarity.md](39.3-status-clarity.md)
+- **Status:** `open` · **Short:** Chiarire badge identical e differs · **Size:** S · **Depends on:** 39.1, 40.2 · **Use cases:** UC026 · **Spec:** [39.3-status-clarity.md](39.3-status-clarity.md)
 - **Goal:** Verificare se gli elementi non gestiti "differs from <source>" siano divergenze reali o artefatti di hash, quindi uniformare testi e stile dei badge tra barra laterale e Dashboard (`✓ Identical to <source>` vs neutro `Custom · differs from <source>`).
 
 ## Closed
 
 ### 39.1 - Correggere `[object Object]` e mantenere sincronizzata la tabella Unmanaged
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Correzione rendering righe inventoryData · **Size:** S · **Depends on:** - · **Spec:** [39.1-fix-inventory-rows.md](39.1-fix-inventory-rows.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Correzione rendering righe inventoryData · **Size:** S · **Depends on:** - · **Use cases:** UC026 · **Spec:** [39.1-fix-inventory-rows.md](39.1-fix-inventory-rows.md)
 - **Goal:** Correggere l'handler client `inventoryData` che assegna `msg.rowsHtml` come oggetto a `#unifiedTable` e mantenere sincronizzati i corpi di entrambe le tabelle gestita e non gestita durante i refresh.
 
 ### 39.4 - Pannello di dettaglio: origine calcolata, stato a parole, posizione, un'unica barra delle azioni con etichette
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Pannello di dettaglio comprensibile · **Size:** M · **Depends on:** 39.1 · **Spec:** [39.4-detail-panel.md](39.4-detail-panel.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Pannello di dettaglio comprensibile · **Size:** M · **Depends on:** 39.1 · **Use cases:** UC026 · **Spec:** [39.4-detail-panel.md](39.4-detail-panel.md)
 - **Goal:** Ristrutturare il pannello di dettaglio della Dashboard con un'intestazione chiara, stato a parole, origine calcolata (inclusi i candidati di corrispondenza non gestiti), percorso su disco, elenco cross-framework e un'unica barra delle azioni con etichette.

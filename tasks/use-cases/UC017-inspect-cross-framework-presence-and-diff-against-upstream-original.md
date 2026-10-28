@@ -3,9 +3,9 @@
 - id: UC017
 - title: Inspect cross-framework presence and diff against upstream original
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P2
-- linked-tasks: 23, 24, 26
+- linked-tasks: 23.1, 23.2, 23.3, 24.1, 24.2, 26.1, 26.2
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

@@ -33,17 +33,17 @@
 
 ### 37.2 - Flusso di installazione unificato a selezione multipla in `availableView.ts`
 
-- **Status:** `open` · **Short:** Flusso installazione multi-selezione · **Size:** M · **Depends on:** 37.1 · **Spec:** [37.2-multi-select-flow.md](37.2-multi-select-flow.md)
+- **Status:** `open` · **Short:** Flusso installazione multi-selezione · **Size:** M · **Depends on:** 37.1 · **Use cases:** UC028 · **Spec:** [37.2-multi-select-flow.md](37.2-multi-select-flow.md)
 - **Goal:** Unificare `installArtifact` e `installBatch` in `src/ui/availableView.ts` dietro un singolo flusso con selezione multipla degli assistenti, selezione dell'ambito Workspace/Global/Both e una modale di riepilogo con Preview/Install/Overwrite.
 
 ### 37.3 - Rendicontazione degli esiti per target e gestione dei fallimenti parziali
 
-- **Status:** `open` · **Short:** Report esiti installazione target · **Size:** S · **Depends on:** 37.2 · **Spec:** [37.3-result-reporting.md](37.3-result-reporting.md)
+- **Status:** `open` · **Short:** Report esiti installazione target · **Size:** S · **Depends on:** 37.2 · **Use cases:** UC028 · **Spec:** [37.3-result-reporting.md](37.3-result-reporting.md)
 - **Goal:** Sostituire le notifiche di installazione per singolo flusso con un'unica notifica di riepilogo (`applied / skipped / unsupported / failed`), un canale di output "Show details" in caso di errore e un unico refresh finale.
 
 ## Closed
 
 ### 37.1 - Helper del motore: pianificare la matrice assistente × ambito e riepilogarla
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Helper matrice di installazione · **Size:** M · **Depends on:** - · **Spec:** [37.1-target-matrix.md](37.1-target-matrix.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Helper matrice di installazione · **Size:** M · **Depends on:** - · **Use cases:** UC028 · **Spec:** [37.1-target-matrix.md](37.1-target-matrix.md)
 - **Goal:** Creare `src/engine/installMatrix.ts` con `planInstallMatrix` e `applyInstallMatrix` per pianificare e applicare sequenzialmente le installazioni sul prodotto cartesiano assistente × ambito.

@@ -3,9 +3,9 @@
 - id: UC025
 - title: Act on workspace recommendations and update or uninstall from Dashboard
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P1
-- linked-tasks: 31, 34, 35
+- linked-tasks: 31.1, 31.2, 31.3, 31.4, 34.1, 34.2, 34.3, 35.1, 35.2, 35.3, 35.4, 35.5
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

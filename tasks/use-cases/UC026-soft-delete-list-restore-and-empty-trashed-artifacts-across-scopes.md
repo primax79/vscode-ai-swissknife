@@ -3,9 +3,9 @@
 - id: UC026
 - title: Soft-delete, list, restore, and empty trashed artifacts across scopes
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P1
-- linked-tasks: 39, 42
+- linked-tasks: 39.1, 39.2, 39.3, 39.4, 42.1, 42.2, 42.3, 42.4, 42.5
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

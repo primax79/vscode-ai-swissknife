@@ -3,9 +3,9 @@
 - id: UC006
 - title: Resolve multi-plugin catalogs from git-marketplace sources
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P1
-- linked-tasks: 11
+- linked-tasks: 11.1, 11.2, 11.3
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

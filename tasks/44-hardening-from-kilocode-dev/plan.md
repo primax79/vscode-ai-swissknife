@@ -30,32 +30,32 @@
 
 ### 44.2 - Workspace Trust: spike, poi dichiarare `limited` e saltare le sorgenti di progetto quando non attendibile
 
-- **Status:** `open` · **Short:** Controllo Workspace Trust · **Size:** S · **Priority:** P2 · **Depends on:** - · **Spec:** [44.2-workspace-trust.md](44.2-workspace-trust.md)
+- **Status:** `open` · **Short:** Controllo Workspace Trust · **Size:** S · **Priority:** P2 · **Depends on:** - · **Use cases:** UC005, UC013, UC021 · **Spec:** [44.2-workspace-trust.md](44.2-workspace-trust.md)
 - **Goal:** Verificare il comportamento in Restricted Mode, dichiarare `capabilities.untrustedWorkspaces` e saltare la risoluzione delle sorgenti e le installazioni nell'ambito progetto quando il workspace non è attendibile.
 
 ## Closed
 
 ### 44.1 - Irrigidire la risoluzione delle sorgenti git (validazione di url/ref/id, `--`, allow-list dei protocolli, directory di cache sicura)
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Hardening risoluzione sorgenti git · **Size:** M · **Priority:** P1 · **Depends on:** 36.1 · **Spec:** [44.1-git-source-hardening.md](44.1-git-source-hardening.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Hardening risoluzione sorgenti git · **Size:** M · **Priority:** P1 · **Depends on:** 36.1 · **Use cases:** UC005, UC013, UC021 · **Spec:** [44.1-git-source-hardening.md](44.1-git-source-hardening.md)
 - **Goal:** Validare URL git, ref e ID delle directory di cache al momento della risoluzione, passare i separatori `--` a `git clone`/`checkout` e limitare `GIT_ALLOW_PROTOCOL`.
 
 ### 44.3 - Configurazione MCP di Kilo: verificare la destinazione reale con Kilo, poi scrivere nel vero campo `mcp` (compatibile con JSONC)
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Percorso config JSONC MCP Kilo · **Size:** M · **Priority:** P1 · **Depends on:** - · **Spec:** [44.3-kilo-mcp-config-path.md](44.3-kilo-mcp-config-path.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Percorso config JSONC MCP Kilo · **Size:** M · **Priority:** P1 · **Depends on:** - · **Use cases:** UC005, UC013, UC021 · **Spec:** [44.3-kilo-mcp-config-path.md](44.3-kilo-mcp-config-path.md)
 - **Goal:** Scrivere i server MCP di Kilo in `kilo.jsonc`/`kilo.json`/`opencode.jsonc` nel vero campo `mcp` nella forma `local`/`remote` di Kilo usando `jsonc-parser`, mantenendo leggibile e rimovibile il file legacy `mcp.json`.
 
 ### 44.4 - Scalari a blocco (`>`, `|`) e valori multilinea nel frontmatter
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Scalari a blocco nel frontmatter · **Size:** S · **Priority:** P2 · **Depends on:** - · **Spec:** [44.4-frontmatter-block-scalars.md](44.4-frontmatter-block-scalars.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Scalari a blocco nel frontmatter · **Size:** S · **Priority:** P2 · **Depends on:** - · **Use cases:** UC005, UC013, UC021 · **Spec:** [44.4-frontmatter-block-scalars.md](44.4-frontmatter-block-scalars.md)
 - **Goal:** Estendere il parsing del frontmatter basato su righe in `src/sources/detect.ts` e `src/adapters/codec.ts` per supportare gli scalari a blocco YAML folded (`>`) e literal (`|`) e le continuazioni multilinea.
 
 ### 44.5 - Barra laterale: stato di caricamento per singola sorgente durante la risoluzione
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Stato caricamento sorgenti sidebar · **Size:** S · **Priority:** P3 · **Depends on:** 38.1 · **Spec:** [44.5-sidebar-source-loading.md](44.5-sidebar-source-loading.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Stato caricamento sorgenti sidebar · **Size:** S · **Priority:** P3 · **Depends on:** 38.1 · **Use cases:** UC005, UC013, UC021 · **Spec:** [44.5-sidebar-source-loading.md](44.5-sidebar-source-loading.md)
 - **Goal:** Mostrare un'icona spinner e la descrizione `"Refreshing..."` su ciascun elemento sorgente della barra laterale mentre il relativo gruppo del catalogo viene risolto, renderizzando progressivamente le sorgenti completate.
 
 ### 44.6 - Le modifiche alla configurazione Kilo mantengono intatti gli elementi adiacenti e i relativi commenti (seguito di 44.3)
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Preservare voci adiacenti JSONC Kilo · **Size:** S · **Priority:** P3 · **Depends on:** 44.3 · **Spec:** [44.6-kilo-jsonc-preserve-neighbors.md](44.6-kilo-jsonc-preserve-neighbors.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Preservare voci adiacenti JSONC Kilo · **Size:** S · **Priority:** P3 · **Depends on:** 44.3 · **Use cases:** UC005, UC013, UC021 · **Spec:** [44.6-kilo-jsonc-preserve-neighbors.md](44.6-kilo-jsonc-preserve-neighbors.md)
 - **Goal:** Rendere minimali le modifiche MCP al JSONC di Kilo in modo che le voci sorelle non vengano mai riformattate e i loro commenti finali non vengano mai spostati.

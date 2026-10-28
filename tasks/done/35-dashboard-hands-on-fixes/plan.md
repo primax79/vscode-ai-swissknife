@@ -63,25 +63,25 @@ zero avvisi) prima e dopo il merge.
 
 ### 35.1 - Guscio di caricamento istantaneo
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Guscio di caricamento istantaneo · **Size:** S · **Depends on:** 31, 32, 33, 34 · **Spec:** [35.1-instant-loading-shell.md](35.1-instant-loading-shell.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Guscio di caricamento istantaneo · **Size:** S · **Depends on:** 31, 32, 33, 34 · **Use cases:** UC024, UC025 · **Spec:** [35.1-instant-loading-shell.md](35.1-instant-loading-shell.md)
 - **Goal:** Renderizzare in modo sincrono un guscio di caricamento istantaneo con gli stili del tema e uno spinner all'apertura della Dashboard, così che non mostri mai una schermata vuota durante il caricamento dei dati.
 
 ### 35.2 - Contenuto del tab Overview
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Contenuto del tab Overview · **Size:** S · **Depends on:** 31, 32, 33, 34 · **Spec:** [35.2-overview-content.md](35.2-overview-content.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Contenuto del tab Overview · **Size:** S · **Depends on:** 31, 32, 33, 34 · **Use cases:** UC024, UC025 · **Spec:** [35.2-overview-content.md](35.2-overview-content.md)
 - **Goal:** Sostituire il segnaposto del tab Overview con una vista iniziale a colpo d'occhio che mostra chip statistici di riepilogo e gli elementi che richiedono attenzione.
 
 ### 35.3 - Vista a matrice per Installed
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Vista a matrice di Installed · **Size:** L · **Depends on:** 35.1, 35.2, 35.4 · **Spec:** [35.3-installed-matrix-view.md](35.3-installed-matrix-view.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Vista a matrice di Installed · **Size:** L · **Depends on:** 35.1, 35.2, 35.4 · **Use cases:** UC024, UC025 · **Spec:** [35.3-installed-matrix-view.md](35.3-installed-matrix-view.md)
 - **Goal:** Sostituire la tabella piatta di Installed con una matrice di confronto espandibile per artefatto dotata di sotto-righe per assistente, azioni rapide (Preview, Diff, Update) e ordinamento per colonna.
 
 ### 35.4 - Righe del catalogo come vera tabella
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Tabella a griglia del catalogo · **Size:** S · **Depends on:** 31, 32, 33, 34 · **Spec:** [35.4-catalog-as-table.md](35.4-catalog-as-table.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Tabella a griglia del catalogo · **Size:** S · **Depends on:** 31, 32, 33, 34 · **Use cases:** UC024, UC025 · **Spec:** [35.4-catalog-as-table.md](35.4-catalog-as-table.md)
 - **Goal:** Convertire le righe di artefatti e cartelle di Sources & Catalog da layout flex a ritorno a capo libero a una tabella CSS Grid a colonne fisse.
 
 ### 35.5 - Pulsanti con sola icona in tutta la Dashboard
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Pulsanti Dashboard con sola icona · **Size:** S · **Depends on:** 35.1, 35.2, 35.3, 35.4 · **Spec:** [35.5-icon-only-buttons.md](35.5-icon-only-buttons.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Pulsanti Dashboard con sola icona · **Size:** S · **Depends on:** 35.1, 35.2, 35.3, 35.4 · **Use cases:** UC024, UC025 · **Spec:** [35.5-icon-only-buttons.md](35.5-icon-only-buttons.md)
 - **Goal:** Sostituire le etichette di testo con pulsanti compatti a icona Unicode e tooltip in tutte le sezioni della Dashboard dove il testo non è indispensabile.

@@ -3,9 +3,9 @@
 - id: UC014
 - title: Install and manage artifacts for Codex CLI and Gemini CLI
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P1
-- linked-tasks: 21
+- linked-tasks: 21.1, 21.2, 21.3, 21.4
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

@@ -24,25 +24,25 @@ per le firme esatte dei metodi `do*` utilizzati.
 
 ### 33.1 - Elenco delle sorgenti + CRUD
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Elenco sorgenti e CRUD · **Size:** M · **Depends on:** 31, 32 · **Spec:** [33.1-sources-list-crud.md](33.1-sources-list-crud.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Elenco sorgenti e CRUD · **Size:** M · **Depends on:** 31, 32 · **Use cases:** UC024 · **Spec:** [33.1-sources-list-crud.md](33.1-sources-list-crud.md)
 - **Goal:** Renderizzare l'elenco delle sorgenti raggruppato per scope nella sezione Sources & Catalog della Dashboard con Add, Remove, Export, Export All e Import collegati a `SourcesTreeDataProvider`.
 
 ### 33.2 - Navigazione lazy del catalogo
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Navigazione lazy del catalogo · **Size:** M · **Depends on:** 33.1 · **Spec:** [33.2-catalog-browsing.md](33.2-catalog-browsing.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Navigazione lazy del catalogo · **Size:** M · **Depends on:** 33.1 · **Use cases:** UC024 · **Spec:** [33.2-catalog-browsing.md](33.2-catalog-browsing.md)
 - **Goal:** Implementare l'espansione su richiesta delle sorgenti tramite i messaggi `requestCatalog{sourceId, scope}` e `catalogData` renderizzando cartelle annidate, artefatti e diagnostica.
 
 ### 33.3 - Azione di anteprima
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Azione di anteprima nel catalogo · **Size:** S · **Depends on:** 33.2 · **Spec:** [33.3-preview-action.md](33.3-preview-action.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Azione di anteprima nel catalogo · **Size:** S · **Depends on:** 33.2 · **Use cases:** UC024 · **Spec:** [33.3-preview-action.md](33.3-preview-action.md)
 - **Goal:** Collegare `previewArtifact` dalle righe del catalogo della Dashboard per aprire un tab editor di anteprima in sola lettura tramite `AvailableTreeDataProvider`.
 
 ### 33.4 - Azioni di installazione
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Azioni di installazione dal catalogo · **Size:** M · **Depends on:** 31.2, 33.2 · **Spec:** [33.4-install-actions.md](33.4-install-actions.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Azioni di installazione dal catalogo · **Size:** M · **Depends on:** 31.2, 33.2 · **Use cases:** UC024 · **Spec:** [33.4-install-actions.md](33.4-install-actions.md)
 - **Goal:** Collegare le azioni di installazione di singolo artefatto, cartella e intera sorgente dal catalogo della Dashboard ai metodi disaccoppiati `doInstall*` su `AvailableTreeDataProvider`.
 
 ### 33.5 - Badge "Installed in" + aggiornamento del catalogo
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Badge installazioni e refresh · **Size:** S · **Depends on:** 33.4 · **Spec:** [33.5-installed-badges-refresh.md](33.5-installed-badges-refresh.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Badge installazioni e refresh · **Size:** S · **Depends on:** 33.4 · **Use cases:** UC024 · **Spec:** [33.5-installed-badges-refresh.md](33.5-installed-badges-refresh.md)
 - **Goal:** Mostrare sulle righe del catalogo i badge per artefatto degli assistenti in cui è installato, collegare `refreshCatalog` e attivare il refresh incrociato tra provider dopo le mutazioni.

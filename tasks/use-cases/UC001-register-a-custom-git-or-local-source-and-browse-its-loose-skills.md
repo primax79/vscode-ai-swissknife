@@ -3,9 +3,9 @@
 - id: UC001
 - title: Register a custom Git or local source and browse its loose skills
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P1
-- linked-tasks: 02, 04, 07
+- linked-tasks: 02.1, 02.2, 02.3, 04.1, 04.2, 04.3, 07.1, 07.2, 07.3
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

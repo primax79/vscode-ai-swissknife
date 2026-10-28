@@ -3,9 +3,9 @@
 - id: UC008
 - title: Discover unmanaged artifacts in assistant folders and promote them
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P1
-- linked-tasks: 14
+- linked-tasks: 14.1, 14.2, 14.3
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

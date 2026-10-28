@@ -3,9 +3,9 @@
 - id: UC004
 - title: Translate and install agents and commands across Claude, Kilo, Copilot
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P1
-- linked-tasks: 08, 09, 12
+- linked-tasks: 08.1, 08.2, 08.3, 09.1, 09.2, 09.3, 12.1, 12.2, 12.3
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

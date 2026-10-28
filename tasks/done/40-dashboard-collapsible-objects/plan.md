@@ -36,25 +36,25 @@ Nessuna.
 
 ### 40.1 - Modello puro: costruire l'albero oggetto → posizioni a partire da gestiti + osservati
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Modello ad albero oggetto-posizioni · **Size:** M · **Depends on:** - · **Spec:** [40.1-installed-tree-model.md](40.1-installed-tree-model.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Modello ad albero oggetto-posizioni · **Size:** M · **Depends on:** - · **Use cases:** UC028 · **Spec:** [40.1-installed-tree-model.md](40.1-installed-tree-model.md)
 - **Goal:** Creare `src/engine/installedTree.ts` che esporta `buildInstalledTree` per raggruppare gli elementi gestiti e non gestiti in un unico `InstalledObject` per `(kind, name)` con figli `Place` ordinati e `worstState`.
 
 ### 40.2 - Unico renderer lato server: riga compressa (striscia di chip + stato peggiore), righe figlie per posizione, filtri/ordinamento/dettaglio adattati
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Renderer unico albero installati · **Size:** L · **Depends on:** 40.1, 40.4, 39.1 · **Spec:** [40.2-single-renderer.md](40.2-single-renderer.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Renderer unico albero installati · **Size:** L · **Depends on:** 40.1, 40.4, 39.1 · **Use cases:** UC028 · **Spec:** [40.2-single-renderer.md](40.2-single-renderer.md)
 - **Goal:** Sostituire i costruttori duplicati della matrice e la tabella separata degli elementi non gestiti con un unico `renderInstalledTree` lato server che renderizza righe padre comprimibili per oggetto con strisce di chip di posizione e righe figlie di posizione.
 
 ### 40.3 - Espandi tutto / Comprimi tutto + stato di compressione mantenuto tra gli aggiornamenti
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Espandi e comprimi tutto · **Size:** S · **Depends on:** 40.2 · **Spec:** [40.3-expand-collapse-all.md](40.3-expand-collapse-all.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Espandi e comprimi tutto · **Size:** S · **Depends on:** 40.2 · **Use cases:** UC028 · **Spec:** [40.3-expand-collapse-all.md](40.3-expand-collapse-all.md)
 - **Goal:** Aggiungere i pulsanti icona Expand all e Collapse all alla barra degli strumenti di Installed e persistere le identità dei nodi padre espansi nello stato della webview tra gli aggiornamenti dei dati.
 
 ### 40.4 - Vocabolario dello scope (Global/Workspace) + icone come modulo condiviso — eseguire prima di 40.2
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Vocabolario e icone scope condivisi · **Size:** S · **Depends on:** - · **Spec:** [40.4-scope-icons.md](40.4-scope-icons.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Vocabolario e icone scope condivisi · **Size:** S · **Depends on:** - · **Use cases:** UC028 · **Spec:** [40.4-scope-icons.md](40.4-scope-icons.md)
 - **Goal:** Creare `src/ui/scopeIcons.ts` come unica fonte di verità per le etichette e le icone Global/Workspace e sostituire le stringhe "Project" rivolte all'utente relative allo scope in tutta la UI.
 
 ### 40.5 - Barra dei filtri: Env/Scope/Membership/Kind come gruppi di pillole raggruppati visivamente (sostituisce i `<select>`)
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Pillole barra filtri raggruppate · **Size:** S · **Depends on:** 40.2, 40.4 · **Spec:** [40.5-filter-bar.md](40.5-filter-bar.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Pillole barra filtri raggruppate · **Size:** S · **Depends on:** 40.2, 40.4 · **Use cases:** UC028 · **Spec:** [40.5-filter-bar.md](40.5-filter-bar.md)
 - **Goal:** Sostituire i menu a discesa `<select>` di Scope e Membership e la riga separata di tab Kind con quattro gruppi di pillole etichettati e raggruppati visivamente (ENV, SCOPE, MEMBERSHIP, KIND).

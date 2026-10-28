@@ -24,15 +24,15 @@ per le firme esatte dei metodi `do*` utilizzati.
 
 ### 34.1 - Sezione Recommendations
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Sezione Recommendations della Dashboard · **Size:** M · **Depends on:** 31.3, 32 · **Spec:** [34.1-recommendations-section.md](34.1-recommendations-section.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Sezione Recommendations della Dashboard · **Size:** M · **Depends on:** 31.3, 32 · **Use cases:** UC025 · **Spec:** [34.1-recommendations-section.md](34.1-recommendations-section.md)
 - **Goal:** Esporre per `resolveRecommendations` i bucket `pending` e `broken` nel tab Recommendations della Dashboard con le azioni installa singolo, installa tutti e rimuovi suggerimento.
 
 ### 34.2 - Uninstall + Update-to-latest nel pannello di dettaglio
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Uninstall e Update nel dettaglio · **Size:** S · **Depends on:** 31.1, 31.4 · **Spec:** [34.2-uninstall-update-parity.md](34.2-uninstall-update-parity.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Uninstall e Update nel dettaglio · **Size:** S · **Depends on:** 31.1, 31.4 · **Use cases:** UC025 · **Spec:** [34.2-uninstall-update-parity.md](34.2-uninstall-update-parity.md)
 - **Goal:** Estendere il pannello di dettaglio di Installed con le azioni Uninstall e Update-to-latest usando la nuova risoluzione lato server tramite chiave di identità composita stabile.
 
 ### 34.3 - Cablaggio del refresh incrociato
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Verifica refresh incrociato · **Size:** S · **Depends on:** 34.1, 34.2 · **Spec:** [34.3-cross-refresh.md](34.3-cross-refresh.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Verifica refresh incrociato · **Size:** S · **Depends on:** 34.1, 34.2 · **Use cases:** UC025 · **Spec:** [34.3-cross-refresh.md](34.3-cross-refresh.md)
 - **Goal:** Verificare e garantire che ogni mutazione di stato attivata dalla Dashboard aggiorni la barra di stato e i tree provider della sidebar.

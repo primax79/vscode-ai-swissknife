@@ -20,25 +20,25 @@ singolo file del task + questa specifica + `tasks/CONTEXT.md` — non all'intero
 
 ### 29.1 - `Adapter` acquisisce `displayName`/`iconId`
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Campi nome e icona Adapter · **Size:** S · **Depends on:** 03, 12, 21 · **Spec:** [29.1-adapter-interface-fields.md](29.1-adapter-interface-fields.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Campi nome e icona Adapter · **Size:** S · **Depends on:** 03, 12, 21 · **Use cases:** UC023 · **Spec:** [29.1-adapter-interface-fields.md](29.1-adapter-interface-fields.md)
 - **Goal:** Aggiungere i campi descrittivi `displayName` e `iconId` direttamente sull'interfaccia `Adapter` e sulle sue cinque implementazioni adapter.
 
 ### 29.2 - `src/adapters/registry.ts`
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Modulo registro degli adapter · **Size:** S · **Depends on:** 29.1 · **Spec:** [29.2-adapter-registry-module.md](29.2-adapter-registry-module.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Modulo registro degli adapter · **Size:** S · **Depends on:** 29.1 · **Use cases:** UC023 · **Spec:** [29.2-adapter-registry-module.md](29.2-adapter-registry-module.md)
 - **Goal:** Creare `src/adapters/registry.ts` come unica fonte di verità che esporta `ALL_ADAPTERS`, `getAdapter` e `getAdapterWithHomeRoot`.
 
 ### 29.3 - Migrare ogni punto duplicato di selezione dell'adapter
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Migrazione chiamate agli adapter · **Size:** M · **Depends on:** 29.2 · **Spec:** [29.3-migrate-call-sites.md](29.3-migrate-call-sites.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Migrazione chiamate agli adapter · **Size:** M · **Depends on:** 29.2 · **Use cases:** UC023 · **Spec:** [29.3-migrate-call-sites.md](29.3-migrate-call-sites.md)
 - **Goal:** Eliminare le copie duplicate di `getAdapter()` e gli array letterali degli assistenti in tutta la codebase e sostituirli con chiamate a `src/adapters/registry.ts`.
 
 ### 29.4 - Impostazione VS Code per gli assistenti abilitati
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Impostazione assistenti abilitati · **Size:** M · **Depends on:** 29.3 · **Spec:** [29.4-enabled-assistants-setting.md](29.4-enabled-assistants-setting.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Impostazione assistenti abilitati · **Size:** M · **Depends on:** 29.3 · **Use cases:** UC023 · **Spec:** [29.4-enabled-assistants-setting.md](29.4-enabled-assistants-setting.md)
 - **Goal:** Aggiungere la configurazione VS Code `aiSwissknife.enabledAssistants`, `getEnabledAdapters()` e la registrazione delle viste della sidebar guidata dal registro con chiavi di contesto `when` per singola vista.
 
 ### 29.5 - Comando "Configure enabled assistants"
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Comando di configurazione assistenti · **Size:** S · **Depends on:** 29.4 · **Spec:** [29.5-configure-command.md](29.5-configure-command.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Comando di configurazione assistenti · **Size:** S · **Depends on:** 29.4 · **Use cases:** UC023 · **Spec:** [29.5-configure-command.md](29.5-configure-command.md)
 - **Goal:** Aggiungere il comando QuickPick a selezione multipla `aiSwissknife.configureEnabledAssistants` e ristrutturare `aiSwissknife.enabledAssistants` come oggetto di booleani.

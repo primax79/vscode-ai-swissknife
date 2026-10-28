@@ -3,9 +3,9 @@
 - id: UC007
 - title: Detect local drift and upstream updates on managed installations
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P1
-- linked-tasks: 13, 15
+- linked-tasks: 13.1, 13.2, 13.3, 15.1, 15.2
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

@@ -3,9 +3,9 @@
 - id: UC021
 - title: Browse source contents directly inside the unified Sources sidebar tree
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P2
-- linked-tasks: 28, 44
+- linked-tasks: 28.1, 28.2, 44.1, 44.2, 44.3, 44.4, 44.5, 44.6
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

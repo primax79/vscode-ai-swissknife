@@ -16,27 +16,27 @@
 
 ### 42.4 - Scheda Trash della Dashboard: elenco, Restore, Delete permanently, Empty trash
 
-- **Status:** `open` · **Short:** Scheda Trash della Dashboard · **Size:** M · **Depends on:** 42.1, 40.4 · **Spec:** [42.4-dashboard-trash-tab.md](42.4-dashboard-trash-tab.md)
+- **Status:** `open` · **Short:** Scheda Trash della Dashboard · **Size:** M · **Depends on:** 42.1, 40.4 · **Use cases:** UC026 · **Spec:** [42.4-dashboard-trash-tab.md](42.4-dashboard-trash-tab.md)
 - **Goal:** Aggiungere una quinta scheda della Dashboard con caricamento lazy (`Trash`) che elenca gli elementi eliminati con le azioni Restore, Delete permanently ed Empty trash.
 
 ### 42.5 - Vista Trash nella barra laterale (compressa, solo se non vuota): elenco, Restore, Delete permanently, Empty trash
 
-- **Status:** `open` · **Short:** Vista Trash barra laterale · **Size:** S · **Depends on:** 42.1 · **Spec:** [42.5-sidebar-trash-view.md](42.5-sidebar-trash-view.md)
+- **Status:** `open` · **Short:** Vista Trash barra laterale · **Size:** S · **Depends on:** 42.1 · **Use cases:** UC026 · **Spec:** [42.5-sidebar-trash-view.md](42.5-sidebar-trash-view.md)
 - **Goal:** Aggiungere una vista `aiSwissknife.trash` nella barra laterale, compressa per impostazione predefinita e visibile solo quando il cestino non è vuoto, con le azioni inline Restore e Delete permanently.
 
 ### 42.2 - Helper di navigazione: mostra nel Finder, copia percorso, apri repository/commit della sorgente
 
-- **Status:** `open` · **Short:** Comandi helper di navigazione · **Size:** S · **Depends on:** 40.2 · **Spec:** [42.2-navigation-helpers.md](42.2-navigation-helpers.md)
+- **Status:** `open` · **Short:** Comandi helper di navigazione · **Size:** S · **Depends on:** 40.2 · **Use cases:** UC026 · **Spec:** [42.2-navigation-helpers.md](42.2-navigation-helpers.md)
 - **Goal:** Aggiungere i comandi `revealInOS`, `copyPath` e `openSourceRepo` accessibili dal menu contestuale della barra laterale e dal pannello di dettaglio della Dashboard.
 
 ### 42.3 - Terzetto inline fisso (Favorite/Update/Uninstall; non gestiti: Promote/Diff/Remove) + menu contestuale in base allo stato + overflow sulle righe della Dashboard
 
-- **Status:** `open` · **Short:** Terzetto inline fisso e overflow · **Size:** M · **Depends on:** 39.2, 40.2, 42.2 · **Spec:** [42.3-surface-policy.md](42.3-surface-policy.md)
+- **Status:** `open` · **Short:** Terzetto inline fisso e overflow · **Size:** M · **Depends on:** 39.2, 40.2, 42.2 · **Use cases:** UC026 · **Spec:** [42.3-surface-policy.md](42.3-surface-policy.md)
 - **Goal:** Applicare un terzetto fisso di azioni inline sulle righe della barra laterale e della Dashboard (Favorite/Update/Uninstall per i gestiti; Promote/Diff/Remove per i non gestiti) collocando le restanti azioni applicabili allo stato nel menu contestuale/di overflow.
 
 ## Closed
 
 ### 42.1 - Ripristino dal cestino + Svuota cestino: motore (`listTrash`, `restoreFromTrash`, `deleteFromTrash`, `emptyTrash`) e comandi
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Ripristina e svuota cestino · **Size:** M · **Depends on:** 39.2 · **Spec:** [42.1-restore-from-trash.md](42.1-restore-from-trash.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Ripristina e svuota cestino · **Size:** M · **Depends on:** 39.2 · **Use cases:** UC026 · **Spec:** [42.1-restore-from-trash.md](42.1-restore-from-trash.md)
 - **Goal:** Aggiungere il tracciamento tramite sidecar `.origin.json` e le funzioni del motore `listTrash`, `restoreFromTrash`, `deleteFromTrash` ed `emptyTrash` insieme ai comandi `restoreFromTrash` ed `emptyTrash`.

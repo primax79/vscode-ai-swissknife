@@ -15,7 +15,7 @@ Due task indipendenti, ciascuno in un singolo commit:
 
 ### 28.1 - Unire Sources + Available in un unico albero
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Unione di Sources e Available · **Size:** M · **Depends on:** 16, 22
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Unione di Sources e Available · **Size:** M · **Depends on:** 16, 22 · **Use cases:** UC021, UC022
 - **Goal:** Unificare `SourcesTreeDataProvider` e `AvailableTreeDataProvider` in un singolo albero nella sidebar in modo che l'espansione di una sorgente mostri direttamente il contenuto del suo catalogo senza accoppiamento selezione-filtro.
 
 **Ambito:**
@@ -57,7 +57,7 @@ Due task indipendenti, ciascuno in un singolo commit:
 
 ### 28.2 - Raggruppamento per tipo in Installed
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Raggruppamento per tipo in Installed · **Size:** S · **Depends on:** -
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Raggruppamento per tipo in Installed · **Size:** S · **Depends on:** - · **Use cases:** UC021, UC022
 - **Goal:** Aggiungere un livello intermedio di raggruppamento per tipo (`KindGroupItem`) sotto ciascun gruppo assistente/scope in `InstalledTreeDataProvider`.
 
 **Ambito:**

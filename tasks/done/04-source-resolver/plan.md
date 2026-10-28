@@ -40,15 +40,15 @@ Decisioni condivise per questa iniziativa che ogni task deve rispettare:
 
 ### 04.1 - Rilevamento del formato + resolver per cartella locale
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Resolver cartella locale e rilevamento · **Size:** M · **Depends on:** 02.1 · **Spec:** [04.1-local-folder-resolver.md](04.1-local-folder-resolver.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Resolver cartella locale e rilevamento · **Size:** M · **Depends on:** 02.1 · **Use cases:** UC001 · **Spec:** [04.1-local-folder-resolver.md](04.1-local-folder-resolver.md)
 - **Goal:** Attraversare un albero di directory senza richiedere un manifest (`findSkillDirs`) e risolvere sorgenti `local-folder` in `Package[]` contenenti artefatti `skill`.
 
 ### 04.2 - Resolver git-custom
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Resolver per sorgenti git-custom · **Size:** M · **Depends on:** 04.1 · **Spec:** [04.2-git-custom-resolver.md](04.2-git-custom-resolver.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Resolver per sorgenti git-custom · **Size:** M · **Depends on:** 04.1 · **Use cases:** UC001 · **Spec:** [04.2-git-custom-resolver.md](04.2-git-custom-resolver.md)
 - **Goal:** Risolvere sorgenti `git-custom` tramite clone/fetch in una directory di cache locale con pin di branch/tag/commit e riutilizzando il rilevamento del formato di `04.1`.
 
 ### 04.3 - Hardening del resolver + fixture portabili
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Diagnostiche del resolver e fixture · **Size:** M · **Depends on:** 04.2, 02.3, 03.4 · **Spec:** [04.3-hardening.md](04.3-hardening.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Diagnostiche del resolver e fixture · **Size:** M · **Depends on:** 04.2, 02.3, 03.4 · **Use cases:** UC001 · **Spec:** [04.3-hardening.md](04.3-hardening.md)
 - **Goal:** Restituire `SourceResolution { packages, diagnostics }` dai resolver, serializzare il checkout Git e le letture del contenuto sotto un unico mutex e sostituire i percorsi di test specifici della macchina con fixture committate.

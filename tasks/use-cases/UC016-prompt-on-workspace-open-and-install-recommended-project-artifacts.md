@@ -3,9 +3,9 @@
 - id: UC016
 - title: Prompt on workspace open and install recommended project artifacts
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P1
-- linked-tasks: 22
+- linked-tasks: 22.1, 22.2, 22.3, 22.4, 22.5
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

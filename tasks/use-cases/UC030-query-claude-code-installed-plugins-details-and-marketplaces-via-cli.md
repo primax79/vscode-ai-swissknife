@@ -3,9 +3,9 @@
 - id: UC030
 - title: Query Claude Code installed plugins, details, and marketplaces via CLI
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P3
-- linked-tasks: 45
+- linked-tasks: 45.1, 45.2, 45.3, 45.4, 45.5
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

@@ -1,0 +1,120 @@
+# Adopt-Links Migration Report — 2026-10-28T13:02:38Z
+
+- **Plan Hash:** `d8df6902726b969ecc152c32e8af32cb70e9b5432fbc9ebaa9113a165ca27a72`
+- **Files Snapshotted:** 46
+- **Initiative Expansions:** 62
+- **Unresolved IDs:** 0
+
+## Snapshotted Files (Before Apply)
+
+- `37-install-multi-target/plan.md` (`sha256:f5a19cd15d882a358377ccb35933a1fba8a3a4515e52f2ce0574022e8da68854`)
+- `39-dashboard-installed-fixes/plan.md` (`sha256:dc5c83d7ce320ea5b6ecf9cbef0d69d537cda0a706c46401509c340f2b769005`)
+- `42-item-actions-tier1/plan.md` (`sha256:1d771baa3a40d88169779fca24bb5c402612f717ce6a3e6efd1e077bcbd7152b`)
+- `43-disabled-state/plan.md` (`sha256:e2a666415400532a37487c867d9202f50e8c6135c530273e9b1325f75266f30e`)
+- `44-hardening-from-kilocode-dev/plan.md` (`sha256:55f44a07f8bd29e96a2f8daf075135e4edbbcce15f352f512d34788c1ee13118`)
+- `45-claude-plugins/plan.md` (`sha256:31a3fb85b7c0605bfcbab1c81ebf31ffaf486efaf8acd4c47e97fb55ad9c8c9b`)
+- `48-cli-maintainer-features/plan.md` (`sha256:3b15d20735d03f8fb701bdf86bef31cfa3795c2c5394afdf739af624dc389161`)
+- `done/02-domain-and-registry/plan.md` (`sha256:d543be35cae0a1c363713c7fed044ef1bfd8fc6dac3bf71dcbfa40812648b610`)
+- `done/03-claude-kilo-adapters/plan.md` (`sha256:2e5b421e3012547898b6f48bcc838ed221e8d74241d78dd1a967a3633c022899`)
+- `done/04-source-resolver/plan.md` (`sha256:0caed9e15815d9d9398adb515e7f08586fa8ceb9b2b1c8b8ef8d1a157411838a`)
+- `done/05-translator-skill/plan.md` (`sha256:ce9039e32f8227567147eb883c8197c8122762e003f25f50f3fc8f54ce6c0ad1`)
+- `done/06-install-engine/plan.md` (`sha256:8c0a8dd5653c23b6f2293b4efa77624d95fb1bd35ead4f10f81815e7c11efbd1`)
+- `done/07-minimal-ui/plan.md` (`sha256:885b5c887aabf046b01d88776aabd36ef338e5622946e2943dd58296bc88367a`)
+- `done/08-agent-support/plan.md` (`sha256:e79d13b5d2def9168ab3c386eb5995fea942ed542d70f7fe9e354146f07a44b2`)
+- `done/09-command-support/plan.md` (`sha256:a6a0d00cbe267faccd0666dca175aa9234c1c056cd06920a34631dd0afb190a0`)
+- `done/10-mcp-support/plan.md` (`sha256:7f30173f0beb7bf60c4459d9cfa635c83fa441e36b707526ecc97017ef950fdf`)
+- `done/11-marketplace-sources/plan.md` (`sha256:48dbf1dadc27c1384310a91aff4bfd8967f29deac8e64102cde40086090b99ef`)
+- `done/12-copilot-adapter/plan.md` (`sha256:d40a44cbe77a55ccdcd8776973fe60c2ea338582394621f41aff8957e5ba4582`)
+- `done/13-drift-and-updates/plan.md` (`sha256:150f1c0b73027df73140b82793adad799f9da2465d8f17b1f850059ecaee5adf`)
+- `done/14-discovery-promotion/plan.md` (`sha256:c4053737c719003de30e9cc648efdcc8c0a78bdd01be4ba913c8c2ed96092e5d`)
+- `done/15-file-watchers/plan.md` (`sha256:d4ecb109d983b434d98df239e0b432f4f68f8ad106e14cdea8317b1795b2687f`)
+- `done/16-dashboard-webview/plan.md` (`sha256:a7ebe364041f9258aa5ca903cedd11d9464439c3a1a63f0e169478ba660de449`)
+- `done/17-form-editor/plan.md` (`sha256:5410597ff07f62b38efe7b9a67a3e6c7f3559e189a1c53ef1b7d17178b822003`)
+- `done/18-cross-assistant-sync/plan.md` (`sha256:6dfa20248fe92dc485cc668bf890b2c23f1b210b4d0eba40a6bc961104c9fc7b`)
+- `done/19-hook-and-rule-merge/plan.md` (`sha256:466a64760565d44f28221d6cd2c592d8f77370499898ec13882243fb7f26e82c`)
+- `done/20-remote-url-and-single-item-sources/plan.md` (`sha256:3d1d0ad702b3afa16f1b67c517e529bf7768d763a05c1e0d1eaa31b9da51efd7`)
+- `done/21-codex-gemini-adapters/plan.md` (`sha256:513f8e8bf6afd8d1a5bfe4831b60c7386976018e304bae59835cdc93d1675909`)
+- `done/22-project-recommendations/plan.md` (`sha256:c1c8ae12c006b82d6c48a8d826ad0803dd9d1057c2d5beede98489adc14d83e2`)
+- `done/23-cross-framework-lookup/plan.md` (`sha256:91f95dd70cde4c1e61b25d9c49353abfee894fd4abc194116207bc5ab719e31f`)
+- `done/24-diff-and-preview/plan.md` (`sha256:3718efe62899ed4c74460ac1158a60f73fb14fb96e444be100d362acb3777eac`)
+- `done/25-move-and-promote-fix/plan.md` (`sha256:822de70d3afb2b6c2005bf1bf10df96b59051409b7545cb272f97a4d90cc77bf`)
+- `done/26-dashboard-rebuild/plan.md` (`sha256:101671592b797558d95861ee89a217824eed1a6d4f529e8722cf665780c76ac0`)
+- `done/27-dashboard-entry-points/plan.md` (`sha256:edc40e26a4c774fcd5d935037604bdc6f28968a3da42fe76c5e45ef04c5e87f5`)
+- `done/28-sidebar-unification/plan.md` (`sha256:df4325de51f60447ea8b2b5b4c0391995e38939e04f5b3cd3b43e56625df7025`)
+- `done/29-adapter-registry/plan.md` (`sha256:7977602c3fbae308b6e0787f783cade27dc897137581f97ac98c1100a34446fe`)
+- `done/30-source-resolver-registry/plan.md` (`sha256:8f7d77cd6bccf0a3e0486585e2550d30751fea2b90c3f0b27d18c451d18efa54`)
+- `done/31-dashboard-action-decoupling/plan.md` (`sha256:c995b525f96d0a7dc411d970844036c8d2af6dcbb714ff870d473b9fac23ea92`)
+- `done/32-dashboard-skeleton/plan.md` (`sha256:5cd19ac7de5424f8dae95b5c57a656348f02b9ada6ca192651725954f75f583e`)
+- `done/33-dashboard-sources-catalog/plan.md` (`sha256:850a5100828458f750c8bac4eb78ee3d3ce2c4fb6c401d663d26a4413e1aed2b`)
+- `done/34-dashboard-recommendations-parity/plan.md` (`sha256:8f033414bd787953c328f48ba85a79c8c8d7b8072cb82c8a063a7d5feef4f04a`)
+- `done/35-dashboard-hands-on-fixes/plan.md` (`sha256:4540bebedb4d9c5af2c6976b37cd0a81912ce3e0cc8e385f3f834864e314d3c6`)
+- `done/36-add-source-wizard/plan.md` (`sha256:6b93364ef675838908459be361e13ddb1997ccd284cc47704552e16c9a8f2da1`)
+- `done/38-per-source-refresh/plan.md` (`sha256:3912b559e67cdf41cf6b7abc43210a43ac88099064c28ee8194a7df097b9384e`)
+- `done/40-dashboard-collapsible-objects/plan.md` (`sha256:dc3851511d3a26ecf5e4fcc3f11a123c536321a98924a7030244e9c53338e122`)
+- `done/46-cli-access/plan.md` (`sha256:7b07ffcf0c83dce22a0b8cc17a2d2727409e6d290fc0b8e814146dca54161c7d`)
+- `done/47-update-all/plan.md` (`sha256:f908d8908b0f4eb817974b60bb474d74c460e0eacb462135fb011ec0fc8879a4`)
+
+## Expanded Initiative Links (--expand-initiatives)
+
+- **UC001** (`use-cases/UC001-register-a-custom-git-or-local-source-and-browse-its-loose-skills.md`): `02` -> 02.1, 02.2, 02.3
+- **UC001** (`use-cases/UC001-register-a-custom-git-or-local-source-and-browse-its-loose-skills.md`): `04` -> 04.1, 04.2, 04.3
+- **UC001** (`use-cases/UC001-register-a-custom-git-or-local-source-and-browse-its-loose-skills.md`): `07` -> 07.1, 07.2, 07.3
+- **UC002** (`use-cases/UC002-preview-and-transactionally-install-a-skill-onto-claude-or-kilo.md`): `03` -> 03.1, 03.2, 03.3, 03.4
+- **UC002** (`use-cases/UC002-preview-and-transactionally-install-a-skill-onto-claude-or-kilo.md`): `05` -> 05.1, 05.2
+- **UC002** (`use-cases/UC002-preview-and-transactionally-install-a-skill-onto-claude-or-kilo.md`): `06` -> 06.1, 06.2
+- **UC002** (`use-cases/UC002-preview-and-transactionally-install-a-skill-onto-claude-or-kilo.md`): `07` -> 07.1, 07.2, 07.3
+- **UC003** (`use-cases/UC003-separate-shared-manifest-intent-from-machine-local-install-state.md`): `02` -> 02.1, 02.2, 02.3
+- **UC003** (`use-cases/UC003-separate-shared-manifest-intent-from-machine-local-install-state.md`): `06` -> 06.1, 06.2
+- **UC003** (`use-cases/UC003-separate-shared-manifest-intent-from-machine-local-install-state.md`): `07` -> 07.1, 07.2, 07.3
+- **UC004** (`use-cases/UC004-translate-and-install-agents-and-commands-across-claude-kilo-copilot.md`): `08` -> 08.1, 08.2, 08.3
+- **UC004** (`use-cases/UC004-translate-and-install-agents-and-commands-across-claude-kilo-copilot.md`): `09` -> 09.1, 09.2, 09.3
+- **UC004** (`use-cases/UC004-translate-and-install-agents-and-commands-across-claude-kilo-copilot.md`): `12` -> 12.1, 12.2, 12.3
+- **UC005** (`use-cases/UC005-merge-and-remove-mcp-server-entries-in-json-jsonc-assistant-configs.md`): `10` -> 10.1, 10.2, 10.3
+- **UC005** (`use-cases/UC005-merge-and-remove-mcp-server-entries-in-json-jsonc-assistant-configs.md`): `12` -> 12.1, 12.2, 12.3
+- **UC005** (`use-cases/UC005-merge-and-remove-mcp-server-entries-in-json-jsonc-assistant-configs.md`): `44` -> 44.1, 44.2, 44.3, 44.4, 44.5, 44.6
+- **UC006** (`use-cases/UC006-resolve-multi-plugin-catalogs-from-git-marketplace-sources.md`): `11` -> 11.1, 11.2, 11.3
+- **UC007** (`use-cases/UC007-detect-local-drift-and-upstream-updates-on-managed-installations.md`): `13` -> 13.1, 13.2, 13.3
+- **UC007** (`use-cases/UC007-detect-local-drift-and-upstream-updates-on-managed-installations.md`): `15` -> 15.1, 15.2
+- **UC008** (`use-cases/UC008-discover-unmanaged-artifacts-in-assistant-folders-and-promote-them.md`): `14` -> 14.1, 14.2, 14.3
+- **UC009** (`use-cases/UC009-inspect-and-manage-inventory-from-the-management-dashboard-webview.md`): `16` -> 16.1, 16.2, 16.3
+- **UC009** (`use-cases/UC009-inspect-and-manage-inventory-from-the-management-dashboard-webview.md`): `15` -> 15.1, 15.2
+- **UC010** (`use-cases/UC010-create-or-edit-artifacts-via-the-structured-form-editor-webview.md`): `17` -> 17.1, 17.2, 17.3
+- **UC011** (`use-cases/UC011-sync-an-installed-artifact-across-assistants-and-scopes.md`): `18` -> 18.1, 18.2, 18.3
+- **UC012** (`use-cases/UC012-install-hooks-and-merge-demarcated-rules-non-destructively.md`): `19` -> 19.1, 19.2, 19.3, 19.4
+- **UC013** (`use-cases/UC013-resolve-artifacts-from-git-single-item-and-remote-url-sources.md`): `20` -> 20.1, 20.2, 20.3
+- **UC013** (`use-cases/UC013-resolve-artifacts-from-git-single-item-and-remote-url-sources.md`): `44` -> 44.1, 44.2, 44.3, 44.4, 44.5, 44.6
+- **UC014** (`use-cases/UC014-install-and-manage-artifacts-for-codex-cli-and-gemini-cli.md`): `21` -> 21.1, 21.2, 21.3, 21.4
+- **UC015** (`use-cases/UC015-mark-or-unmark-project-scoped-recommended-artifacts-in-manifest-json.md`): `22` -> 22.1, 22.2, 22.3, 22.4, 22.5
+- **UC016** (`use-cases/UC016-prompt-on-workspace-open-and-install-recommended-project-artifacts.md`): `22` -> 22.1, 22.2, 22.3, 22.4, 22.5
+- **UC017** (`use-cases/UC017-inspect-cross-framework-presence-and-diff-against-upstream-original.md`): `23` -> 23.1, 23.2, 23.3
+- **UC017** (`use-cases/UC017-inspect-cross-framework-presence-and-diff-against-upstream-original.md`): `24` -> 24.1, 24.2
+- **UC017** (`use-cases/UC017-inspect-cross-framework-presence-and-diff-against-upstream-original.md`): `26` -> 26.1, 26.2
+- **UC018** (`use-cases/UC018-move-an-installed-artifact-to-another-assistant-or-scope-with-soft-delete.md`): `25` -> 25.1, 25.2, 25.3, 25.4, 25.5
+- **UC019** (`use-cases/UC019-disambiguate-multiple-matching-sources-when-promoting-an-unmanaged-item.md`): `25` -> 25.1, 25.2, 25.3, 25.4, 25.5
+- **UC020** (`use-cases/UC020-open-the-dashboard-from-the-status-bar-pending-badge-or-filtered-by-source.md`): `26` -> 26.1, 26.2
+- **UC020** (`use-cases/UC020-open-the-dashboard-from-the-status-bar-pending-badge-or-filtered-by-source.md`): `27` -> 27.1, 27.2
+- **UC021** (`use-cases/UC021-browse-source-contents-directly-inside-the-unified-sources-sidebar-tree.md`): `28` -> 28.1, 28.2
+- **UC021** (`use-cases/UC021-browse-source-contents-directly-inside-the-unified-sources-sidebar-tree.md`): `44` -> 44.1, 44.2, 44.3, 44.4, 44.5, 44.6
+- **UC022** (`use-cases/UC022-browse-installed-and-unmanaged-items-grouped-by-kind-in-the-sidebar.md`): `28` -> 28.1, 28.2
+- **UC023** (`use-cases/UC023-configure-which-ai-assistants-are-enabled-in-the-sidebar-and-pickers.md`): `29` -> 29.1, 29.2, 29.3, 29.4, 29.5
+- **UC023** (`use-cases/UC023-configure-which-ai-assistants-are-enabled-in-the-sidebar-and-pickers.md`): `30` -> 30.1, 30.2, 30.3, 30.4
+- **UC024** (`use-cases/UC024-manage-sources-export-import-config-and-install-from-dashboard-catalog.md`): `31` -> 31.1, 31.2, 31.3, 31.4
+- **UC024** (`use-cases/UC024-manage-sources-export-import-config-and-install-from-dashboard-catalog.md`): `32` -> 32.1, 32.2, 32.3
+- **UC024** (`use-cases/UC024-manage-sources-export-import-config-and-install-from-dashboard-catalog.md`): `33` -> 33.1, 33.2, 33.3, 33.4, 33.5
+- **UC024** (`use-cases/UC024-manage-sources-export-import-config-and-install-from-dashboard-catalog.md`): `35` -> 35.1, 35.2, 35.3, 35.4, 35.5
+- **UC025** (`use-cases/UC025-act-on-workspace-recommendations-and-update-or-uninstall-from-dashboard.md`): `31` -> 31.1, 31.2, 31.3, 31.4
+- **UC025** (`use-cases/UC025-act-on-workspace-recommendations-and-update-or-uninstall-from-dashboard.md`): `34` -> 34.1, 34.2, 34.3
+- **UC025** (`use-cases/UC025-act-on-workspace-recommendations-and-update-or-uninstall-from-dashboard.md`): `35` -> 35.1, 35.2, 35.3, 35.4, 35.5
+- **UC026** (`use-cases/UC026-soft-delete-list-restore-and-empty-trashed-artifacts-across-scopes.md`): `39` -> 39.1, 39.2, 39.3, 39.4
+- **UC026** (`use-cases/UC026-soft-delete-list-restore-and-empty-trashed-artifacts-across-scopes.md`): `42` -> 42.1, 42.2, 42.3, 42.4, 42.5
+- **UC027** (`use-cases/UC027-batch-update-all-outdated-managed-items-while-protecting-local-edits.md`): `47` -> 47.1, 47.2, 47.3, 47.4
+- **UC028** (`use-cases/UC028-install-an-artifact-to-multiple-assistants-and-scopes-or-refresh-one-source.md`): `36` -> 36.1, 36.2, 36.3
+- **UC028** (`use-cases/UC028-install-an-artifact-to-multiple-assistants-and-scopes-or-refresh-one-source.md`): `37` -> 37.1, 37.2, 37.3
+- **UC028** (`use-cases/UC028-install-an-artifact-to-multiple-assistants-and-scopes-or-refresh-one-source.md`): `38` -> 38.1, 38.2
+- **UC028** (`use-cases/UC028-install-an-artifact-to-multiple-assistants-and-scopes-or-refresh-one-source.md`): `40` -> 40.1, 40.2, 40.3, 40.4, 40.5
+- **UC029** (`use-cases/UC029-disable-and-re-enable-installed-skills-agents-and-commands-in-place.md`): `43` -> 43.1, 43.2, 43.3, 43.4
+- **UC030** (`use-cases/UC030-query-claude-code-installed-plugins-details-and-marketplaces-via-cli.md`): `45` -> 45.1, 45.2, 45.3, 45.4, 45.5
+- **UC031** (`use-cases/UC031-inspect-sources-catalog-installed-items-updates-and-plans-via-cli.md`): `46` -> 46.1, 46.2, 46.3, 46.4, 46.5
+- **UC032** (`use-cases/UC032-execute-plan-first-cli-write-commands-with-state-locking-and-code-gates.md`): `46` -> 46.1, 46.2, 46.3, 46.4, 46.5
+- **UC033** (`use-cases/UC033-redistribute-edited-local-folder-artifacts-to-all-installed-copies-via-cli.md`): `46` -> 46.1, 46.2, 46.3, 46.4, 46.5
+- **UC034** (`use-cases/UC034-scan-multiple-workspace-roots-via-cli-with-depth-and-ignore-rules.md`): `48` -> 48.1, 48.1b, 48.2, 48.3, 48.4, 48.5, 48.6, 48.7, 48.8

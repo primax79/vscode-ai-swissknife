@@ -26,10 +26,10 @@ Un pulsante di aggiornamento su ciascuna sorgente: azione inline nella barra lat
 
 ### 38.1 - `AvailableProvider.refreshSource` (nuova risoluzione di una singola sorgente, aggiornamento sul posto della cache)
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Aggiornamento singola sorgente catalogo · **Size:** M · **Depends on:** - · **Spec:** [38.1-provider-refresh-source.md](38.1-provider-refresh-source.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Aggiornamento singola sorgente catalogo · **Size:** M · **Depends on:** - · **Use cases:** UC028 · **Spec:** [38.1-provider-refresh-source.md](38.1-provider-refresh-source.md)
 - **Goal:** Aggiungere `AvailableTreeDataProvider.refreshSource(sourceId, scope)` per risolvere nuovamente una singola sorgente, aggiornare sul posto il suo gruppo in cache e ricalcolare le raccomandazioni senza riscaricare le altre sorgenti.
 
 ### 38.2 - Comando inline nella barra laterale + pulsante sulla riga della Dashboard collegati
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Pulsanti di aggiornamento sorgente · **Size:** S · **Depends on:** 38.1 · **Spec:** [38.2-buttons.md](38.2-buttons.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Pulsanti di aggiornamento sorgente · **Size:** S · **Depends on:** 38.1 · **Use cases:** UC028 · **Spec:** [38.2-buttons.md](38.2-buttons.md)
 - **Goal:** Collegare `aiSwissknife.refreshSource` come azione inline sugli elementi sorgente della barra laterale e come pulsante di sola icona `↻` su ogni riga sorgente della Dashboard.

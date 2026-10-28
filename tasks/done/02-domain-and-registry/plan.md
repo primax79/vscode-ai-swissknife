@@ -38,15 +38,15 @@ Decisioni condivise per questa iniziativa che ogni task deve rispettare:
 
 ### 02.1 - Tipi di dominio fondamentali
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Tipi di dominio fondamentali · **Size:** S · **Depends on:** 01 · **Spec:** [02.1-domain-types.md](02.1-domain-types.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Tipi di dominio fondamentali · **Size:** S · **Depends on:** 01 · **Use cases:** UC001, UC003 · **Spec:** [02.1-domain-types.md](02.1-domain-types.md)
 - **Goal:** Definire ogni entità fondamentale della specifica (`AssistantId`, `ItemKind`, `Scope`, `Source`, `Package`, `Artifact`, `ManagedInstallation`, `ObservedArtifact`) come interfacce TypeScript in `src/domain/types.ts`.
 
 ### 02.2 - Store del registro (lettura/scrittura JSON, globale + progetto)
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Store JSON del registro · **Size:** S · **Depends on:** 02.1 · **Spec:** [02.2-registry-store.md](02.2-registry-store.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Store JSON del registro · **Size:** S · **Depends on:** 02.1 · **Use cases:** UC001, UC003 · **Spec:** [02.2-registry-store.md](02.2-registry-store.md)
 - **Goal:** Implementare funzioni puro-Node di lettura/scrittura JSON atomica per il registro negli scope globale e di progetto.
 
 ### 02.3 - Modello di persistenza e artefatti risolti (hardening)
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Persistenza portabile e hardening · **Size:** M · **Depends on:** 02.2, 03.4 · **Spec:** [02.3-hardening.md](02.3-hardening.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Persistenza portabile e hardening · **Size:** M · **Depends on:** 02.2, 03.4 · **Use cases:** UC001, UC003 · **Spec:** [02.3-hardening.md](02.3-hardening.md)
 - **Goal:** Suddividere la persistenza in `manifest.json` condivisibile (`DesiredSource`, `desiredInstallations`) e `state.json` locale alla macchina sotto `.ai-swissknife`, e aggiungere la risoluzione tipizzata del contenuto `ResolvedArtifact<CanonicalSkill>` e un mutex condiviso per la cache Git.

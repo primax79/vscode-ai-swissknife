@@ -3,9 +3,9 @@
 - id: UC028
 - title: Install an artifact to multiple assistants and scopes or refresh one source
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P1
-- linked-tasks: 36, 37, 38, 40
+- linked-tasks: 36.1, 36.2, 36.3, 37.1, 37.2, 37.3, 38.1, 38.2, 40.1, 40.2, 40.3, 40.4, 40.5
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

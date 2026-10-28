@@ -3,9 +3,9 @@
 - id: UC033
 - title: Redistribute edited local-folder artifacts to all installed copies via CLI
 - actor: Agent session
-- status: draft
+- approval: proposed
 - priority: P1
-- linked-tasks: 46
+- linked-tasks: 46.1, 46.2, 46.3, 46.4, 46.5
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

@@ -6,37 +6,37 @@
 
 ### 48.2 - Flag di `installed`: link vs copia, link interrotto, orfano (rimosso dalla sorgente), installato due volte
 
-- **Status:** `open` (solo bozza) · **Short:** Flag link e orfani installed · **Size:** M · **Depends on:** 46.1
+- **Status:** `open` (solo bozza) · **Short:** Flag link e orfani installed · **Size:** M · **Depends on:** 46.1 · **Use cases:** UC034
 - **Goal:** Aggiungere flag basati su `lstat` all'output di `installed` per distinguere symlink vs copia, link interrotti, installazioni duplicate tra ambiti e artefatti orfani rimossi dalla rispettiva sorgente a monte.
 
 ### 48.3 - Report di shadowing: identical / stale / ahead / unique, e protezione `--force` prima di eliminare copie ahead/unique
 
-- **Status:** `open` (solo bozza) · **Short:** Report classificazione di shadowing · **Size:** L · **Depends on:** 48.1, 48.2
+- **Status:** `open` (solo bozza) · **Short:** Report classificazione di shadowing · **Size:** L · **Depends on:** 48.1, 48.2 · **Use cases:** UC034
 - **Goal:** Classificare le copie attraverso le root come `identical`, `stale`, `ahead` o `unique` calcolando l'hash degli artefatti rispetto ai commit passati del clone della sorgente, e richiedere `--force` prima di eliminare copie `ahead` o `unique`.
 
 ### 48.4 - Controlli doctor (regole di esclusione di Kilo, nome = cartella, metadati malformati, duplicati tra ambiti)
 
-- **Status:** `open` (solo bozza) · **Short:** Controlli doctor della CLI · **Size:** M · **Depends on:** 44.4, 46.1
+- **Status:** `open` (solo bozza) · **Short:** Controlli doctor della CLI · **Size:** M · **Depends on:** 44.4, 46.1 · **Use cases:** UC034
 - **Goal:** Aggiungere un comando doctor nella CLI che verifichi le regole di esclusione della discovery di Kilo, la mancata corrispondenza tra nome della skill e cartella, i metadati del frontmatter malformati e gli elementi duplicati tra ambiti.
 
 ### 48.5 - `replaces: [...]` sui plugin, applicato durante l'aggiornamento
 
-- **Status:** `open` (solo bozza; decisione aperta su dove risieda `replaces` e chi altro debba interpretarlo) · **Short:** Sostituzione plugin in aggiornamento · **Size:** M · **Depends on:** 47.1, 48.1
+- **Status:** `open` (solo bozza; decisione aperta su dove risieda `replaces` e chi altro debba interpretarlo) · **Short:** Sostituzione plugin in aggiornamento · **Size:** M · **Depends on:** 47.1, 48.1 · **Use cases:** UC034
 - **Goal:** Supportare una dichiarazione `replaces: [...]` su plugin/artefatti in modo che l'aggiornamento ritiri automaticamente i nomi degli artefatti sostituiti.
 
 ### 48.6 - Contribuire a ritroso una copia locale in un checkout della sorgente / marcare come intenzionalmente locale
 
-- **Status:** `open` (solo bozza) · **Short:** Contribuire copia locale a sorgente · **Size:** M · **Depends on:** 46.4
+- **Status:** `open` (solo bozza) · **Short:** Contribuire copia locale a sorgente · **Size:** M · **Depends on:** 46.4 · **Use cases:** UC034
 - **Goal:** Consentire di riportare un artefatto modificato o solo locale in un checkout di sorgente `local-folder` (mai nella nostra cache dei cloni git) oppure di marcarlo come intenzionalmente locale.
 
 ### 48.7 - Sorgenti CLI: fetch di tutte, N commit indietro, pin
 
-- **Status:** `open` (specificato in 48.7-revision-gap.md, commit 8efb5a1; metà engine `src/engine/revisionGap.ts` + test assorbita in 49.5) · **Short:** Divario revisione e sources fetch · **Size:** S · **Depends on:** 46.1, 46.4, 44.1, 47.4 · **Spec:** [48.7-revision-gap.md](48.7-revision-gap.md)
+- **Status:** `open` (specificato in 48.7-revision-gap.md, commit 8efb5a1; metà engine `src/engine/revisionGap.ts` + test assorbita in 49.5) · **Short:** Divario revisione e sources fetch · **Size:** S · **Depends on:** 46.1, 46.4, 44.1, 47.4 · **Use cases:** UC034 · **Spec:** [48.7-revision-gap.md](48.7-revision-gap.md)
 - **Goal:** Arricchire `updates` con `installedRevision`, `latestRevision`, `commitsBehind` e `behindDays` tramite `src/engine/revisionGap.ts` (già assorbita e testata in 49.5), e aggiungere un comando CLI `sources fetch`.
 
 ### 48.8 - Estensione di `redistribute <path|item>` con corrispondenza ampliata (`--roots`, copie associate per identità, `ahead`)
 
-- **Status:** `open` (v1 per cartella locale rilasciata come 46.5 in 99a127c; solo bozza per l'estensione ampliata) · **Short:** Estendere redistribute su più root · **Size:** M · **Depends on:** 46.5, 48.1, 48.3
+- **Status:** `open` (v1 per cartella locale rilasciata come 46.5 in 99a127c; solo bozza per l'estensione ampliata) · **Short:** Estendere redistribute su più root · **Size:** M · **Depends on:** 46.5, 48.1, 48.3 · **Use cases:** UC034
 - **Goal:** Estendere `redistribute` oltre le copie `local-folder` a singolo workspace della v1 per supportare la scansione multi-workspace con `--roots`, le copie associate per identità e le protezioni per la classificazione `ahead`.
 
 ## Bozze e note
@@ -64,10 +64,10 @@ L'aggiornamento di un singolo elemento `update <item>`, il report "vecchio commi
 
 ### 48.1 - Scansione multi-root con regole di esclusione
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Scansione workspace multi-root · **Size:** M · **Depends on:** 46.1 · **Spec:** [48.1-scan-roots.md](48.1-scan-roots.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Scansione workspace multi-root · **Size:** M · **Depends on:** 46.1 · **Use cases:** UC034 · **Spec:** [48.1-scan-roots.md](48.1-scan-roots.md)
 - **Goal:** Aggiungere `findWorkspaces` e `scanInventoryAcrossRoots` in `src/engine/scanRoots.ts` più le opzioni CLI `--roots`, `--max-depth`, `--ignore` ed `--extra-ignore` per scansionare più workspace in una sola chiamata.
 
 ### 48.1b - Valutare le regole di esclusione della scansione dei workspace relativamente a ciascuna root
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Regole esclusione workspace relative · **Size:** XS · **Kind:** fix · **Depends on:** 48.1
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Regole esclusione workspace relative · **Size:** XS · **Kind:** fix · **Depends on:** 48.1 · **Use cases:** UC034
 - **Goal:** Valutare le regole di esclusione di `findWorkspaces` (come `.kilo/worktrees`) sui percorsi relativi a ciascuna root scansionata anziché sul percorso assoluto, in modo che anche le root situate dentro un worktree vengano scansionate correttamente.

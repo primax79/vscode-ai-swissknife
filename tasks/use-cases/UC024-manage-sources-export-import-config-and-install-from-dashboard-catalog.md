@@ -3,9 +3,9 @@
 - id: UC024
 - title: Manage sources, export/import config, and install from Dashboard catalog
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P2
-- linked-tasks: 31, 32, 33, 35
+- linked-tasks: 31.1, 31.2, 31.3, 31.4, 32.1, 32.2, 32.3, 33.1, 33.2, 33.3, 33.4, 33.5, 35.1, 35.2, 35.3, 35.4, 35.5
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

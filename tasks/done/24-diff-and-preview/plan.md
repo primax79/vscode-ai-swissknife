@@ -15,10 +15,10 @@ Task (ciascuno = un commit):
 
 ### 24.1 - Comando di diff rispetto all'originale
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Comando diff vs originale · **Size:** M · **Depends on:** 23.2 · **Spec:** [24.1-diff-vs-original.md](24.1-diff-vs-original.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Comando diff vs originale · **Size:** M · **Depends on:** 23.2 · **Use cases:** UC017 · **Spec:** [24.1-diff-vs-original.md](24.1-diff-vs-original.md)
 - **Goal:** Aggiungere un comando `diffAgainstOriginal` sugli elementi gestiti modificati e sugli elementi non gestiti differenti che risolva l'originale upstream tramite `resolveAndTranslate` e apra `vscode.diff`.
 
 ### 24.2 - Azione di anteprima prima dell'installazione
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Azione anteprima pre-installazione · **Size:** M · **Depends on:** 06, 07 · **Spec:** [24.2-preview-before-install.md](24.2-preview-before-install.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Azione anteprima pre-installazione · **Size:** M · **Depends on:** 06, 07 · **Use cases:** UC017 · **Spec:** [24.2-preview-before-install.md](24.2-preview-before-install.md)
 - **Goal:** Aggiungere un'opzione `Preview` al flusso di conferma dell'installazione usando un `TextDocumentContentProvider` per ispezionare `prepared.content` in sola lettura senza scrivere su disco.

@@ -3,9 +3,9 @@
 - id: UC029
 - title: Disable and re-enable installed skills, agents, and commands in place
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P2
-- linked-tasks: 43
+- linked-tasks: 43.1, 43.2, 43.3, 43.4
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

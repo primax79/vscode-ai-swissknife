@@ -25,15 +25,15 @@ di task per passaggio di consegne. Indirizzare l'agente al singolo file del task
 
 ### 32.1 - Cablaggio dei provider
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Cablaggio provider della Dashboard · **Size:** S · **Depends on:** 28, 29 · **Spec:** [32.1-provider-wiring.md](32.1-provider-wiring.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Cablaggio provider della Dashboard · **Size:** S · **Depends on:** 28, 29 · **Use cases:** UC024 · **Spec:** [32.1-provider-wiring.md](32.1-provider-wiring.md)
 - **Goal:** Passare `SourcesTreeDataProvider`, `AvailableTreeDataProvider` e una callback di refresh incrociato a `DashboardPanel` e aggiornare i punti di chiamata in `extension.ts`.
 
 ### 32.2 - Guscio di navigazione a sezioni + punto di accesso New Artifact
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Guscio delle sezioni della Dashboard · **Size:** M · **Depends on:** 32.1 · **Spec:** [32.2-section-shell.md](32.2-section-shell.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Guscio delle sezioni della Dashboard · **Size:** M · **Depends on:** 32.1 · **Use cases:** UC024 · **Spec:** [32.2-section-shell.md](32.2-section-shell.md)
 - **Goal:** Aggiungere i tab di sezione di primo livello (Overview, Installed, Sources & Catalog, Recommendations) e il punto di accesso `+ New Artifact`, suddividendo `getHtml()` in template per singola sezione.
 
 ### 32.3 - Modello di aggiornamento incrementale
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Aggiornamenti incrementali Dashboard · **Size:** M · **Depends on:** 32.2 · **Spec:** [32.3-incremental-updates.md](32.3-incremental-updates.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Aggiornamenti incrementali Dashboard · **Size:** M · **Depends on:** 32.2 · **Use cases:** UC024 · **Spec:** [32.3-incremental-updates.md](32.3-incremental-updates.md)
 - **Goal:** Sostituire la riassegnazione integrale di `webview.html` al refresh con un singolo rendering iniziale del guscio e aggiornamenti incrementali del DOM guidati da `postMessage`.

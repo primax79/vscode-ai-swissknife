@@ -21,25 +21,25 @@
 
 ### 46.1 - Scheletro della CLI + comandi in sola lettura (sources, catalog, installed, updates, item, plan-install)
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Scheletro CLI e comandi lettura · **Size:** M · **Depends on:** 37.1, 44.1 · **Spec:** [46.1-cli-read-only.md](46.1-cli-read-only.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Scheletro CLI e comandi lettura · **Size:** M · **Depends on:** 37.1, 44.1 · **Use cases:** UC031, UC032, UC033 · **Spec:** [46.1-cli-read-only.md](46.1-cli-read-only.md)
 - **Goal:** Compilare il bundle privo di `vscode` `dist/cli.js` (`ai-swissknife`) con stdout in puro JSON e i comandi in sola lettura `sources`, `catalog`, `installed`, `updates`, `item` e `plan-install`.
 
 ### 46.2 - Documentazione rivolta agli agenti: blocco AGENTS.md + auto-descrizione `--help --json`
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Describe CLI e doc agenti · **Size:** S · **Depends on:** 46.1 · **Spec:** [46.2-agent-docs.md](46.2-agent-docs.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Describe CLI e doc agenti · **Size:** S · **Depends on:** 46.1 · **Use cases:** UC031, UC032, UC033 · **Spec:** [46.2-agent-docs.md](46.2-agent-docs.md)
 - **Goal:** Aggiungere il comando `describe` leggibile dalle macchine generato dalle definizioni dei comandi e documentare il contratto della CLI e gli esempi in `AGENTS.md`.
 
 ### 46.3 - Lock inter-processo per lettura-modifica-scrittura di manifest/stato
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Lock di stato inter-processo · **Size:** S · **Depends on:** - · **Spec:** [46.3-state-lock.md](46.3-state-lock.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Lock di stato inter-processo · **Size:** S · **Depends on:** - · **Use cases:** UC031, UC032, UC033 · **Spec:** [46.3-state-lock.md](46.3-state-lock.md)
 - **Goal:** Implementare `withStateLock` in `src/domain/stateLock.ts` con file di lock esclusivi e recupero dei lock obsoleti attorno alle sequenze di lettura-modifica-scrittura di manifest e stato.
 
 ### 46.4 - Comandi di scrittura protetti da `--write`: apply-install, uninstall (soft), aggiunta/rimozione sorgente
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Comandi di scrittura della CLI · **Size:** M · **Depends on:** 46.1, 46.3, 46.5, 47.1, 42.1 · **Spec:** [46.4-cli-writes.md](46.4-cli-writes.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Comandi di scrittura della CLI · **Size:** M · **Depends on:** 46.1, 46.3, 46.5, 47.1, 42.1 · **Use cases:** UC031, UC032, UC033 · **Spec:** [46.4-cli-writes.md](46.4-cli-writes.md)
 - **Goal:** Aggiungere i comandi di scrittura della CLI con pianificazione preventiva protetti da `--write` (`apply-install`, `uninstall`, `source add/remove`, `update` e `trash list/restore/empty`).
 
 ### 46.5 - `redistribute <path|item>` v1 (installato da una cartella locale; pianificazione preventiva, `--write`)
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Comando redistribute da cartella locale · **Size:** M · **Depends on:** 46.1, 46.3, 47.1 · **Spec:** [46.5-redistribute.md](46.5-redistribute.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Comando redistribute da cartella locale · **Size:** M · **Depends on:** 46.1, 46.3, 47.1 · **Use cases:** UC031, UC032, UC033 · **Spec:** [46.5-redistribute.md](46.5-redistribute.md)
 - **Goal:** Aggiungere `planRedistribute`/`applyRedistribute` e il comando CLI `redistribute` per propagare le modifiche da una sorgente `local-folder` registrata a tutte le copie installate (solo pianificazione senza `--write`).

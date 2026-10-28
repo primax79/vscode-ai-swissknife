@@ -55,10 +55,10 @@ Decisioni condivise per questa iniziativa che ogni task deve rispettare:
 
 ### 06.1 - Pianificazione + anteprima (rivisto)
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Piano e anteprima di installazione · **Size:** M · **Depends on:** 02.3, 03.4, 04.3, 05.2 · **Spec:** [06.1-plan-and-preview.md](06.1-plan-and-preview.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Piano e anteprima di installazione · **Size:** M · **Depends on:** 02.3, 03.4, 04.3, 05.2 · **Use cases:** UC002, UC003 · **Spec:** [06.1-plan-and-preview.md](06.1-plan-and-preview.md)
 - **Goal:** Risolvere il contenuto reale della skill, tradurlo per l'assistente di destinazione, calcolare un'anteprima di conflitti/file rispetto a una directory di destinazione validata e restituire un `PreparedInstall` discriminato.
 
 ### 06.2 - Applicazione transazionale + verifica (rivisto)
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Applicazione transazionale e verifica · **Size:** M · **Depends on:** 06.1 · **Spec:** [06.2-apply-and-verify.md](06.2-apply-and-verify.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Applicazione transazionale e verifica · **Size:** M · **Depends on:** 06.1 · **Use cases:** UC002, UC003 · **Spec:** [06.2-apply-and-verify.md](06.2-apply-and-verify.md)
 - **Goal:** Applicare un `PreparedInstall` tramite uno scambio di directory con staging con rivalidazione dello snapshot dell'albero di destinazione, verifica post-scambio, esiti di ripristino rollback e persistenza in `state.json`.

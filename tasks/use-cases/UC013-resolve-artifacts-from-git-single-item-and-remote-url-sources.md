@@ -3,9 +3,9 @@
 - id: UC013
 - title: Resolve artifacts from git-single-item and remote-url sources
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P2
-- linked-tasks: 20, 44
+- linked-tasks: 20.1, 20.2, 20.3, 44.1, 44.2, 44.3, 44.4, 44.5, 44.6
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

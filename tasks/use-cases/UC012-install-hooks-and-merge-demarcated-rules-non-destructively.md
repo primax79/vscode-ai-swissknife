@@ -3,9 +3,9 @@
 - id: UC012
 - title: Install hooks and merge demarcated rules non-destructively
 - actor: User
-- status: draft
+- approval: proposed
 - priority: P1
-- linked-tasks: 19
+- linked-tasks: 19.1, 19.2, 19.3, 19.4
 - verification-type: automated-probe
 - last-tested: -
 - last-verdict: -

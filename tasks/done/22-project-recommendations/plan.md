@@ -28,25 +28,25 @@ Task (ciascuno = un commit):
 
 ### 22.1 - Comandi recommend/unrecommend + decorazione dell'albero
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Comandi recommend e unrecommend · **Size:** S · **Depends on:** 02, 07 · **Spec:** [22.1-recommend-commands.md](22.1-recommend-commands.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Comandi recommend e unrecommend · **Size:** S · **Depends on:** 02, 07 · **Use cases:** UC015, UC016 · **Spec:** [22.1-recommend-commands.md](22.1-recommend-commands.md)
 - **Goal:** Aggiungere azioni del menu contestuale sugli elementi Available e Installed per scrivere o rimuovere voci `DesiredInstallation` nel manifesto del progetto con una decorazione Recommended e l'aggiornamento di entrambe le viste.
 
 ### 22.2 - Motore di risoluzione delle raccomandazioni
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Motore risoluzione raccomandazioni · **Size:** M · **Depends on:** 02, 06 · **Spec:** [22.2-resolution-engine.md](22.2-resolution-engine.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Motore risoluzione raccomandazioni · **Size:** M · **Depends on:** 02, 06 · **Use cases:** UC015, UC016 · **Spec:** [22.2-resolution-engine.md](22.2-resolution-engine.md)
 - **Goal:** Implementare la funzione pura `resolveRecommendations` in `src/engine/recommendations.ts` classificando `desiredInstallations` rispetto a `state.json` e ai tentativi di risoluzione delle sorgenti in `satisfied`, `pending` e `broken`.
 
 ### 22.3 - Comando "Install Recommended" + filtro "Recommended" nella vista Available
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Install Recommended e gruppo albero · **Size:** M · **Depends on:** 22.2 · **Spec:** [22.3-install-recommended.md](22.3-install-recommended.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Install Recommended e gruppo albero · **Size:** M · **Depends on:** 22.2 · **Use cases:** UC015, UC016 · **Spec:** [22.3-install-recommended.md](22.3-install-recommended.md)
 - **Goal:** Aggiungere il comando `aiSwissknife.installRecommended` e il raggruppamento `Recommended` in `AvailableTreeDataProvider` usando l'installazione sull'assistente/scope di destinazione specifico di ciascuna voce.
 
 ### 22.4 - Rilevamento all'apertura del workspace + notifica
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Prompt raccomandazioni all'apertura · **Size:** S · **Depends on:** 22.2, 22.3 · **Spec:** [22.4-open-prompt.md](22.4-open-prompt.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Prompt raccomandazioni all'apertura · **Size:** S · **Depends on:** 22.2, 22.3 · **Use cases:** UC015, UC016 · **Spec:** [22.4-open-prompt.md](22.4-open-prompt.md)
 - **Goal:** Collegare all'attivazione un controllo esclusivamente locale delle raccomandazioni non soddisfatte che offra `Install All`, `Review` e `Don't ask again for this workspace`.
 
 ### 22.5 - Igiene Git per il manifesto condiviso
 
-- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Igiene gitignore per state.json · **Size:** XS · **Depends on:** 02 · **Spec:** [22.5-gitignore-hygiene.md](22.5-gitignore-hygiene.md)
+- **Status:** `done` (2026-10-27; ai-coding-tools-c1) · **Short:** Igiene gitignore per state.json · **Size:** XS · **Depends on:** 02 · **Use cases:** UC015, UC016 · **Spec:** [22.5-gitignore-hygiene.md](22.5-gitignore-hygiene.md)
 - **Goal:** Garantire che `writeManifest` a livello di progetto accodi in modo non distruttivo il percorso `state.json` del progetto a un `.gitignore` esistente.
