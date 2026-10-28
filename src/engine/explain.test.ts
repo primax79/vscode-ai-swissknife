@@ -199,7 +199,7 @@ describe('Task 49.7 — Explain update state (formatter unit tests)', () => {
     );
   });
 
-  it('8. state "rebaselined": hash rebaselined after codec change', () => {
+  it('8a. rebaselined annotation when status is up-to-date', () => {
     const rebaselinedInst: ManagedInstallation = {
       ...baseInst,
       rebaselined: 'codec',
@@ -208,13 +208,46 @@ describe('Task 49.7 — Explain update state (formatter unit tests)', () => {
       installation: rebaselinedInst,
       status: 'up-to-date',
       rebaselined: 'codec',
+      installedCommit: 'abc1234567890123456789012345678901234567',
+      currentCommit: 'abc1234567890123456789012345678901234567',
     };
     const explained = explainInstallation(rebaselinedInst, report);
-    assert.strictEqual(explained.status, 'rebaselined');
+    assert.strictEqual(explained.status, 'up-to-date');
+    assert.strictEqual(explained.rebaselined, 'codec');
     assert.strictEqual(
       explained.reason,
-      'hash rebaselined after codec change'
+      'source commit unchanged (installed hash rebaselined after a codec change)'
     );
+    const json = formatExplainCliJson(explained);
+    assert.strictEqual(json.status, 'up-to-date');
+    assert.strictEqual(json.rebaselined, 'codec');
+  });
+
+  it('8b. rebaselined annotation when status is update-available', () => {
+    const rebaselinedInst: ManagedInstallation = {
+      ...baseInst,
+      sourceRevision: {
+        commit: 'f7bf72b012345678901234567890123456789012',
+      },
+      rebaselined: 'codec',
+    };
+    const report: DriftReport = {
+      installation: rebaselinedInst,
+      status: 'update-available',
+      rebaselined: 'codec',
+      installedCommit: 'f7bf72b012345678901234567890123456789012',
+      currentCommit: '2fc6633012345678901234567890123456789012',
+    };
+    const explained = explainInstallation(rebaselinedInst, report);
+    assert.strictEqual(explained.status, 'update-available');
+    assert.strictEqual(explained.rebaselined, 'codec');
+    assert.strictEqual(
+      explained.reason,
+      'source moved from f7bf72b to 2fc6633 and the content changed (installed hash rebaselined after a codec change)'
+    );
+    const json = formatExplainCliJson(explained);
+    assert.strictEqual(json.status, 'update-available');
+    assert.strictEqual(json.rebaselined, 'codec');
   });
 
   it('formatExplainCliLine outputs one clean line with short hashes (7 chars)', () => {
@@ -477,5 +510,103 @@ describe('Task 49.7 — CLI integration (status/updates --explain and --json)', 
     const updatesCmd = program.commands.find((c) => c.name() === 'updates');
     assert.ok(updatesCmd, 'updates command must exist');
     assert.ok(updatesCmd.aliases().includes('status'), 'updates must have status alias');
+  });
+
+  it('explain status for every item equals updates status on the same fixture', async () => {
+    const multiHome = fs.mkdtempSync(path.join(os.tmpdir(), 'explain-parity-test-'));
+    fs.mkdirSync(path.join(multiHome, '.ai-swissknife'), { recursive: true });
+    fs.mkdirSync(path.join(multiHome, '.claude', 'skills', 'skill-a'), { recursive: true });
+    fs.writeFileSync(path.join(multiHome, '.claude', 'skills', 'skill-a', 'SKILL.md'), '# Skill A\n', 'utf-8');
+
+    const sourcePath = path.join(multiHome, 'src-repo');
+    fs.mkdirSync(sourcePath, { recursive: true });
+
+    const source: Source = {
+      id: 'src-1',
+      type: 'local-folder',
+      scope: 'global',
+      localPath: sourcePath,
+    };
+
+    await writeManifest(
+      'global',
+      {
+        schemaVersion: SCHEMA_VERSION,
+        sources: [toDesiredSource(source, undefined, multiHome)],
+        desiredInstallations: [],
+      },
+      undefined,
+      multiHome
+    );
+
+    const instA: ManagedInstallation = {
+      assistant: 'claude-code',
+      scope: 'global',
+      kind: 'skill',
+      name: 'skill-a',
+      path: path.join(multiHome, '.claude', 'skills', 'skill-a'),
+      sourceId: 'src-1',
+      source: {
+        id: 'src-1',
+        scope: 'global',
+        type: 'local-folder',
+        location: sourcePath,
+      },
+      contentHash: 'hash-a',
+      installedAt: '2026-10-27T10:00:00.000Z',
+      rebaselined: 'codec',
+    };
+
+    const instB: ManagedInstallation = {
+      assistant: 'claude-code',
+      scope: 'global',
+      kind: 'skill',
+      name: 'skill-b-missing',
+      path: path.join(multiHome, '.claude', 'skills', 'skill-b-missing'),
+      sourceId: 'src-1',
+      source: {
+        id: 'src-1',
+        scope: 'global',
+        type: 'local-folder',
+        location: sourcePath,
+      },
+      contentHash: 'hash-b',
+      installedAt: '2026-10-27T10:00:00.000Z',
+    };
+
+    const instC: ManagedInstallation = {
+      assistant: 'claude-code',
+      scope: 'global',
+      kind: 'skill',
+      name: 'skill-c-unknown',
+      path: path.join(multiHome, '.claude', 'skills', 'skill-c-unknown'),
+      provenance: 'unknown',
+      provenanceReason: 'artifact-not-in-source',
+      contentHash: 'hash-c',
+      installedAt: '2026-10-27T10:00:00.000Z',
+    };
+
+    await writeState(
+      'global',
+      {
+        schemaVersion: SCHEMA_VERSION,
+        installations: [instA, instB, instC],
+      },
+      undefined,
+      multiHome
+    );
+
+    const normalUpdates = await runUpdates({ home: multiHome, explain: false });
+    const explainedUpdates = await runUpdates({ home: multiHome, explain: true, json: true });
+
+    assert.strictEqual(explainedUpdates.length, normalUpdates.length);
+    for (let i = 0; i < normalUpdates.length; i++) {
+      assert.strictEqual(
+        explainedUpdates[i].status,
+        normalUpdates[i].status,
+        `Status for item ${normalUpdates[i].key} must match between updates and explain`
+      );
+      assert.strictEqual(explainedUpdates[i].key, normalUpdates[i].key);
+    }
   });
 });

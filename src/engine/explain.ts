@@ -2,9 +2,7 @@ import type { AssistantId, ItemKind, ManagedInstallation, Scope } from '../domai
 import type { DriftReport, DriftStatus } from './types';
 import type { CliExplainedUpdateItem } from '../cli/types';
 
-export type ExplainStatus =
-  | DriftStatus
-  | 'rebaselined';
+export type ExplainStatus = DriftStatus;
 
 export interface ExplainedState {
   key: string;
@@ -19,7 +17,8 @@ export interface ExplainedState {
   installedContentHash?: string;
   sourceContentHash?: string;
   diskHash?: string;
-  status: ExplainStatus;
+  status: DriftStatus;
+  rebaselined?: 'codec';
   reason: string;
   details?: string;
   workspace?: string | null;
@@ -47,7 +46,7 @@ export function formatSourceIdentity(installation: ManagedInstallation): string 
 }
 
 export function computeExplainReason(
-  status: ExplainStatus,
+  status: DriftStatus,
   options: {
     installedCommit?: string;
     currentCommit?: string;
@@ -59,6 +58,7 @@ export function computeExplainReason(
     details?: string;
     reportReason?: string;
     provenanceReason?: string;
+    rebaselined?: 'codec';
   }
 ): string {
   const {
@@ -69,71 +69,64 @@ export function computeExplainReason(
     details,
     reportReason,
     provenanceReason,
+    rebaselined,
   } = options;
 
-  if (status === 'rebaselined') {
-    return 'hash rebaselined after codec change';
-  }
+  let baseReason: string;
 
   if (status === 'provenance-unknown') {
     if (provenanceReason) {
-      return `provenance unknown: ${provenanceReason}`;
+      baseReason = `provenance unknown: ${provenanceReason}`;
+    } else if (reportReason) {
+      baseReason = `provenance unknown: ${reportReason}`;
+    } else {
+      baseReason = 'provenance unknown: artifact-not-in-source';
     }
-    if (reportReason) {
-      return `provenance unknown: ${reportReason}`;
-    }
-    return 'provenance unknown: artifact-not-in-source';
-  }
-
-  if (status === 'modified-locally') {
+  } else if (status === 'modified-locally') {
     if (hasLocalPatch) {
-      return 'edited on disk after install (local.patch applied)';
+      baseReason = 'edited on disk after install (local.patch applied)';
+    } else {
+      baseReason = 'edited on disk after install';
     }
-    return 'edited on disk after install';
-  }
-
-  if (status === 'update-available') {
+  } else if (status === 'update-available') {
     if (installedCommit && currentCommit && installedCommit !== currentCommit) {
-      return `source moved from ${shortCommit(installedCommit)} to ${shortCommit(currentCommit)} and the content changed`;
+      baseReason = `source moved from ${shortCommit(installedCommit)} to ${shortCommit(currentCommit)} and the content changed`;
+    } else if (dirty) {
+      baseReason = 'newer version available in source (dirty working tree)';
+    } else {
+      baseReason = 'newer version available from upstream source';
     }
-    if (dirty) {
-      return 'newer version available in source (dirty working tree)';
-    }
-    return 'newer version available from upstream source';
-  }
-
-  if (status === 'modified-and-update-available') {
+  } else if (status === 'modified-and-update-available') {
     if (installedCommit && currentCommit && installedCommit !== currentCommit) {
-      return `edited on disk after install; source moved from ${shortCommit(installedCommit)} to ${shortCommit(currentCommit)} and the content changed`;
+      baseReason = `edited on disk after install; source moved from ${shortCommit(installedCommit)} to ${shortCommit(currentCommit)} and the content changed`;
+    } else {
+      baseReason = 'edited on disk after install and upstream source changed';
     }
-    return 'edited on disk after install and upstream source changed';
-  }
-
-  if (status === 'missing-on-disk') {
-    if (details) {
-      return details;
-    }
-    return 'installation directory not found on disk';
-  }
-
-  if (status === 'source-unavailable') {
+  } else if (status === 'missing-on-disk') {
+    baseReason = details || 'installation directory not found on disk';
+  } else if (status === 'source-unavailable') {
     if (reportReason) {
-      return `source unavailable: ${reportReason}`;
+      baseReason = `source unavailable: ${reportReason}`;
+    } else if (details) {
+      baseReason = `source unavailable: ${details}`;
+    } else {
+      baseReason = 'source unavailable';
     }
-    if (details) {
-      return `source unavailable: ${details}`;
+  } else {
+    // up-to-date
+    if (installedCommit && currentCommit && installedCommit !== currentCommit) {
+      baseReason = `source moved from ${shortCommit(installedCommit)} to ${shortCommit(currentCommit)} but content is unchanged`;
+    } else if (installedCommit && currentCommit && installedCommit === currentCommit) {
+      baseReason = 'source commit unchanged';
+    } else {
+      baseReason = 'up to date with source';
     }
-    return 'source unavailable';
   }
 
-  // up-to-date
-  if (installedCommit && currentCommit && installedCommit !== currentCommit) {
-    return `source moved from ${shortCommit(installedCommit)} to ${shortCommit(currentCommit)} but content is unchanged`;
+  if (rebaselined === 'codec') {
+    return `${baseReason} (installed hash rebaselined after a codec change)`;
   }
-  if (installedCommit && currentCommit && installedCommit === currentCommit) {
-    return 'source commit unchanged';
-  }
-  return 'up to date with source';
+  return baseReason;
 }
 
 export function explainInstallation(
@@ -156,18 +149,11 @@ export function explainInstallation(
     report?.sourceHash ?? installation.sourceContentHash ?? undefined;
   const diskHash = report?.diskHash ?? undefined;
 
-  let status: ExplainStatus;
-  if (
-    installation.rebaselined === 'codec' ||
-    report?.rebaselined === 'codec' ||
-    (report as any)?.status === 'rebaselined'
-  ) {
-    status = 'rebaselined';
-  } else if (report?.status) {
-    status = report.status;
-  } else {
-    status = 'up-to-date';
-  }
+  const status: DriftStatus = report?.status ?? 'up-to-date';
+  const rebaselined =
+    installation.rebaselined === 'codec' || report?.rebaselined === 'codec'
+      ? ('codec' as const)
+      : undefined;
 
   const reason = computeExplainReason(status, {
     installedCommit,
@@ -180,6 +166,7 @@ export function explainInstallation(
     details: report?.details,
     reportReason: report?.reason,
     provenanceReason: installation.provenanceReason,
+    rebaselined,
   });
 
   return {
@@ -196,6 +183,7 @@ export function explainInstallation(
     ...(sourceContentHash ? { sourceContentHash } : {}),
     ...(diskHash ? { diskHash } : {}),
     status,
+    ...(rebaselined ? { rebaselined } : {}),
     reason,
     ...(report?.details ? { details: report.details } : {}),
     workspace: options?.workspace ?? null,
@@ -225,13 +213,14 @@ export function formatExplainCliJson(item: ExplainedState): CliExplainedUpdateIt
     name: item.name,
     assistant: item.assistant,
     scope: item.scope,
-    status: item.status as DriftReport['status'],
+    status: item.status,
     sourceIdentity: item.sourceIdentity,
     ...(item.installedCommit ? { installedCommit: item.installedCommit } : {}),
     ...(item.currentCommit ? { currentCommit: item.currentCommit } : {}),
     ...(item.installedContentHash ? { installedContentHash: item.installedContentHash } : {}),
     ...(item.sourceContentHash ? { sourceContentHash: item.sourceContentHash } : {}),
     ...(item.diskHash ? { diskHash: item.diskHash } : {}),
+    ...(item.rebaselined ? { rebaselined: item.rebaselined } : {}),
     reason: item.reason,
     ...(item.details ? { details: item.details } : {}),
     workspace: item.workspace ?? null,
@@ -268,6 +257,7 @@ export function formatExplainDetailHtml(item: ExplainedState): string {
     `  <div><strong>Current source content hash:</strong> <code>${esc(item.sourceContentHash || '-')}</code></div>`,
     `  <div><strong>On-disk hash:</strong> <code>${esc(item.diskHash || '-')}</code></div>`,
     `  <div><strong>Status:</strong> ${esc(item.status)}</div>`,
+    ...(item.rebaselined ? [`  <div><strong>Rebaselined:</strong> <code>${esc(item.rebaselined)}</code></div>`] : []),
     `  <div><strong>Reason:</strong> ${esc(item.reason)}</div>`,
     '</div>',
   ].join('\n');

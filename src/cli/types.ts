@@ -157,6 +157,7 @@ export interface CliExplainedUpdateItem extends CliUpdateItem {
   installedContentHash?: string;
   sourceContentHash?: string;
   diskHash?: string;
+  rebaselined?: 'codec';
   reason: string;
 }
 

@@ -289,7 +289,6 @@ export const COMMAND_DEFINITIONS: CliCommandDefinition[] = [
               'missing-on-disk',
               'source-unavailable',
               'provenance-unknown',
-              'rebaselined',
             ],
           },
           sourceId: { type: 'string', optional: true },
@@ -299,6 +298,7 @@ export const COMMAND_DEFINITIONS: CliCommandDefinition[] = [
           installedContentHash: { type: 'string', optional: true },
           sourceContentHash: { type: 'string', optional: true },
           diskHash: { type: 'string', optional: true },
+          rebaselined: { type: 'string', optional: true },
           reason: { type: 'string', optional: true },
           details: { type: 'string', optional: true },
           workspace: {
