@@ -12,7 +12,7 @@
 
 ### 48.3 - Report di shadowing: identical / stale / ahead / unique, e protezione `--force` prima di eliminare copie ahead/unique
 
-- **Status:** `open` (solo bozza) · **Short:** Report classificazione di shadowing · **Size:** L · **Depends on:** 48.1, 48.2 · **Use cases:** UC034
+- **Status:** `in progress` (solo bozza; 2026-10-28; kilo) · **Short:** Report classificazione di shadowing · **Size:** L · **Depends on:** 48.1, 48.2 · **Use cases:** UC034
 - **Goal:** Classificare le copie attraverso le root come `identical`, `stale`, `ahead` o `unique` calcolando l'hash degli artefatti rispetto ai commit passati del clone della sorgente, e richiedere `--force` prima di eliminare copie `ahead` o `unique`.
 
 ### 48.4 - Controlli doctor (regole di esclusione di Kilo, nome = cartella, metadati malformati, duplicati tra ambiti)
