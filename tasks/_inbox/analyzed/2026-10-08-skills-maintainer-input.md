@@ -40,3 +40,12 @@ Keep the bump/release helper out of ai-swissknife. One related fix was made toda
 - Update of a plugin whose manifest version was not bumped (content changed, version equal): must be detected.
 - Shadowing on `/Users/Alfredo/works/gcube/porting_liferay` (32 project skills in `.claude/skills` and `.kilo/skills`): 7 identical to the toolkit, 13 different, 12 only in the project.
 - Removal of `gcube-readme-updater` and the other five from a user folder with trash and restore.
+
+---
+**Smistata il 2026-10-27 (ai-coding-tools-d8).** Contenuto già distribuito:
+- §1 stale/ahead con il commit di provenienza, §7 versione non incrementata: iniziativa 49 (spec
+  `install-provenance-and-update-detection.md` §2 e caso 7) e 48.3 (report di classificazione dello shadowing).
+- §2 cartelle utente non gestite, §4 link da adottare: 48.2 (flag link e orfani).
+- §3 `replaces`: 48.5. Rimozione con cestino: iniziativa 42 (archiviata).
+- §5 trasformazioni registrate per assistente: fuori ambito della 49 (spec §7), non pianificate.
+- §6: nessuna azione.
