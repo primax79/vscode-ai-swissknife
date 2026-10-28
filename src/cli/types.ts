@@ -50,6 +50,7 @@ export interface CliArgumentDefinition {
 
 export interface CliCommandDescription {
   name: string;
+  aliases?: string[];
   description: string;
   arguments?: CliArgumentDefinition[];
   options: CliOptionDefinition[];
@@ -149,6 +150,15 @@ export interface CliUpdateItem {
   commitsBehind?: number;
   details?: string;
   workspace?: string | null;
+}
+
+export interface CliExplainedUpdateItem extends CliUpdateItem {
+  sourceIdentity: string;
+  installedContentHash?: string;
+  sourceContentHash?: string;
+  diskHash?: string;
+  rebaselined?: 'codec';
+  reason: string;
 }
 
 export interface CliItemDetail {

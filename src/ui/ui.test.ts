@@ -2810,6 +2810,46 @@ describe('UI TreeDataProviders', () => {
       panel.dispose();
     });
 
+    it('detail panel renders explain fields and reason when explainHtml is provided', () => {
+      const { panel, elements, postMessage } = setupDashboardSandbox();
+
+      const managedItem = {
+        assistant: 'kilo-code',
+        scope: 'project',
+        kind: 'skill',
+        name: 'explained-skill',
+        path: '/workspace/.kilo/skills/explained-skill',
+        source: {
+          id: 'test-src',
+          scope: 'workspace',
+          type: 'git-marketplace',
+          location: 'https://github.com/org/marketplace.git',
+        },
+        sourceRevision: { commit: '1234567890abcdef1234567890abcdef12345678' },
+        installedAt: '2026-10-08T00:00:00.000Z',
+      };
+      const key = 'kilo-code:project:skill::explained-skill';
+
+      postMessage({
+        command: 'itemDetail',
+        key,
+        origin: computeItemOrigin('managed', managedItem as any),
+        diffAvailable: false,
+        crossFramework: [],
+        candidates: [],
+        item: managedItem,
+        membership: 'managed',
+        status: 'update-available',
+        explainHtml: '<div class="detail-explain"><div><strong>Source:</strong> <code>workspace:test-src</code></div><div><strong>Reason:</strong> source moved and content changed</div></div>',
+      });
+
+      assert.ok(elements.detailStatus.innerHTML.includes('detail-explain'));
+      assert.ok(elements.detailStatus.innerHTML.includes('workspace:test-src'));
+      assert.ok(elements.detailStatus.innerHTML.includes('source moved and content changed'));
+
+      panel.dispose();
+    });
+
     it('renders exactly one parent row and 3 child rows for an object in 3 places with chip strip, scope icons and worst badge', () => {
       const panel = DashboardPanel.render({ fsPath: '/test/ext' } as any, {} as any, {} as any, {} as any, () => {});
       assert.ok(panel);

@@ -90,4 +90,6 @@ export {
   type RevisionGapReason,
   type DescribeRevisionGapOptions,
 } from './revisionGap';
+export * from './explain';
+
 

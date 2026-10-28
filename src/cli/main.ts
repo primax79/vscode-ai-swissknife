@@ -4,7 +4,7 @@ import { COMMAND_DEFINITIONS, runDescribe } from './definitions';
 import { setSkipStateMigrationWrite } from '../domain/registry';
 
 const KNOWN_COMMANDS = new Set(
-  COMMAND_DEFINITIONS.flatMap((d) => [d.name, d.name.split(' ')[0]])
+  COMMAND_DEFINITIONS.flatMap((d) => [d.name, d.name.split(' ')[0], ...(d.aliases ?? [])])
 );
 
 export function normalizeArgv(argv: string[]): string[] {
@@ -58,6 +58,7 @@ export function createProgram(): Command {
       '--extra-ignore <names...>',
       'Additional directory names to ignore (adds to defaults)'
     )
+    .option('--json', 'Output machine-readable JSON')
     .exitOverride();
 
   for (const def of COMMAND_DEFINITIONS) {
@@ -78,6 +79,12 @@ export function createProgram(): Command {
       cmd = program.command(def.name);
     }
     cmd.description(def.description);
+
+    if (def.aliases) {
+      for (const a of def.aliases) {
+        cmd.alias(a);
+      }
+    }
 
     if (def.arguments) {
       for (const arg of def.arguments) {

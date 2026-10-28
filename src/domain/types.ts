@@ -148,6 +148,7 @@ export interface ManagedInstallation {
   provenanceHint?: string;
   installedAt: string;
   contentHash?: string;
+  rebaselined?: 'codec';
   disabled?: boolean;
   held?: boolean;
 }

@@ -200,8 +200,24 @@ export const COMMAND_DEFINITIONS: CliCommandDefinition[] = [
   },
   {
     name: 'updates',
+    aliases: ['status'],
     description: 'Check drift and upstream updates for managed installations',
+    arguments: [
+      {
+        name: 'item',
+        required: false,
+        description: 'Item key to check (optional, checks all if omitted)',
+      },
+    ],
     options: [
+      {
+        flags: '--explain',
+        description: 'Explain drift and provenance state for each item',
+      },
+      {
+        flags: '--json',
+        description: 'Output machine-readable JSON (with --explain)',
+      },
       {
         flags: '--scope <scope>',
         description: 'Filter by scope: global or project (Workspace)',
@@ -232,6 +248,8 @@ export const COMMAND_DEFINITIONS: CliCommandDefinition[] = [
     examples: [
       'ai-swissknife updates',
       'ai-swissknife updates --assistant kilo-code',
+      'ai-swissknife status --explain',
+      'ai-swissknife status --explain claude-code:global:skill:conflict-resolver',
     ],
     outputShape: {
       type: 'array',
@@ -274,6 +292,14 @@ export const COMMAND_DEFINITIONS: CliCommandDefinition[] = [
             ],
           },
           sourceId: { type: 'string', optional: true },
+          sourceIdentity: { type: 'string', optional: true },
+          installedCommit: { type: 'string', optional: true },
+          currentCommit: { type: 'string', optional: true },
+          installedContentHash: { type: 'string', optional: true },
+          sourceContentHash: { type: 'string', optional: true },
+          diskHash: { type: 'string', optional: true },
+          rebaselined: { type: 'string', optional: true },
+          reason: { type: 'string', optional: true },
           details: { type: 'string', optional: true },
           workspace: {
             type: 'string',
@@ -1057,6 +1083,7 @@ export const COMMAND_DEFINITIONS: CliCommandDefinition[] = [
 export function runDescribe(): CliCommandDescription[] {
   return COMMAND_DEFINITIONS.map((def) => ({
     name: def.name,
+    ...(def.aliases && def.aliases.length > 0 ? { aliases: def.aliases } : {}),
     description: def.description,
     ...(def.arguments && def.arguments.length > 0
       ? { arguments: def.arguments }

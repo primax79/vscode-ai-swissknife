@@ -15,6 +15,7 @@ import { resolveArtifactPreviewPath } from './artifactFileTree';
 import { handleInstallRecommended, installResolvedArtifacts, unrecommendArtifactForWorkspace } from './recommendations';
 import { getScopeLabel, getScopeIconSvg } from './scopeIcons';
 import { buildInstalledTree, type InstalledObject, type Place, type PlaceState, STATE_SEVERITY } from '../engine/installedTree';
+import { explainInstallation, formatExplainDetailHtml } from '../engine/explain';
 
 export { getScopeLabel, getScopeIconSvg, buildInstalledTree };
 
@@ -716,6 +717,9 @@ export class DashboardPanel {
         // ignore
       }
 
+      const explained = explainInstallation(inst, report);
+      const explainHtml = formatExplainDetailHtml(explained);
+
       this._panel.webview.postMessage({
         command: 'itemDetail',
         key,
@@ -729,7 +733,9 @@ export class DashboardPanel {
         hasLocalPatch: report?.hasLocalPatch,
         details: report?.details,
         held: Boolean(inst.held),
-        assistantIconUri
+        assistantIconUri,
+        explained,
+        explainHtml,
       });
       return;
     }
@@ -3335,7 +3341,11 @@ export class DashboardPanel {
 
         const statusEl = document.getElementById('detailStatus');
         if (statusEl) {
-          statusEl.innerHTML = '<span class="badge ' + badgeClass + '">' + escapeHtmlClient(badgeText) + '</span>';
+          let statusHtml = '<span class="badge ' + badgeClass + '">' + escapeHtmlClient(badgeText) + '</span>';
+          if (msg.explainHtml) {
+            statusHtml += msg.explainHtml;
+          }
+          statusEl.innerHTML = statusHtml;
         }
 
         // 3. Origin

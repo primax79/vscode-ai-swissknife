@@ -133,6 +133,7 @@ export interface DriftReport {
   currentCommit?: string;
   commitsBehind?: number;
   dirty?: boolean;
+  rebaselined?: 'codec';
   reason?: string;
   details?: string;
   hint?: string;
