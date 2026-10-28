@@ -2,7 +2,8 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
-import type { ManagedInstallation, ObservedArtifact, Source, AssistantId, Scope, ItemKind } from '../domain/types';
+import type { ManagedInstallation, ObservedArtifact, Source, AssistantId, Scope, ItemKind, InstalledFlag } from '../domain/types';
+import { attachFlagsToInventory } from '../engine/installedFlags';
 import { readState, writeState, readManifest, fromDesiredSource, withStateLock } from '../domain/registry';
 import { analyzeLocalDrift, checkDriftForAll, resolveInstallationSource } from '../engine/drift';
 import { scanInstalledInventory, promoteObservedArtifact } from '../engine/discovery';
@@ -66,14 +67,20 @@ export class InstalledInstallationItem {
     public readonly installation: ManagedInstallation,
     public report?: DriftReport,
     public readonly isRecommended?: boolean,
-    public readonly tooltipDescription?: string
+    public readonly tooltipDescription?: string,
+    public readonly flags?: InstalledFlag[],
+    public readonly linkTarget?: string,
+    public readonly duplicateOf?: string[]
   ) {}
 }
 
 export class ObservedArtifactItem {
   constructor(
     public readonly observed: ObservedArtifact,
-    public readonly tooltipDescription?: string
+    public readonly tooltipDescription?: string,
+    public readonly flags?: InstalledFlag[],
+    public readonly linkTarget?: string,
+    public readonly duplicateOf?: string[]
   ) {}
 }
 
@@ -217,6 +224,15 @@ export class InstalledTreeDataProvider {
       }
     }
 
+    try {
+      await attachFlagsToInventory(allManaged, allObserved, {
+        homeRoot: this.homeRoot,
+        workspaceRoot: folders?.[0]?.uri.fsPath,
+      });
+    } catch {
+      // ignore
+    }
+
     return { allManaged, allObserved };
   }
 
@@ -262,6 +278,43 @@ export class InstalledTreeDataProvider {
         iconName = 'eye';
       }
 
+      let flags = element.flags ?? obs.flags;
+      let linkTarget = element.linkTarget ?? obs.linkTarget;
+      const duplicateOf = element.duplicateOf ?? obs.duplicateOf;
+
+      if (!flags && obs.path) {
+        try {
+          const lst = fs.lstatSync(obs.path);
+          if (lst.isSymbolicLink()) {
+            flags = ['link'];
+            try {
+              const raw = fs.readlinkSync(obs.path);
+              linkTarget = path.isAbsolute(raw)
+                ? raw
+                : path.resolve(path.dirname(obs.path), raw);
+              try {
+                fs.statSync(obs.path);
+              } catch {
+                flags.push('broken-link');
+              }
+            } catch {
+              flags.push('broken-link');
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (flags?.includes('broken-link')) {
+        desc += ' [broken link]';
+      } else if (flags?.includes('link')) {
+        desc += ' [link]';
+      }
+      if (flags?.includes('duplicate')) {
+        desc += ' [duplicate]';
+      }
+
       const isDir = isBrowsableDirectory(obs.path);
 
       const item = new vscode.TreeItem(
@@ -269,9 +322,19 @@ export class InstalledTreeDataProvider {
         isDir ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
       );
       item.description = desc;
-      item.tooltip = `Name: ${obs.name}\nKind: ${obs.kind}\nAssistant: ${obs.assistant}\nScope: ${obs.scope}\nPath: ${obs.path}\nDiscovered: ${obs.discoveredAt}${
+      let tooltip = `Name: ${obs.name}\nKind: ${obs.kind}\nAssistant: ${obs.assistant}\nScope: ${obs.scope}\nPath: ${obs.path}\nDiscovered: ${obs.discoveredAt}${
         element.tooltipDescription ? `\nDescription: ${element.tooltipDescription}` : ''
       }${obs.match?.details ? `\nFeedback: ${obs.match.details}` : ''}`;
+      if (flags?.includes('link') && linkTarget) {
+        tooltip += `\nLink target: ${linkTarget}`;
+      }
+      if (flags?.includes('broken-link')) {
+        tooltip += `\nBroken link: target does not exist`;
+      }
+      if (flags?.includes('duplicate') && duplicateOf?.length) {
+        tooltip += `\nDuplicate of: ${duplicateOf.join(', ')}`;
+      }
+      item.tooltip = tooltip;
       item.iconPath = new vscode.ThemeIcon(iconName);
       if (!isDir) {
         item.command = {
@@ -334,6 +397,46 @@ export class InstalledTreeDataProvider {
         desc += ' held';
       }
 
+      let flags = element.flags ?? inst.flags;
+      let linkTarget = element.linkTarget ?? inst.linkTarget;
+      const duplicateOf = element.duplicateOf ?? inst.duplicateOf;
+
+      if (!flags && inst.path) {
+        try {
+          const lst = fs.lstatSync(inst.path);
+          if (lst.isSymbolicLink()) {
+            flags = ['link'];
+            try {
+              const raw = fs.readlinkSync(inst.path);
+              linkTarget = path.isAbsolute(raw)
+                ? raw
+                : path.resolve(path.dirname(inst.path), raw);
+              try {
+                fs.statSync(inst.path);
+              } catch {
+                flags.push('broken-link');
+              }
+            } catch {
+              flags.push('broken-link');
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      if (flags?.includes('broken-link')) {
+        desc += ' [broken link]';
+      } else if (flags?.includes('link')) {
+        desc += ' [link]';
+      }
+      if (flags?.includes('orphan')) {
+        desc += ' [orphan]';
+      }
+      if (flags?.includes('duplicate')) {
+        desc += ' [duplicate]';
+      }
+
       const isDir = isBrowsableDirectory(inst.path);
 
       const item = new vscode.TreeItem(
@@ -347,6 +450,18 @@ export class InstalledTreeDataProvider {
       }\n${formatExplainTooltip(explained)}`;
       if (inst.held) {
         tooltip += `\nHeld: skipped by Update all`;
+      }
+      if (flags?.includes('link') && linkTarget) {
+        tooltip += `\nLink target: ${linkTarget}`;
+      }
+      if (flags?.includes('broken-link')) {
+        tooltip += `\nBroken link: target does not exist`;
+      }
+      if (flags?.includes('orphan')) {
+        tooltip += `\nOrphan: artifact no longer exists in source`;
+      }
+      if (flags?.includes('duplicate') && duplicateOf?.length) {
+        tooltip += `\nDuplicate of: ${duplicateOf.join(', ')}`;
       }
       item.tooltip = tooltip;
       item.iconPath = new vscode.ThemeIcon(iconName);

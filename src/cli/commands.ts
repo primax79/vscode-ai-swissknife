@@ -33,6 +33,11 @@ import { planUpdateAll, backupItemToTrash, relinkInstallation } from '../engine/
 import { uninstallInstallation } from '../engine/uninstall';
 import { addSourceToManifest, removeSourceFromManifest } from '../engine/sourceManifest';
 import {
+  InstalledFlag,
+  VALID_INSTALLED_FLAGS,
+  attachFlagsToItems,
+} from '../engine/installedFlags';
+import {
   snapshotTree,
   diffSnapshots,
   computePlanChangedFiles,
@@ -164,6 +169,23 @@ function validateScope(scope?: string): Scope | undefined {
   return scope as Scope;
 }
 
+function validateFlags(flags?: string): InstalledFlag[] | undefined {
+  if (!flags) return undefined;
+  const list = flags
+    .split(',')
+    .map((f) => f.trim())
+    .filter(Boolean);
+  for (const f of list) {
+    if (!VALID_INSTALLED_FLAGS.includes(f as InstalledFlag)) {
+      throw new CliError(
+        'INVALID_ARGUMENT',
+        `Invalid flag "${f}". Supported flags: ${VALID_INSTALLED_FLAGS.join(', ')}`
+      );
+    }
+  }
+  return list as InstalledFlag[];
+}
+
 export { runDescribe } from './definitions';
 export async function runSources(opts: GlobalCliOptions): Promise<CliSource[]> {
   const { homeRoot, workspaceRoot } = resolveRoots(opts);
@@ -285,15 +307,16 @@ export async function runCatalog(
 }
 
 export async function runInstalled<
-  T extends GlobalCliOptions & { scope?: string; assistant?: string; kind?: string }
+  T extends GlobalCliOptions & { scope?: string; assistant?: string; kind?: string; flags?: string }
 >(
   opts: T
 ): Promise<T extends { roots: string[] } ? CliInstalledRootsResult : CliInstalledItem[]>;
 export async function runInstalled(
-  opts: GlobalCliOptions & { scope?: string; assistant?: string; kind?: string }
+  opts: GlobalCliOptions & { scope?: string; assistant?: string; kind?: string; flags?: string }
 ): Promise<CliInstalledItem[] | CliInstalledRootsResult> {
   const filterScope = validateScope(opts.scope);
   const filterKind = validateKind(opts.kind);
+  const filterFlags = validateFlags(opts.flags);
 
   let assistantFilter: AssistantId[] | undefined;
   if (opts.assistant) {
@@ -316,9 +339,13 @@ export async function runInstalled(
       options: scanOpts,
     });
 
-    const items = filterKind
+    let items = filterKind
       ? scanResult.items.filter((i) => i.kind === filterKind)
       : scanResult.items;
+
+    if (filterFlags && filterFlags.length > 0) {
+      items = items.filter((i) => filterFlags.some((f) => i.flags.includes(f)));
+    }
 
     return {
       items,
@@ -330,10 +357,10 @@ export async function runInstalled(
 
   const { homeRoot, workspaceRoot } = resolveRoots(opts);
 
-  const scopesToScan: Scope[] = filterScope
-    ? [filterScope]
-    : workspaceRoot
+  const scopesToScan: Scope[] = workspaceRoot
     ? ['global', 'project']
+    : filterScope
+    ? [filterScope]
     : ['global'];
 
   const results: CliInstalledItem[] = [];
@@ -345,7 +372,6 @@ export async function runInstalled(
 
       for (const m of inventory.managed) {
         if (assistantFilter && !assistantFilter.includes(m.assistant)) continue;
-        if (filterKind && m.kind !== filterKind) continue;
 
         results.push({
           key: `${m.assistant}:${m.scope}:${m.kind}:${m.name}`,
@@ -357,16 +383,19 @@ export async function runInstalled(
           path: m.path,
           ...(m.source ? { source: m.source } : {}),
           ...(m.sourceId ? { sourceId: m.sourceId } : {}),
+          ...(m.packageId ? { packageId: m.packageId } : {}),
+          ...(m.artifactId ? { artifactId: m.artifactId } : {}),
+          ...(m.contentHash ? { contentHash: m.contentHash } : {}),
           ...(m.provenance ? { provenance: m.provenance } : {}),
           ...(m.provenanceReason ? { provenanceReason: m.provenanceReason } : {}),
           ...(m.provenanceHint ? { provenanceHint: m.provenanceHint } : {}),
           workspace: sc === 'global' ? null : workspaceRoot,
+          flags: [],
         });
       }
 
       for (const o of inventory.observed) {
         if (assistantFilter && !assistantFilter.includes(o.assistant)) continue;
-        if (filterKind && o.kind !== filterKind) continue;
 
         const matchedStatus = o.match?.status === 'identical'
           ? 'identical'
@@ -383,8 +412,11 @@ export async function runInstalled(
           membership: 'observed',
           path: o.path,
           ...(o.match?.sourceId ? { sourceId: o.match.sourceId } : {}),
+          ...(o.match?.artifactId ? { artifactId: o.match.artifactId } : {}),
+          ...(o.contentHash ? { contentHash: o.contentHash } : {}),
           ...(matchedStatus ? { match: matchedStatus } : {}),
           workspace: sc === 'global' ? null : workspaceRoot,
+          flags: [],
         });
       }
     } catch {
@@ -392,7 +424,20 @@ export async function runInstalled(
     }
   }
 
-  return results;
+  await attachFlagsToItems(results, { homeRoot, workspaceRoot });
+
+  let finalResults = results;
+  if (filterScope) {
+    finalResults = finalResults.filter((i) => i.scope === filterScope);
+  }
+  if (filterKind) {
+    finalResults = finalResults.filter((i) => i.kind === filterKind);
+  }
+  if (filterFlags && filterFlags.length > 0) {
+    finalResults = finalResults.filter((i) => filterFlags.some((f) => i.flags.includes(f)));
+  }
+
+  return finalResults;
 }
 
 interface ProcessedUpdateEntry {

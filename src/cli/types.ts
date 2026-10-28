@@ -1,6 +1,7 @@
 import type {
   AssistantId,
   InstallationSourceIdentity,
+  InstalledFlag,
   ItemKind,
   Scope,
   ResolvedRevision,
@@ -96,6 +97,8 @@ export interface CatalogResult {
   diagnostics: CatalogDiagnostic[];
 }
 
+export type { InstalledFlag };
+
 export interface CliInstalledItem {
   key: string;
   kind: ItemKind;
@@ -111,6 +114,9 @@ export interface CliInstalledItem {
   provenanceHint?: string;
   match?: 'identical' | 'different';
   workspace?: string | null;
+  flags: InstalledFlag[];
+  linkTarget?: string;
+  duplicateOf?: string[];
 }
 
 export interface CliRelinkOutput {

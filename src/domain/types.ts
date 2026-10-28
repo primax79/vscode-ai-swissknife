@@ -84,6 +84,8 @@ export interface ObservedSourceMatch {
   details?: string;
 }
 
+export type InstalledFlag = 'link' | 'copy' | 'broken-link' | 'orphan' | 'duplicate';
+
 export interface ObservedArtifact {
   assistant: AssistantId;
   scope: Scope;
@@ -96,6 +98,9 @@ export interface ObservedArtifact {
   candidates?: ObservedSourceMatch[];
   match?: ObservedSourceMatch;
   disabled?: boolean;
+  flags?: InstalledFlag[];
+  linkTarget?: string;
+  duplicateOf?: string[];
 }
 
 export interface InstallationSourceIdentity {
@@ -151,6 +156,9 @@ export interface ManagedInstallation {
   rebaselined?: 'codec';
   disabled?: boolean;
   held?: boolean;
+  flags?: InstalledFlag[];
+  linkTarget?: string;
+  duplicateOf?: string[];
 }
 
 export type ConversionDiagnostic =

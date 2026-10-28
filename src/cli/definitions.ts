@@ -133,6 +133,11 @@ export const COMMAND_DEFINITIONS: CliCommandDefinition[] = [
           'Filter by kind (skill, agent, command, mcp-server, hook, rule)',
       },
       {
+        flags: '--flags <flag,...>',
+        description:
+          'Filter by flags: link, copy, broken-link, orphan, duplicate (comma-separated)',
+      },
+      {
         flags: '--roots <dirs...>',
         description: 'Workspace root directories to scan (overrides --workspace)',
       },
@@ -153,6 +158,8 @@ export const COMMAND_DEFINITIONS: CliCommandDefinition[] = [
       'ai-swissknife installed',
       'ai-swissknife installed --scope global --assistant claude-code',
       'ai-swissknife installed --kind skill',
+      'ai-swissknife installed --flags link',
+      'ai-swissknife installed --flags orphan,broken-link',
     ],
     outputShape: {
       type: 'array',
@@ -192,6 +199,26 @@ export const COMMAND_DEFINITIONS: CliCommandDefinition[] = [
             type: 'string',
             optional: true,
             description: 'Workspace root path (null for Global scope)',
+          },
+          flags: {
+            type: 'array',
+            description: 'Item flags (link, copy, broken-link, orphan, duplicate)',
+            items: {
+              type: 'string',
+              enum: ['link', 'copy', 'broken-link', 'orphan', 'duplicate'],
+            },
+          },
+          linkTarget: {
+            type: 'string',
+            optional: true,
+            description: 'Resolved target path for symlinks',
+          },
+          duplicateOf: {
+            type: 'array',
+            optional: true,
+            description:
+              'Other item keys representing the same artifact for the same assistant',
+            items: { type: 'string' },
           },
         },
       },

@@ -39,6 +39,7 @@
 
 import type {
   AssistantId,
+  InstalledFlag,
   ItemKind,
   ManagedInstallation,
   ObservedArtifact,
@@ -80,6 +81,9 @@ export interface Place {
   match?: PlaceMatch;
   disabled: boolean;
   sourceId?: string;
+  flags?: InstalledFlag[];
+  linkTarget?: string;
+  duplicateOf?: string[];
 }
 
 export interface InstalledObject {
@@ -94,6 +98,9 @@ export interface BuildInstalledTreeOptions {
   statusByKey?:
     | Map<string, PlaceState | string>
     | Record<string, PlaceState | string>;
+  flagsByKey?:
+    | Map<string, { flags: InstalledFlag[]; linkTarget?: string; duplicateOf?: string[] }>
+    | Record<string, { flags: InstalledFlag[]; linkTarget?: string; duplicateOf?: string[] }>;
 }
 
 /**
@@ -220,6 +227,25 @@ function lookupStatus(
   return raw as PlaceState;
 }
 
+function lookupFlags(
+  flagsByKey:
+    | Map<string, { flags: InstalledFlag[]; linkTarget?: string; duplicateOf?: string[] }>
+    | Record<string, { flags: InstalledFlag[]; linkTarget?: string; duplicateOf?: string[] }>
+    | undefined,
+  key: string
+): { flags: InstalledFlag[]; linkTarget?: string; duplicateOf?: string[] } | undefined {
+  if (!flagsByKey) {
+    return undefined;
+  }
+  if (flagsByKey instanceof Map) {
+    return flagsByKey.get(key);
+  }
+  if (typeof flagsByKey === 'object') {
+    return flagsByKey[key];
+  }
+  return undefined;
+}
+
 interface ObjectAccumulator {
   kind: ItemKind;
   name: string;
@@ -270,6 +296,7 @@ export function buildInstalledTree(
       ? 'disabled'
       : (injected ?? (inst.provenance === 'unknown' ? 'provenance-unknown' : 'checking'));
 
+    const injectedFlags = lookupFlags(opts?.flagsByKey, key);
     const place: Place = {
       key,
       assistant: inst.assistant,
@@ -278,6 +305,13 @@ export function buildInstalledTree(
       state,
       disabled,
       sourceId: inst.sourceId,
+      ...(inst.flags || injectedFlags?.flags ? { flags: inst.flags ?? injectedFlags?.flags } : {}),
+      ...(inst.linkTarget || injectedFlags?.linkTarget
+        ? { linkTarget: inst.linkTarget ?? injectedFlags?.linkTarget }
+        : {}),
+      ...(inst.duplicateOf || injectedFlags?.duplicateOf
+        ? { duplicateOf: inst.duplicateOf ?? injectedFlags?.duplicateOf }
+        : {}),
     };
 
     if (!acc.placeMap.has(key)) {
@@ -343,6 +377,7 @@ export function buildInstalledTree(
       match = { status: 'none', sourceId: obs.match?.sourceId };
     }
 
+    const injectedFlags = lookupFlags(opts?.flagsByKey, key);
     const place: Place = {
       key,
       assistant: obs.assistant,
@@ -352,6 +387,13 @@ export function buildInstalledTree(
       match,
       disabled,
       sourceId: obs.candidates?.[0]?.sourceId || obs.match?.sourceId,
+      ...(obs.flags || injectedFlags?.flags ? { flags: obs.flags ?? injectedFlags?.flags } : {}),
+      ...(obs.linkTarget || injectedFlags?.linkTarget
+        ? { linkTarget: obs.linkTarget ?? injectedFlags?.linkTarget }
+        : {}),
+      ...(obs.duplicateOf || injectedFlags?.duplicateOf
+        ? { duplicateOf: obs.duplicateOf ?? injectedFlags?.duplicateOf }
+        : {}),
     };
 
     if (!acc.placeMap.has(key)) {

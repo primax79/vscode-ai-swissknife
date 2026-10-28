@@ -6,8 +6,9 @@
 
 ### 48.2 - Flag di `installed`: link vs copia, link interrotto, orfano (rimosso dalla sorgente), installato due volte
 
-- **Status:** `open` (solo bozza) · **Short:** Flag link e orfani installed · **Size:** M · **Depends on:** 46.1 · **Use cases:** UC034
+- **Status:** `delivered` (2026-10-28) · **Short:** Flag link e orfani installed · **Size:** M · **Depends on:** 46.1 · **Use cases:** UC034
 - **Goal:** Aggiungere flag basati su `lstat` all'output di `installed` per distinguere symlink vs copia, link interrotti, installazioni duplicate tra ambiti e artefatti orfani rimossi dalla rispettiva sorgente a monte.
+- **Result:** Aggiunti all'output di `installed` e alla UI i flag in sola lettura (`link` con `linkTarget`, `copy`, `broken-link`, `orphan` per artefatti rimossi dalla sorgente tramite `evaluateProvenanceCandidates`, e `duplicate` con `duplicateOf` per duplicati tra ambiti per lo stesso assistente), il filtro CLI `installed --flags <flag,...>`, i badge/tooltip nell'albero Installed di VS Code, il supporto symlink negli adapter e test completi in `src/cli/installedFlags.test.ts`.
 
 ### 48.3 - Report di shadowing: identical / stale / ahead / unique, e protezione `--force` prima di eliminare copie ahead/unique
 
