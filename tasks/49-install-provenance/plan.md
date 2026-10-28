@@ -10,8 +10,9 @@ folders read from the live working tree, catalog vs check commit, artifact match
 
 ### 49.6 - Migration of existing state
 
-- **Status:** `open` · **Short:** State migration · **Size:** M · **Depends on:** 49.2, 49.5
+- **Status:** `delivered` (2026-10-27) · **Short:** State migration · **Size:** M · **Depends on:** 49.2, 49.5
 - **Goal:** spec §5 with backup of the old state file; `provenance-unknown` + re-link / reinstall actions; case 8 passes; verified on a copy of the real `~/.ai-swissknife/state.json`.
+- **Result:** Implementata la migrazione offline delle installazioni prive di `source` al caricamento di `state.json` (`readState`/`migrateStateFile`) con backup singolo `state.json.bak-<timestamp>`, re-baselining degli hash calcolati con il vecchio codec pre-`d61fdd1`/`2f949cc` (`rebaselined: codec`, preservando invece gli hash con modifiche locali reali così che restino `modified-locally`), recupero offline del commit di installazione dalla storia git dell'artefatto (`git log` / `--follow` fino a 200 commit con cache per `(source, commit, artifact)`), adozione delle sorgenti a candidato singolo e disambiguazione multi-candidato (o `provenance: 'unknown'` con `reason: 'ambiguous-source'`), stato neutrale `provenance-unknown` in UI/CLI, comando CLI `relink <item> --source <scope>:<id>` e azioni `relinkInstallation`/`reinstallInstallation`; i casi 8–8d in `src/engine/provenance.test.ts` sono verdi e la verifica su copia isolata del `~/.ai-swissknife/state.json` reale adotta 61 installazioni su 67 (48 `adopted-with-commit`, 13 `adopted-source-only`, 30 `rebaselined: codec`, 19 modifiche locali reali, 6 `provenance-unknown`), portando gli stati post-migrazione a 19 `up-to-date`, 16 `update-available` reali, 17 `modified-and-update-available`, 1 `modified-locally`, 4 `provenance-unknown` e 10 `missing-on-disk`.
 
 ### 49.7 - Explain the state in UI and CLI
 

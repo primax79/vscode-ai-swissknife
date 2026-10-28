@@ -95,6 +95,8 @@ function isIgnoredSkillSegment(name: string): boolean {
   return (
     name === '.git' ||
     name === 'node_modules' ||
+    name === '__pycache__' ||
+    name.endsWith('.pyc') ||
     name === 'index.json' ||
     name === 'local.patch' ||
     name.endsWith('.patch') ||

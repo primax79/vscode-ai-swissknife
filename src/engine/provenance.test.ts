@@ -1,6 +1,7 @@
 import { describe, it, before, after, beforeEach, afterEach } from 'node:test';
 import * as assert from 'node:assert';
 import * as child_process from 'child_process';
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -17,6 +18,8 @@ import {
   writeManifest,
   readState,
   writeState,
+  statePath,
+  migrateStateFile,
   toDesiredSource,
   fromDesiredSource,
   SCHEMA_VERSION,
@@ -28,8 +31,13 @@ import * as planModule from './plan';
 import { applyInstall } from './apply';
 import { checkForUpstreamUpdate, checkDriftForAll, resolveInstallationSource } from './drift';
 import { computePendingCounts } from './pendingCounts';
-import { planUpdate } from './update';
-import { runUpdates } from '../cli/commands';
+import {
+  planUpdate,
+  planUpdateAll,
+  relinkInstallation,
+  reinstallInstallation,
+} from './update';
+import { runUpdates, runRelink } from '../cli/commands';
 
 // File-wide HOME sandbox so no code path reads or writes the real ~/.ai-swissknife
 const realHome = process.env.HOME;
@@ -999,7 +1007,6 @@ describe('provenance & update detection — spec §6 acceptance cases', () => {
   // that source's current content differs from `contentHash`.
   it(
     '8. old state.json record (bare sourceId, no provenance object) -> migrated when uniquely matched or marked provenance-unknown, never a false update-available',
-    { todo: 'fixed by 49.6' },
     async () => {
       const sharedId = 'legacy-source';
 
@@ -1106,6 +1113,630 @@ describe('provenance & update detection — spec §6 acceptance cases', () => {
         reports[0].status as string,
         'provenance-unknown',
         'Ambiguous legacy installation that cannot be uniquely attributed must be marked provenance-unknown'
+      );
+    }
+  );
+
+  it(
+    '8b. state.json migration: adopts unique matching candidate, creates state.json.bak-<timestamp> once, resolves offline needs-fetch on next drift check, and supports relink + reinstall',
+    async () => {
+      const sharedId = 'legacy-source';
+
+      // Global local-folder source (v2)
+      const globalFolder = path.join(testHomeDir, 'legacy-global-b');
+      initGitRepo(globalFolder);
+      writeSkillFile(globalFolder, 'skills/legacy-skill', 'legacy-skill', 'Global version', '# Global content v2');
+      const globalCommit = commitAll(globalFolder, 'Global commit v2');
+      const globalSource: Source = {
+        id: sharedId,
+        type: 'local-folder',
+        scope: 'global',
+        localPath: globalFolder,
+      };
+      await writeManifest(
+        'global',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          sources: [toDesiredSource(globalSource, undefined, testHomeDir)],
+          desiredInstallations: [],
+        },
+        undefined,
+        testHomeDir
+      );
+
+      // Install from globalSource so contentHash matches globalSource at globalCommit
+      const { installation: rawInstalled } = await resolveAndInstallSkill({
+        source: globalSource,
+        skillName: 'legacy-skill',
+        targetScope: 'project',
+      });
+
+      // Workspace local-folder source with same id but different content (v3)
+      const wsFolder = path.join(testWorkspaceDir, 'legacy-ws-b');
+      writeSkillFile(wsFolder, 'skills/legacy-skill', 'legacy-skill', 'WS version', '# WS content v3');
+      const wsSource: Source = {
+        id: sharedId,
+        type: 'local-folder',
+        scope: 'project',
+        projectPath: testWorkspaceDir,
+        localPath: wsFolder,
+      };
+      await writeManifest(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          sources: [toDesiredSource(wsSource, testWorkspaceDir, testHomeDir)],
+          desiredInstallations: [],
+        },
+        testWorkspaceDir,
+        testHomeDir
+      );
+
+      // Write legacy installation without `source`, `sourceRevision`, `sourceContentHash`
+      const legacyInstallation: ManagedInstallation = {
+        assistant: rawInstalled.assistant,
+        scope: rawInstalled.scope,
+        projectPath: rawInstalled.projectPath,
+        kind: rawInstalled.kind,
+        name: rawInstalled.name,
+        path: rawInstalled.path,
+        sourceId: sharedId,
+        artifactId: `${sharedId}:skills/legacy-skill:legacy-skill`,
+        installedAt: '2026-09-01T00:00:00.000Z',
+        contentHash: rawInstalled.contentHash,
+      };
+      await writeState(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          installations: [legacyInstallation],
+        },
+        testWorkspaceDir,
+        testHomeDir
+      );
+
+      // 1. Load state -> uniquely adopts globalSource (only candidate matching contentHash), creates backup once
+      const loaded1 = await readState('project', testWorkspaceDir, testHomeDir);
+      const migratedInst = loaded1.installations[0];
+      assert.ok(migratedInst.source, 'Unique matching candidate should be adopted');
+      assert.strictEqual(migratedInst.source?.scope, 'global');
+      assert.strictEqual(migratedInst.source?.id, sharedId);
+      assert.strictEqual(migratedInst.sourceRevision?.commit, globalCommit);
+      assert.strictEqual(migratedInst.sourceContentHash, rawInstalled.contentHash);
+      assert.strictEqual(migratedInst.provenance, undefined);
+
+      const pStateFile = statePath('project', testWorkspaceDir, testHomeDir);
+      const stateDir = path.dirname(pStateFile);
+      const bakFiles1 = fs.readdirSync(stateDir).filter((f) => f.startsWith('state.json.bak-'));
+      assert.strictEqual(bakFiles1.length, 1, 'Should create exactly one state.json.bak-<timestamp> backup');
+
+      // Second readState should not create a second backup
+      await readState('project', testWorkspaceDir, testHomeDir);
+      const bakFiles2 = fs.readdirSync(stateDir).filter((f) => f.startsWith('state.json.bak-'));
+      assert.deepStrictEqual(bakFiles2, bakFiles1, 'Backup must be created only once');
+
+      // 2. Test offline needs-fetch behavior: uncached git candidate marks provenance-unknown with hint "check sources to resolve", then resolves on explicit checkDriftForAll
+      const uncachedGitId = 'uncached-git-src';
+      const remoteRepoDir = path.join(testWorkspaceDir, 'remotes', 'uncached-git');
+      initGitRepo(remoteRepoDir);
+      writeSkillFile(remoteRepoDir, 'skills/legacy-skill', 'legacy-skill', 'Global version', '# Global content v2');
+      const gitCommit = commitAll(remoteRepoDir, 'Matching git commit');
+      const uncachedGitSource: Source = {
+        id: uncachedGitId,
+        type: 'git-custom',
+        scope: 'project',
+        projectPath: testWorkspaceDir,
+        url: remoteRepoDir,
+      };
+      await writeManifest(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          sources: [toDesiredSource(uncachedGitSource, testWorkspaceDir, testHomeDir)],
+          desiredInstallations: [],
+        },
+        testWorkspaceDir,
+        testHomeDir
+      );
+      await writeState(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          installations: [
+            {
+              ...legacyInstallation,
+              sourceId: uncachedGitId,
+              artifactId: `${uncachedGitId}:skills/legacy-skill:legacy-skill`,
+            },
+          ],
+        },
+        testWorkspaceDir,
+        testHomeDir
+      );
+
+      // Load without cache -> offline, does NOT fetch, marks provenance: 'unknown' with hint "check sources to resolve"
+      const offlineLoaded = await readState('project', testWorkspaceDir, testHomeDir);
+      const offlineInst = offlineLoaded.installations[0];
+      assert.strictEqual(offlineInst.source, undefined);
+      assert.strictEqual(offlineInst.provenance, 'unknown');
+      assert.strictEqual(offlineInst.provenanceHint, 'check sources to resolve');
+
+      // Next explicit drift check fetches and resolves provenance!
+      const driftAfterFetch = await checkDriftForAll([offlineInst], [uncachedGitSource], testHomeDir);
+      assert.strictEqual(driftAfterFetch[0].status, 'up-to-date');
+      const resolvedOfflineInst = driftAfterFetch[0].installation;
+      assert.strictEqual(resolvedOfflineInst.provenance, undefined);
+      assert.strictEqual(resolvedOfflineInst.source?.id, uncachedGitId);
+      assert.strictEqual(resolvedOfflineInst.source?.scope, 'workspace');
+      assert.strictEqual(resolvedOfflineInst.sourceRevision?.commit, gitCommit);
+
+      // 3. Test CLI relink (plan and --write) and engine reinstallInstallation
+      const cliPlan = await runRelink('legacy-skill', {
+        home: testHomeDir,
+        workspace: testWorkspaceDir,
+        source: `global:${sharedId}`,
+        write: false,
+      });
+      assert.strictEqual(cliPlan.mode, 'plan');
+      assert.strictEqual(cliPlan.newSource.scope, 'global');
+      assert.strictEqual(cliPlan.newSource.id, sharedId);
+
+      const cliApplied = await runRelink('legacy-skill', {
+        home: testHomeDir,
+        workspace: testWorkspaceDir,
+        source: `global:${sharedId}`,
+        write: true,
+      });
+      assert.strictEqual(cliApplied.mode, 'applied');
+      const stateAfterRelink = await readState('project', testWorkspaceDir, testHomeDir);
+      assert.strictEqual(stateAfterRelink.installations[0].source?.scope, 'global');
+      assert.strictEqual(stateAfterRelink.installations[0].source?.id, sharedId);
+
+      // Reinstall from wsSource (v3)
+      const reinstallRes = await reinstallInstallation(
+        stateAfterRelink.installations[0],
+        wsSource,
+        { homeRoot: testHomeDir, projectRoot: testWorkspaceDir }
+      );
+      assert.strictEqual(reinstallRes.status, 'applied');
+      assert.strictEqual(reinstallRes.installation.source?.scope, 'workspace');
+      assert.strictEqual(reinstallRes.installation.provenance, undefined);
+    }
+  );
+
+  it(
+    '8c. follow-up 49.6 rules: single candidate moved source -> adopted + update-available; history hit -> commit recorded + up-to-date; two candidates with one history hit -> adopted; two without -> ambiguous-source with both candidates in hint',
+    async () => {
+      // (A) Single candidate with moved source (hash not in history) -> adopted-source-only, status update-available
+      const singleMovedId = 'single-moved-src';
+      const singleFolder = path.join(testWorkspaceDir, 'single-moved-folder');
+      writeSkillFile(singleFolder, 'skills/moved-skill', 'moved-skill', 'v1', '# Content v1');
+      const singleSource: Source = {
+        id: singleMovedId,
+        type: 'local-folder',
+        scope: 'project',
+        projectPath: testWorkspaceDir,
+        localPath: singleFolder,
+      };
+      const { installation: instMoved } = await resolveAndInstallSkill({
+        source: singleSource,
+        skillName: 'moved-skill',
+      });
+      // Now source moves to v2 (plain non-git folder, so v1 is no longer in history)
+      writeSkillFile(singleFolder, 'skills/moved-skill', 'moved-skill', 'v2', '# Content v2');
+
+      await writeManifest(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          sources: [toDesiredSource(singleSource, testWorkspaceDir, testHomeDir)],
+          desiredInstallations: [],
+        },
+        testWorkspaceDir,
+        testHomeDir
+      );
+      await writeState(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          installations: [
+            {
+              assistant: instMoved.assistant,
+              scope: instMoved.scope,
+              projectPath: instMoved.projectPath,
+              kind: instMoved.kind,
+              name: instMoved.name,
+              path: instMoved.path,
+              sourceId: singleMovedId,
+              artifactId: instMoved.artifactId,
+              installedAt: '2026-09-01T00:00:00.000Z',
+              contentHash: instMoved.contentHash,
+            },
+          ],
+        },
+        testWorkspaceDir,
+        testHomeDir
+      );
+
+      const stateA = await readState('project', testWorkspaceDir, testHomeDir);
+      const adoptedA = stateA.installations[0];
+      assert.ok(adoptedA.source, 'Single candidate must be adopted even when hash differs');
+      assert.strictEqual(adoptedA.source?.id, singleMovedId);
+      assert.strictEqual(adoptedA.source?.scope, 'workspace');
+      assert.strictEqual(adoptedA.sourceRevision, undefined, 'sourceRevision must be left empty when commit is not found');
+      assert.strictEqual(adoptedA.sourceContentHash, undefined, 'sourceContentHash must be left unset when commit is not found');
+      assert.strictEqual(adoptedA.provenance, undefined);
+
+      const driftA = await checkDriftForAll([adoptedA], [singleSource], testHomeDir);
+      assert.strictEqual(driftA[0].status, 'update-available');
+
+      // (B) History hit -> commit recorded, status up-to-date
+      const histId = 'history-hit-src';
+      const histRepo = path.join(testHomeDir, 'history-hit-repo');
+      initGitRepo(histRepo);
+      writeSkillFile(histRepo, 'skills/hist-skill', 'hist-skill', 'v1', '# Hist skill v1');
+      const histInstallCommit = commitAll(histRepo, 'Add hist-skill v1');
+      const histSource: Source = {
+        id: histId,
+        type: 'local-folder',
+        scope: 'global',
+        localPath: histRepo,
+      };
+      const { installation: instHist } = await resolveAndInstallSkill({
+        source: histSource,
+        skillName: 'hist-skill',
+      });
+      // Advance repo HEAD on another skill so repo HEAD != histInstallCommit, while hist-skill's latest commit in git log is histInstallCommit
+      writeSkillFile(histRepo, 'skills/other-skill', 'other-skill', 'other', '# Other skill');
+      const newerRepoHead = commitAll(histRepo, 'Add other-skill');
+      assert.notStrictEqual(newerRepoHead, histInstallCommit);
+
+      await writeManifest(
+        'global',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          sources: [toDesiredSource(histSource, undefined, testHomeDir)],
+          desiredInstallations: [],
+        },
+        undefined,
+        testHomeDir
+      );
+      await writeState(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          installations: [
+            {
+              assistant: instHist.assistant,
+              scope: instHist.scope,
+              projectPath: instHist.projectPath,
+              kind: instHist.kind,
+              name: instHist.name,
+              path: instHist.path,
+              sourceId: histId,
+              artifactId: instHist.artifactId,
+              installedAt: '2026-09-01T00:00:00.000Z',
+              contentHash: instHist.contentHash,
+            },
+          ],
+        },
+        testWorkspaceDir,
+        testHomeDir
+      );
+
+      const stateB = await readState('project', testWorkspaceDir, testHomeDir);
+      const adoptedB = stateB.installations[0];
+      assert.strictEqual(adoptedB.source?.id, histId);
+      assert.strictEqual(adoptedB.source?.scope, 'global');
+      assert.strictEqual(adoptedB.sourceRevision?.commit, histInstallCommit);
+      assert.strictEqual(adoptedB.sourceContentHash, instHist.contentHash);
+
+      const driftB = await checkDriftForAll([adoptedB], [histSource], testHomeDir);
+      assert.strictEqual(driftB[0].status, 'up-to-date');
+
+      // (C) Two candidates (same id in both scopes), one with the hash in its older git history (after moving to v2) -> adopts that one
+      const dualId = 'dual-hist-src';
+      const globalDualRepo = path.join(testHomeDir, 'dual-global-repo');
+      initGitRepo(globalDualRepo);
+      writeSkillFile(globalDualRepo, 'skills/dual-skill', 'dual-skill', 'v1', '# Dual v1 in global history');
+      const globalV1Commit = commitAll(globalDualRepo, 'Global dual-skill v1');
+      const globalDualSource: Source = {
+        id: dualId,
+        type: 'local-folder',
+        scope: 'global',
+        localPath: globalDualRepo,
+      };
+      const { installation: instDual } = await resolveAndInstallSkill({
+        source: globalDualSource,
+        skillName: 'dual-skill',
+      });
+      // Advance globalDualRepo to v2 so HEAD no longer matches v1, but v1 is in its git history!
+      writeSkillFile(globalDualRepo, 'skills/dual-skill', 'dual-skill', 'v2', '# Dual v2 in global HEAD');
+      commitAll(globalDualRepo, 'Global dual-skill v2');
+
+      // Workspace candidate with same id, only has v3 in its history
+      const wsDualRepo = path.join(testWorkspaceDir, 'dual-ws-repo');
+      initGitRepo(wsDualRepo);
+      writeSkillFile(wsDualRepo, 'skills/dual-skill', 'dual-skill', 'v3', '# Dual v3 in workspace');
+      commitAll(wsDualRepo, 'Workspace dual-skill v3');
+      const wsDualSource: Source = {
+        id: dualId,
+        type: 'local-folder',
+        scope: 'project',
+        projectPath: testWorkspaceDir,
+        localPath: wsDualRepo,
+      };
+
+      await writeManifest(
+        'global',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          sources: [toDesiredSource(globalDualSource, undefined, testHomeDir)],
+          desiredInstallations: [],
+        },
+        undefined,
+        testHomeDir
+      );
+      await writeManifest(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          sources: [toDesiredSource(wsDualSource, testWorkspaceDir, testHomeDir)],
+          desiredInstallations: [],
+        },
+        testWorkspaceDir,
+        testHomeDir
+      );
+      await writeState(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          installations: [
+            {
+              assistant: instDual.assistant,
+              scope: instDual.scope,
+              projectPath: instDual.projectPath,
+              kind: instDual.kind,
+              name: instDual.name,
+              path: instDual.path,
+              sourceId: dualId,
+              artifactId: instDual.artifactId,
+              installedAt: '2026-09-01T00:00:00.000Z',
+              contentHash: instDual.contentHash,
+            },
+          ],
+        },
+        testWorkspaceDir,
+        testHomeDir
+      );
+
+      const stateC = await readState('project', testWorkspaceDir, testHomeDir);
+      const adoptedC = stateC.installations[0];
+      assert.strictEqual(adoptedC.source?.scope, 'global', 'Must adopt the candidate whose git history contains the installed hash');
+      assert.strictEqual(adoptedC.source?.id, dualId);
+      assert.strictEqual(adoptedC.sourceRevision?.commit, globalV1Commit);
+      assert.strictEqual(adoptedC.sourceContentHash, instDual.contentHash);
+
+      // (D) Two candidates without the hash in history -> provenance-unknown with reason ambiguous-source and both candidates in hint
+      await writeState(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          installations: [
+            {
+              assistant: instDual.assistant,
+              scope: instDual.scope,
+              projectPath: instDual.projectPath,
+              kind: instDual.kind,
+              name: instDual.name,
+              path: instDual.path,
+              sourceId: dualId,
+              artifactId: instDual.artifactId,
+              installedAt: '2026-09-01T00:00:00.000Z',
+              contentHash: '0000000000000000000000000000000000000000000000000000000000000000',
+            },
+          ],
+        },
+        testWorkspaceDir,
+        testHomeDir
+      );
+
+      const stateD = await readState('project', testWorkspaceDir, testHomeDir);
+      const unknownD = stateD.installations[0];
+      assert.strictEqual(unknownD.source, undefined);
+      assert.strictEqual(unknownD.provenance, 'unknown');
+      assert.strictEqual(unknownD.provenanceReason, 'ambiguous-source');
+      assert.ok(
+        unknownD.provenanceHint?.includes(`global:${dualId}`) &&
+          unknownD.provenanceHint?.includes(`workspace:${dualId}`),
+        `Expected hint to list both candidates, got: "${unknownD.provenanceHint}"`
+      );
+    }
+  );
+
+  it(
+    '8d. codec rebaseline: recorded old-format hash (with metadata + index.json) -> rebaselined: codec + history hit + up-to-date; real local edit kept -> modified-locally',
+    async () => {
+      const srcId = 'codec-rebaseline-src';
+      const repoDir = path.join(testHomeDir, 'codec-rebaseline-repo');
+      initGitRepo(repoDir);
+
+      // Skill with frontmatter `metadata:` and an `index.json` file (which the pre-d61fdd1/2f949cc codec included in contentHash)
+      const skillRelDir = 'skills/rebaseline-skill';
+      const fullSkillDir = path.join(repoDir, skillRelDir);
+      fs.mkdirSync(fullSkillDir, { recursive: true });
+      const skillMd = [
+        '---',
+        'name: rebaseline-skill',
+        'description: Skill with metadata and index.json',
+        'metadata:',
+        '  author: Test Author',
+        '  version: "1.0.0"',
+        '---',
+        '# Rebaseline Skill Body v1',
+        '',
+      ].join('\n');
+      fs.writeFileSync(path.join(fullSkillDir, 'SKILL.md'), skillMd, 'utf-8');
+      const indexJsonBuf = Buffer.from('{"generated":true}\n', 'utf-8');
+      fs.writeFileSync(path.join(fullSkillDir, 'index.json'), indexJsonBuf);
+      const installCommit = commitAll(repoDir, 'Add rebaseline-skill v1');
+
+      // Advance repo HEAD on a different skill so history search must recover `installCommit`
+      writeSkillFile(repoDir, 'skills/other', 'other', 'Other skill', '# Other body');
+      const headCommit = commitAll(repoDir, 'Add other skill');
+      assert.notStrictEqual(headCommit, installCommit);
+
+      const source: Source = {
+        id: srcId,
+        type: 'local-folder',
+        scope: 'global',
+        localPath: repoDir,
+      };
+      await writeManifest(
+        'global',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          sources: [toDesiredSource(source, undefined, testHomeDir)],
+          desiredInstallations: [],
+        },
+        undefined,
+        testHomeDir
+      );
+
+      // Install the skill using current pipeline, then also place `index.json` on disk and compute the pre-d61fdd1 hash
+      const { installation: currentInstalled } = await resolveAndInstallSkill({
+        source,
+        skillName: 'rebaseline-skill',
+      });
+      const indexOnDiskPath = path.join(currentInstalled.path, 'index.json');
+      fs.writeFileSync(indexOnDiskPath, indexJsonBuf);
+      const indexStat = fs.statSync(indexOnDiskPath);
+
+      // Compute the exact pre-d61fdd1/pre-2f949cc hash (line-by-line frontmatter parser + metadata included + index.json included)
+      const oldHash = (() => {
+        const h = crypto.createHash('sha256');
+        h.update('name:rebaseline-skill\n');
+        h.update('description:Skill with metadata and index.json\n');
+        h.update('body:# Rebaseline Skill Body v1\n\n');
+        h.update('extraFields:\n');
+        const extra: Record<string, unknown> = {
+          author: 'Test Author',
+          metadata: '',
+          version: '1.0.0',
+        };
+        for (const k of Object.keys(extra).sort()) {
+          h.update(`${k}:${JSON.stringify(extra[k])}\n`);
+        }
+        h.update('files:\n');
+        h.update(`path:index.json\ncontent:`);
+        h.update(indexJsonBuf);
+        h.update(`\nmode:${indexStat.mode.toString(8)}\n`);
+        return h.digest('hex');
+      })();
+      assert.notStrictEqual(
+        oldHash,
+        currentInstalled.contentHash,
+        'Pre-normalization hash must differ from current canonicalSkillHash'
+      );
+
+      // (1) Write legacy installation with `oldHash` -> migrateStateFile rebaselines contentHash, finds installCommit in history, and checkDriftForAll reports up-to-date
+      await writeState(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          installations: [
+            {
+              assistant: currentInstalled.assistant,
+              scope: currentInstalled.scope,
+              projectPath: currentInstalled.projectPath,
+              kind: currentInstalled.kind,
+              name: currentInstalled.name,
+              path: currentInstalled.path,
+              sourceId: srcId,
+              artifactId: currentInstalled.artifactId,
+              installedAt: '2026-10-10T00:00:00.000Z',
+              contentHash: oldHash,
+            },
+          ],
+        },
+        testWorkspaceDir,
+        testHomeDir
+      );
+
+      const migReport1 = await migrateStateFile('project', testWorkspaceDir, testHomeDir, {
+        persist: true,
+      });
+      assert.strictEqual(migReport1.rebaselinedCodecCount, 1);
+      assert.strictEqual(migReport1.realLocalEditCount, 0);
+      assert.strictEqual(migReport1.adoptedWithCommitCount, 1);
+      assert.strictEqual(migReport1.entries[0].rebaselined, 'codec');
+      assert.strictEqual(migReport1.entries[0].commit, installCommit);
+
+      const migratedInst1 = migReport1.state.installations[0];
+      assert.strictEqual(
+        migratedInst1.contentHash,
+        currentInstalled.contentHash,
+        'contentHash must be replaced with the recomputed current-codec hash'
+      );
+      assert.strictEqual(migratedInst1.sourceRevision?.commit, installCommit);
+      assert.strictEqual(migratedInst1.sourceContentHash, currentInstalled.contentHash);
+
+      const drift1 = await checkDriftForAll([migratedInst1], [source], testHomeDir);
+      assert.strictEqual(
+        drift1[0].status,
+        'up-to-date',
+        'Rebaselined installation at unchanged source content must be up-to-date, never update-available'
+      );
+
+      // (2) Real local edit on disk -> keep recorded hash so item stays modified-locally
+      fs.writeFileSync(
+        path.join(currentInstalled.path, 'SKILL.md'),
+        skillMd + '\nEdited locally by user!\n',
+        'utf-8'
+      );
+      await writeState(
+        'project',
+        {
+          schemaVersion: SCHEMA_VERSION,
+          installations: [
+            {
+              assistant: currentInstalled.assistant,
+              scope: currentInstalled.scope,
+              projectPath: currentInstalled.projectPath,
+              kind: currentInstalled.kind,
+              name: currentInstalled.name,
+              path: currentInstalled.path,
+              sourceId: srcId,
+              artifactId: currentInstalled.artifactId,
+              installedAt: '2026-10-10T00:00:00.000Z',
+              contentHash: oldHash,
+            },
+          ],
+        },
+        testWorkspaceDir,
+        testHomeDir
+      );
+
+      const migReport2 = await migrateStateFile('project', testWorkspaceDir, testHomeDir, {
+        persist: true,
+      });
+      assert.strictEqual(migReport2.rebaselinedCodecCount, 0);
+      assert.strictEqual(migReport2.realLocalEditCount, 1);
+      assert.strictEqual(migReport2.entries[0].realLocalEdit, true);
+
+      const migratedInst2 = migReport2.state.installations[0];
+      assert.strictEqual(
+        migratedInst2.contentHash,
+        oldHash,
+        'Real local edit must keep the recorded contentHash'
+      );
+      assert.strictEqual(migratedInst2.sourceRevision?.commit, installCommit);
+
+      const drift2 = await checkDriftForAll([migratedInst2], [source], testHomeDir);
+      assert.strictEqual(
+        drift2[0].status,
+        'modified-locally',
+        'Real local edit must stay modified-locally'
       );
     }
   );

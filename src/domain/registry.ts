@@ -1,8 +1,22 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import type { Scope, AssistantId, Source, ManagedInstallation } from './types';
+import type {
+  Scope,
+  AssistantId,
+  ItemKind,
+  Source,
+  ManagedInstallation,
+  InstallationSourceIdentity,
+} from './types';
 import { ensureStateIgnored } from './gitignore';
+import {
+  evaluateProvenanceCandidates,
+  applyProvenanceEvaluation,
+  setProvenanceResolvedCallback,
+  createProvenanceHistoryCaches,
+} from '../engine/drift';
+import type { SourceResolution } from '../sources/types';
 
 export { ensureStateIgnored } from './gitignore';
 export {
@@ -268,10 +282,309 @@ export async function writeManifest(
   }
 }
 
+let _skipStateMigrationWrite = false;
+
+/**
+ * Controls whether `readState` suppresses on-disk persistence of migrated state
+ * (used by read-only / plan-only CLI commands so directory snapshots stay untouched).
+ */
+export function setSkipStateMigrationWrite(skip: boolean): void {
+  _skipStateMigrationWrite = skip;
+}
+
+export function isSkipStateMigrationWrite(): boolean {
+  return _skipStateMigrationWrite;
+}
+
+/**
+ * Backs up `filePath` as `state.json.bak-<timestamp>` next to it if no backup
+ * file (`state.json.bak-*`) exists in that directory yet.
+ */
+export async function backupStateFileOnce(filePath: string): Promise<string | undefined> {
+  if (!fs.existsSync(filePath)) {
+    return undefined;
+  }
+  const dir = path.dirname(filePath);
+  const base = path.basename(filePath);
+  const prefix = `${base}.bak-`;
+  try {
+    const entries = await fs.promises.readdir(dir);
+    const existing = entries.find((name) => name.startsWith(prefix));
+    if (existing) {
+      return undefined;
+    }
+  } catch {
+    return undefined;
+  }
+
+  const backupPath = path.join(dir, `${prefix}${Date.now()}`);
+  await fs.promises.copyFile(filePath, backupPath);
+  return backupPath;
+}
+
+export interface StateMigrationEntryReport {
+  name: string;
+  assistant: AssistantId;
+  scope: Scope;
+  kind: ItemKind;
+  sourceId?: string;
+  outcome:
+    | 'already-has-source'
+    | 'adopted'
+    | 'adopted-with-commit'
+    | 'adopted-source-only'
+    | 'provenance-unknown';
+  adoptionMode?: 'adopted-with-commit' | 'adopted-source-only';
+  rebaselined?: 'codec';
+  realLocalEdit?: boolean;
+  adoptedSource?: InstallationSourceIdentity;
+  commit?: string;
+  reason?: string;
+  hint?: string;
+}
+
+export interface StateMigrationReport {
+  filePath: string;
+  backupPath?: string;
+  totalInstallations: number;
+  alreadyHadSource: number;
+  adoptedCount: number;
+  adoptedWithCommitCount: number;
+  adoptedSourceOnlyCount: number;
+  rebaselinedCodecCount: number;
+  realLocalEditCount: number;
+  unknownCount: number;
+  reasons: Record<string, number>;
+  entries: StateMigrationEntryReport[];
+  state: StateFile;
+}
+
+async function gatherCandidateSourcesForMigration(
+  neededSourceIds: Set<string>,
+  projectRoot?: string,
+  homeRoot?: string,
+  installations?: ManagedInstallation[]
+): Promise<Source[]> {
+  if (neededSourceIds.size === 0) {
+    return [];
+  }
+  const sources: Source[] = [];
+  try {
+    const gManifest = await readManifest('global', undefined, homeRoot);
+    for (const ds of gManifest.sources) {
+      if (neededSourceIds.has(ds.id)) {
+        sources.push(fromDesiredSource(ds, undefined, homeRoot));
+      }
+    }
+  } catch {
+    // ignore unreadable global manifest during migration
+  }
+
+  const wsRoots = new Set<string>();
+  if (projectRoot) {
+    wsRoots.add(projectRoot);
+  }
+  if (installations) {
+    for (const inst of installations) {
+      if (inst.projectPath) {
+        wsRoots.add(inst.projectPath);
+      }
+    }
+  }
+
+  for (const wsRoot of wsRoots) {
+    try {
+      const pManifest = await readManifest('project', wsRoot, homeRoot);
+      for (const ds of pManifest.sources) {
+        if (neededSourceIds.has(ds.id)) {
+          sources.push(fromDesiredSource(ds, wsRoot, homeRoot));
+        }
+      }
+    } catch {
+      // ignore unreadable workspace manifest during migration
+    }
+  }
+
+  return sources;
+}
+
+/**
+ * Runs offline provenance migration on a state file (`global` or `project`),
+ * backing up the original `state.json` to `state.json.bak-<timestamp>` once before
+ * the first migrated write, and returning a structured report.
+ */
+export async function migrateStateFile(
+  scope: Scope,
+  projectRoot?: string,
+  homeRoot?: string,
+  options?: {
+    cacheDir?: string;
+    persist?: boolean;
+  }
+): Promise<StateMigrationReport> {
+  const filePath = statePath(scope, projectRoot, homeRoot);
+  let rawContent: string;
+  try {
+    rawContent = await fs.promises.readFile(filePath, 'utf-8');
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return {
+        filePath,
+        totalInstallations: 0,
+        alreadyHadSource: 0,
+        adoptedCount: 0,
+        adoptedWithCommitCount: 0,
+        adoptedSourceOnlyCount: 0,
+        rebaselinedCodecCount: 0,
+        realLocalEditCount: 0,
+        unknownCount: 0,
+        reasons: {},
+        entries: [],
+        state: emptyState(),
+      };
+    }
+    throw err;
+  }
+
+  const parsed: StateFile = JSON.parse(rawContent);
+  const installations = Array.isArray(parsed.installations) ? parsed.installations : [];
+
+  const neededSourceIds = new Set<string>();
+  for (const inst of installations) {
+    if (!inst.source && inst.sourceId) {
+      neededSourceIds.add(inst.sourceId);
+    }
+  }
+
+  const candidateSources = await gatherCandidateSourcesForMigration(
+    neededSourceIds,
+    projectRoot,
+    homeRoot,
+    installations
+  );
+
+  const preResolved = new Map<string, { resolution?: SourceResolution; error?: Error }>();
+  const historyCaches = createProvenanceHistoryCaches();
+
+  let alreadyHadSource = 0;
+  let adoptedCount = 0;
+  let adoptedWithCommitCount = 0;
+  let adoptedSourceOnlyCount = 0;
+  let rebaselinedCodecCount = 0;
+  let realLocalEditCount = 0;
+  let unknownCount = 0;
+  let anyChanged = false;
+  const reasons: Record<string, number> = {};
+  const entries: StateMigrationEntryReport[] = [];
+
+  for (const inst of installations) {
+    if (inst.source) {
+      alreadyHadSource++;
+      entries.push({
+        name: inst.name,
+        assistant: inst.assistant,
+        scope: inst.scope,
+        kind: inst.kind,
+        sourceId: inst.sourceId,
+        outcome: 'already-has-source',
+        adoptedSource: inst.source,
+      });
+      continue;
+    }
+
+    const evalResult = await evaluateProvenanceCandidates(inst, candidateSources, {
+      homeRoot,
+      cacheDir: options?.cacheDir,
+      offline: true,
+      preResolved,
+      historyCaches,
+    });
+    const changed = applyProvenanceEvaluation(inst, evalResult, homeRoot);
+    if (changed) {
+      anyChanged = true;
+    }
+    if (evalResult.rebaselined === 'codec') {
+      rebaselinedCodecCount++;
+    }
+    if (evalResult.realLocalEdit) {
+      realLocalEditCount++;
+    }
+
+    if (evalResult.outcome === 'adopted') {
+      adoptedCount++;
+      if (evalResult.adoptionMode === 'adopted-with-commit') {
+        adoptedWithCommitCount++;
+      } else {
+        adoptedSourceOnlyCount++;
+      }
+      entries.push({
+        name: inst.name,
+        assistant: inst.assistant,
+        scope: inst.scope,
+        kind: inst.kind,
+        sourceId: inst.sourceId,
+        outcome: evalResult.adoptionMode,
+        adoptionMode: evalResult.adoptionMode,
+        ...(evalResult.rebaselined ? { rebaselined: evalResult.rebaselined } : {}),
+        ...(evalResult.realLocalEdit ? { realLocalEdit: true } : {}),
+        adoptedSource: inst.source,
+        commit: evalResult.match.revision?.commit,
+      });
+    } else {
+      unknownCount++;
+      reasons[evalResult.reason] = (reasons[evalResult.reason] ?? 0) + 1;
+      entries.push({
+        name: inst.name,
+        assistant: inst.assistant,
+        scope: inst.scope,
+        kind: inst.kind,
+        sourceId: inst.sourceId,
+        outcome: 'provenance-unknown',
+        ...(evalResult.rebaselined ? { rebaselined: evalResult.rebaselined } : {}),
+        ...(evalResult.realLocalEdit ? { realLocalEdit: true } : {}),
+        reason: evalResult.reason,
+        hint: evalResult.hint,
+      });
+    }
+  }
+
+  const migratedState: StateFile = {
+    schemaVersion: parsed.schemaVersion ?? SCHEMA_VERSION,
+    installations,
+  };
+
+  let backupPath: string | undefined;
+  const shouldPersist = options?.persist ?? !_skipStateMigrationWrite;
+  if (anyChanged && shouldPersist) {
+    backupPath = await backupStateFileOnce(filePath);
+    await atomicWriteJson(filePath, migratedState);
+  }
+
+  return {
+    filePath,
+    ...(backupPath ? { backupPath } : {}),
+    totalInstallations: installations.length,
+    alreadyHadSource,
+    adoptedCount,
+    adoptedWithCommitCount,
+    adoptedSourceOnlyCount,
+    rebaselinedCodecCount,
+    realLocalEditCount,
+    unknownCount,
+    reasons,
+    entries,
+    state: migratedState,
+  };
+}
+
 export async function readState(
   scope: Scope,
   projectRoot?: string,
-  homeRoot?: string
+  homeRoot?: string,
+  options?: {
+    cacheDir?: string;
+    persistMigration?: boolean;
+  }
 ): Promise<StateFile> {
   const filePath = statePath(scope, projectRoot, homeRoot);
 
@@ -297,9 +610,70 @@ export async function readState(
     throw new Error(`Unsupported state schemaVersion: ${parsed?.schemaVersion} at ${filePath}`);
   }
 
+  const installations = Array.isArray(parsed.installations) ? parsed.installations : [];
+
+  const needsMigration = installations.some(
+    (inst) =>
+      !inst.source &&
+      (inst.provenance !== 'unknown' || inst.provenanceHint === 'check sources to resolve')
+  );
+
+  if (needsMigration) {
+    const neededSourceIds = new Set<string>();
+    for (const inst of installations) {
+      if (
+        !inst.source &&
+        inst.sourceId &&
+        (inst.provenance !== 'unknown' || inst.provenanceHint === 'check sources to resolve')
+      ) {
+        neededSourceIds.add(inst.sourceId);
+      }
+    }
+
+    const candidateSources = await gatherCandidateSourcesForMigration(
+      neededSourceIds,
+      projectRoot,
+      homeRoot,
+      installations
+    );
+
+    const preResolved = new Map<string, { resolution?: SourceResolution; error?: Error }>();
+    const historyCaches = createProvenanceHistoryCaches();
+    let anyChanged = false;
+
+    for (const inst of installations) {
+      if (inst.source) {
+        continue;
+      }
+      if (inst.provenance === 'unknown' && inst.provenanceHint !== 'check sources to resolve') {
+        continue;
+      }
+      const evalResult = await evaluateProvenanceCandidates(inst, candidateSources, {
+        homeRoot,
+        cacheDir: options?.cacheDir,
+        offline: true,
+        preResolved,
+        historyCaches,
+      });
+      const changed = applyProvenanceEvaluation(inst, evalResult, homeRoot);
+      if (changed) {
+        anyChanged = true;
+      }
+    }
+
+    const shouldPersist = options?.persistMigration ?? !_skipStateMigrationWrite;
+    if (anyChanged && shouldPersist) {
+      await backupStateFileOnce(filePath);
+      await atomicWriteJson(filePath, {
+        schemaVersion: parsed.schemaVersion,
+        installations,
+      });
+    }
+  }
+
   return {
     schemaVersion: parsed.schemaVersion,
-    installations: Array.isArray(parsed.installations) ? parsed.installations : [],
+    installations,
   };
 }
 
@@ -312,3 +686,48 @@ export async function writeState(
   const filePath = statePath(scope, projectRoot, homeRoot);
   await atomicWriteJson(filePath, data);
 }
+
+setProvenanceResolvedCallback(async (inst: ManagedInstallation, homeRoot?: string) => {
+  if (_skipStateMigrationWrite || !inst.source) {
+    return;
+  }
+  const projectRoot = inst.scope === 'project' ? inst.projectPath : undefined;
+  const filePath = statePath(inst.scope, projectRoot, homeRoot);
+  if (!fs.existsSync(filePath)) {
+    return;
+  }
+  try {
+    const raw = await fs.promises.readFile(filePath, 'utf-8');
+    const parsed: StateFile = JSON.parse(raw);
+    if (!Array.isArray(parsed.installations)) {
+      return;
+    }
+    const idx = parsed.installations.findIndex(
+      (i) =>
+        i.assistant === inst.assistant &&
+        i.scope === inst.scope &&
+        i.kind === inst.kind &&
+        i.name === inst.name &&
+        i.path === inst.path
+    );
+    if (idx === -1) {
+      return;
+    }
+    parsed.installations[idx] = {
+      ...parsed.installations[idx],
+      source: inst.source,
+      sourceId: inst.sourceId,
+      packageId: inst.packageId,
+      artifactId: inst.artifactId,
+      ...(inst.sourceRevision ? { sourceRevision: inst.sourceRevision } : {}),
+      ...(inst.sourceContentHash ? { sourceContentHash: inst.sourceContentHash } : {}),
+    };
+    delete parsed.installations[idx].provenance;
+    delete parsed.installations[idx].provenanceReason;
+    delete parsed.installations[idx].provenanceHint;
+    await backupStateFileOnce(filePath);
+    await atomicWriteJson(filePath, parsed);
+  } catch {
+    // ignore
+  }
+});

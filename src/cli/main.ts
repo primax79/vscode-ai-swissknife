@@ -1,6 +1,7 @@
 import { Command, CommanderError } from 'commander';
 import { emit, fail, CliError } from './output';
 import { COMMAND_DEFINITIONS, runDescribe } from './definitions';
+import { setSkipStateMigrationWrite } from '../domain/registry';
 
 const KNOWN_COMMANDS = new Set(
   COMMAND_DEFINITIONS.flatMap((d) => [d.name, d.name.split(' ')[0]])
@@ -120,11 +121,17 @@ export function createProgram(): Command {
         const effectiveGlobalOpts = typeof (cmd as any).optsWithGlobals === 'function'
           ? (cmd as any).optsWithGlobals()
           : globalOpts;
-        const result = await def.run(
-          { ...effectiveGlobalOpts, ...cmdOpts, ...cmdArgs },
-          effectiveGlobalOpts
-        );
-        emit(result);
+        const mergedArgs = { ...effectiveGlobalOpts, ...cmdOpts, ...cmdArgs };
+        setSkipStateMigrationWrite(!mergedArgs.write);
+        try {
+          const result = await def.run(
+            mergedArgs,
+            effectiveGlobalOpts
+          );
+          emit(result);
+        } finally {
+          setSkipStateMigrationWrite(false);
+        }
       } catch (err: unknown) {
         handleActionError(err);
       }

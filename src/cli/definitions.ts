@@ -14,6 +14,7 @@ import {
   runTrashList,
   runTrashRestore,
   runTrashEmpty,
+  runRelink,
 } from './commands';
 import type {
   CliCommandDefinition,
@@ -268,6 +269,8 @@ export const COMMAND_DEFINITIONS: CliCommandDefinition[] = [
               'modified-and-update-available',
               'unreachable',
               'missing-on-disk',
+              'source-unavailable',
+              'provenance-unknown',
             ],
           },
           sourceId: { type: 'string', optional: true },
@@ -964,6 +967,65 @@ export const COMMAND_DEFINITIONS: CliCommandDefinition[] = [
       },
     },
     run: async (opts, globalOpts) => runTrashEmpty({ ...globalOpts, ...opts }),
+  },
+  {
+    name: 'relink',
+    description:
+      'Re-link a managed installation to a specific registered source (<scope>:<id>). Plan-only unless --write is passed.',
+    arguments: [
+      {
+        name: 'item',
+        required: true,
+        description:
+          'Installed item key (<assistant>:<scope>:<kind>:<name>) or unambiguous item name',
+      },
+    ],
+    options: [
+      {
+        flags: '--source <scope:id>',
+        description:
+          'Target registered source in <scope>:<id> format (e.g. global:my-source or project:my-source)',
+        required: true,
+      },
+      {
+        flags: '--write',
+        description: 'Apply the relink to state.json (default is plan-only)',
+      },
+    ],
+    outputShape: {
+      type: 'object',
+      properties: {
+        mode: 'plan | applied',
+        key: 'string',
+        item: 'string',
+        assistant: 'string',
+        scope: 'global | project',
+        kind: 'string',
+        path: 'string',
+        oldSource: 'object | undefined',
+        oldSourceId: 'string | undefined',
+        newSource: {
+          id: 'string',
+          scope: 'global | workspace',
+          type: 'string',
+          location: 'string',
+        },
+        packageId: 'string | undefined',
+        artifactId: 'string | undefined',
+        sourceRevision: 'object | undefined',
+        sourceContentHash: 'string | undefined',
+      },
+    },
+    examples: [
+      'ai-swissknife relink claude-code:project:skill:legacy-skill --source project:legacy-source',
+      'ai-swissknife relink claude-code:project:skill:legacy-skill --source global:legacy-source --write',
+    ],
+    run: async (args, globalOpts) =>
+      runRelink(args.item, {
+        ...globalOpts,
+        source: args.source,
+        write: args.write,
+      }),
   },
   {
     name: 'describe',

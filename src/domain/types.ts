@@ -105,15 +105,22 @@ export interface InstallationSourceIdentity {
   location: string;
 }
 
-export function toInstallationSourceIdentity(source: Source): InstallationSourceIdentity {
+export function toInstallationSourceIdentity(
+  source: Source,
+  homeRoot?: string
+): InstallationSourceIdentity {
   const scope: 'global' | 'workspace' = source.scope === 'project' ? 'workspace' : 'global';
   const rawLocation =
     source.type === 'local-folder'
       ? (source.localPath ?? '')
       : (source.url ?? '');
+  const baseDir =
+    source.scope === 'project'
+      ? (source.projectPath ?? process.cwd())
+      : (homeRoot ?? process.env.HOME ?? process.cwd());
   const location =
     source.type === 'local-folder' && rawLocation
-      ? (path.isAbsolute(rawLocation) ? rawLocation : path.resolve(source.projectPath ?? process.cwd(), rawLocation))
+      ? (path.isAbsolute(rawLocation) ? rawLocation : path.resolve(baseDir, rawLocation))
       : rawLocation;
   return {
     id: source.id,
@@ -136,6 +143,9 @@ export interface ManagedInstallation {
   artifactId?: string;
   sourceRevision?: ResolvedRevision;
   sourceContentHash?: string;
+  provenance?: 'unknown';
+  provenanceReason?: string;
+  provenanceHint?: string;
   installedAt: string;
   contentHash?: string;
   disabled?: boolean;

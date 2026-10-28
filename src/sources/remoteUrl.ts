@@ -19,7 +19,7 @@ import { extractSkillFrontmatter } from './detect';
  */
 export async function resolveRemoteUrl(
   source: Source,
-  opts?: { cacheDir?: string; homeRoot?: string }
+  opts?: { cacheDir?: string; homeRoot?: string; offline?: boolean }
 ): Promise<SourceResolution> {
   if (!source.url || source.url.trim() === '') {
     throw new Error(`source.url is required for remote-url source "${source.id}"`);
@@ -28,31 +28,45 @@ export async function resolveRemoteUrl(
   const baseCacheDir = opts?.cacheDir ?? path.join(opts?.homeRoot ?? os.homedir(), '.ai-swissknife', 'cache', 'remote');
   const sanitizedId = source.id.replace(/[^a-zA-Z0-9._-]/g, '_');
   const targetDir = path.join(baseCacheDir, sanitizedId);
-  await fs.promises.mkdir(targetDir, { recursive: true });
-
   const fileName = path.basename(new URL(source.url).pathname) || 'artifact.md';
   const targetFilePath = path.join(targetDir, fileName);
 
-  let rawContent: string;
-  try {
-    if (source.url.startsWith('file://')) {
-      const localFilePath = new URL(source.url).pathname;
-      rawContent = await fs.promises.readFile(localFilePath, 'utf-8');
-      await fs.promises.writeFile(targetFilePath, rawContent, 'utf-8');
-    } else {
-      const res = await fetch(source.url);
-      if (!res.ok) {
-        throw new Error(`HTTP error ${res.status}: ${res.statusText}`);
-      }
-      rawContent = await res.text();
-      await fs.promises.writeFile(targetFilePath, rawContent, 'utf-8');
+  if (opts?.offline) {
+    if (!fs.existsSync(targetFilePath)) {
+      const err = new Error(
+        `Remote URL cache not found for offline resolution of source "${source.id}"`
+      ) as Error & { code?: string };
+      err.code = 'OFFLINE_CACHE_MISS';
+      throw err;
     }
-  } catch (err: unknown) {
-    if (fs.existsSync(targetFilePath)) {
-      rawContent = await fs.promises.readFile(targetFilePath, 'utf-8');
-    } else {
-      const msg = err instanceof Error ? err.message : String(err);
-      throw new Error(`Failed to fetch remote URL "${source.url}": ${msg}`);
+  } else {
+    await fs.promises.mkdir(targetDir, { recursive: true });
+  }
+
+  let rawContent: string;
+  if (opts?.offline) {
+    rawContent = await fs.promises.readFile(targetFilePath, 'utf-8');
+  } else {
+    try {
+      if (source.url.startsWith('file://')) {
+        const localFilePath = new URL(source.url).pathname;
+        rawContent = await fs.promises.readFile(localFilePath, 'utf-8');
+        await fs.promises.writeFile(targetFilePath, rawContent, 'utf-8');
+      } else {
+        const res = await fetch(source.url);
+        if (!res.ok) {
+          throw new Error(`HTTP error ${res.status}: ${res.statusText}`);
+        }
+        rawContent = await res.text();
+        await fs.promises.writeFile(targetFilePath, rawContent, 'utf-8');
+      }
+    } catch (err: unknown) {
+      if (fs.existsSync(targetFilePath)) {
+        rawContent = await fs.promises.readFile(targetFilePath, 'utf-8');
+      } else {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(`Failed to fetch remote URL "${source.url}": ${msg}`);
+      }
     }
   }
 

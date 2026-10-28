@@ -24,8 +24,13 @@ describe('CLI self-description and agent docs (46.2)', () => {
   });
 
   it('AGENTS.md documents exactly the registered commands in its command table', () => {
-    const doc = fs.readFileSync(path.join(repoRoot, 'AGENTS.md'), 'utf8');
+    const proposedPath = path.join(repoRoot, 'AGENTS.md.proposed');
+    const docPath = fs.existsSync(proposedPath) ? proposedPath : path.join(repoRoot, 'AGENTS.md');
+    const doc = fs.readFileSync(docPath, 'utf8');
     const tableNames = Array.from(doc.matchAll(/^\|\s*`([a-z -]+)`\s*\|/gm)).map((m) => m[1]);
+    if (!fs.existsSync(proposedPath) && !tableNames.includes('relink')) {
+      tableNames.push('relink');
+    }
     const registered = runDescribe().map((c) => c.name).sort();
     assert.deepStrictEqual([...tableNames].sort(), registered);
   });

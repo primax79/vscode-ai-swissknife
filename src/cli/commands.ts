@@ -17,6 +17,7 @@ import {
   fromDesiredSource,
   withStateLock,
   manifestPath,
+  setSkipStateMigrationWrite,
 } from '../domain/registry';
 import { ALL_ADAPTERS, getAdapterWithHomeRoot, getAdapter } from '../adapters/registry';
 import { getSourceResolver } from '../sources/registry';
@@ -28,7 +29,7 @@ import {
 import { planInstallMatrix } from '../engine/installMatrix';
 import { planInstall, resolveAndTranslate } from '../engine/plan';
 import { applyInstall } from '../engine/apply';
-import { planUpdateAll, backupItemToTrash } from '../engine/update';
+import { planUpdateAll, backupItemToTrash, relinkInstallation } from '../engine/update';
 import { uninstallInstallation } from '../engine/uninstall';
 import { addSourceToManifest, removeSourceFromManifest } from '../engine/sourceManifest';
 import {
@@ -75,6 +76,8 @@ import type {
   CliUpdateItem,
   CliItemDetail,
   CliPlanInstallSummary,
+  CliRelinkOutput,
+  ErrorCode,
 } from './types';
 
 const VALID_KINDS: readonly ItemKind[] = [
@@ -345,7 +348,11 @@ export async function runInstalled(
           scope: m.scope,
           membership: 'managed',
           path: m.path,
+          ...(m.source ? { source: m.source } : {}),
           ...(m.sourceId ? { sourceId: m.sourceId } : {}),
+          ...(m.provenance ? { provenance: m.provenance } : {}),
+          ...(m.provenanceReason ? { provenanceReason: m.provenanceReason } : {}),
+          ...(m.provenanceHint ? { provenanceHint: m.provenanceHint } : {}),
           workspace: sc === 'global' ? null : workspaceRoot,
         });
       }
@@ -2006,6 +2013,176 @@ export async function runTrashEmpty(
       kind: f.kind,
       error: f.error,
     })),
+  };
+}
+
+export async function runRelink(
+  itemKeyOrName: string,
+  opts: GlobalCliOptions & { source?: string; write?: boolean }
+): Promise<CliRelinkOutput> {
+  if (!itemKeyOrName || itemKeyOrName.trim() === '') {
+    throw new CliError('INVALID_ARGUMENT', 'Item key or name is required for relink.');
+  }
+  if (!opts.source || opts.source.trim() === '') {
+    throw new CliError(
+      'INVALID_ARGUMENT',
+      'Option --source <scope>:<id> is required for relink.'
+    );
+  }
+
+  const { homeRoot, workspaceRoot } = resolveRoots(opts);
+  const assistantFilter = parseAssistantFilter(opts.assistants);
+  const rawSourceSpec = opts.source.trim();
+
+  let targetSourceScope: Scope | undefined;
+  let targetSourceId: string = rawSourceSpec;
+
+  const firstColon = rawSourceSpec.indexOf(':');
+  if (firstColon !== -1) {
+    const scopePrefix = rawSourceSpec.slice(0, firstColon).toLowerCase();
+    const restId = rawSourceSpec.slice(firstColon + 1);
+    if (scopePrefix === 'global') {
+      targetSourceScope = 'global';
+      targetSourceId = restId;
+    } else if (scopePrefix === 'project' || scopePrefix === 'workspace') {
+      targetSourceScope = 'project';
+      targetSourceId = restId;
+    }
+  }
+
+  if (!targetSourceId) {
+    throw new CliError(
+      'INVALID_ARGUMENT',
+      `Invalid --source "${rawSourceSpec}". Expected <scope>:<id> (e.g. global:my-source or project:my-source).`
+    );
+  }
+
+  const globalSources: Source[] = [];
+  const workspaceSources: Source[] = [];
+  try {
+    const gManifest = await readManifest('global', undefined, homeRoot);
+    globalSources.push(...gManifest.sources.map((d) => fromDesiredSource(d, undefined, homeRoot)));
+  } catch {
+    // ignore
+  }
+  if (workspaceRoot) {
+    try {
+      const pManifest = await readManifest('project', workspaceRoot, homeRoot);
+      workspaceSources.push(
+        ...pManifest.sources.map((d) => fromDesiredSource(d, workspaceRoot, homeRoot))
+      );
+    } catch {
+      // ignore
+    }
+  }
+
+  let matchedSources: Source[];
+  if (targetSourceScope === 'global') {
+    matchedSources = globalSources.filter((s) => s.id === targetSourceId);
+  } else if (targetSourceScope === 'project') {
+    matchedSources = workspaceSources.filter((s) => s.id === targetSourceId);
+  } else {
+    matchedSources = [...globalSources, ...workspaceSources].filter(
+      (s) => s.id === targetSourceId
+    );
+    if (matchedSources.length > 1) {
+      throw new CliError(
+        'INVALID_ARGUMENT',
+        `Multiple sources match id "${targetSourceId}"; specify <scope>:<id> (global:${targetSourceId} or project:${targetSourceId}).`
+      );
+    }
+  }
+
+  if (matchedSources.length === 0) {
+    throw new CliError(
+      'NOT_FOUND',
+      targetSourceScope
+        ? `Source "${targetSourceId}" not found in ${targetSourceScope === 'project' ? 'workspace' : 'global'} manifest.`
+        : `Source "${targetSourceId}" not found in global or workspace manifest.`
+    );
+  }
+
+  const targetSource = matchedSources[0];
+
+  // Locate the managed installation by full key (<assistant>:<scope>:<kind>:<name>) or unambiguous name
+  const allManaged: ManagedInstallation[] = [];
+  const prevSkip = !opts.write;
+  if (prevSkip) {
+    setSkipStateMigrationWrite(true);
+  }
+  try {
+    const gState = await readState('global', undefined, homeRoot);
+    allManaged.push(...gState.installations);
+    if (workspaceRoot) {
+      const pState = await readState('project', workspaceRoot, homeRoot);
+      allManaged.push(
+        ...pState.installations.map((i) => ({
+          ...i,
+          projectPath: i.projectPath ?? workspaceRoot,
+        }))
+      );
+    }
+  } finally {
+    if (prevSkip) {
+      setSkipStateMigrationWrite(false);
+    }
+  }
+
+  const filteredManaged = assistantFilter
+    ? allManaged.filter((m) => assistantFilter.includes(m.assistant))
+    : allManaged;
+
+  const keyMatches = filteredManaged.filter(
+    (m) => `${m.assistant}:${m.scope}:${m.kind}:${m.name}` === itemKeyOrName
+  );
+  let targetInst: ManagedInstallation | undefined;
+  if (keyMatches.length === 1) {
+    targetInst = keyMatches[0];
+  } else if (keyMatches.length > 1) {
+    targetInst = keyMatches[0];
+  } else {
+    const nameMatches = filteredManaged.filter((m) => m.name === itemKeyOrName);
+    if (nameMatches.length === 1) {
+      targetInst = nameMatches[0];
+    } else if (nameMatches.length > 1) {
+      const keys = nameMatches
+        .map((m) => `${m.assistant}:${m.scope}:${m.kind}:${m.name}`)
+        .join(', ');
+      throw new CliError(
+        'INVALID_ARGUMENT',
+        `Multiple managed installations match "${itemKeyOrName}" (${keys}); pass the full item key.`
+      );
+    }
+  }
+
+  if (!targetInst) {
+    throw new CliError(
+      'NOT_FOUND',
+      `Managed installation "${itemKeyOrName}" not found.`
+    );
+  }
+
+  const result = await relinkInstallation(targetInst, targetSource, {
+    homeRoot,
+    projectRoot: targetInst.scope === 'project' ? (targetInst.projectPath ?? workspaceRoot) : undefined,
+    write: Boolean(opts.write),
+  });
+
+  return {
+    mode: result.mode,
+    key: result.key,
+    item: result.item,
+    assistant: result.assistant,
+    scope: result.scope,
+    kind: result.kind,
+    path: result.path,
+    oldSource: result.oldSource,
+    oldSourceId: result.oldSourceId,
+    newSource: result.newSource,
+    packageId: result.packageId,
+    artifactId: result.artifactId,
+    sourceRevision: result.sourceRevision,
+    sourceContentHash: result.sourceContentHash,
   };
 }
 

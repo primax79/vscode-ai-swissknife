@@ -32,6 +32,7 @@ export interface GitCustomResolveOptions {
   cacheDir?: string;
   /** Home root for the default cache dir (tests); ignored when cacheDir is set. */
   homeRoot?: string;
+  offline?: boolean;
 }
 
 export class KeyedMutex {
@@ -107,35 +108,56 @@ export async function resolveGitCustom(
 
     const isExistingRepo = fs.existsSync(path.join(targetDir, '.git'));
 
-    if (isExistingRepo) {
-      await runGit(['fetch', '--all', '--tags', '--prune'], targetDir);
-    } else {
-      await fs.promises.mkdir(path.dirname(targetDir), { recursive: true });
-      await runGit(['clone', '--', source.url!, targetDir]);
-    }
-
     let requestedRef: string | undefined;
-    if (source.commit) {
-      requestedRef = source.commit;
-      await runGit(['checkout', source.commit, '--'], targetDir);
-    } else if (source.tag) {
-      requestedRef = source.tag;
-      await runGit(['checkout', source.tag, '--'], targetDir);
-    } else if (source.branch) {
-      requestedRef = source.branch;
-      await runGit(['checkout', source.branch, '--'], targetDir);
-      try {
-        await runGit(['reset', '--hard', `origin/${source.branch}`], targetDir);
-      } catch {
-        // ignore
+    if (opts?.offline) {
+      if (!isExistingRepo) {
+        const err = new Error(
+          `Git cache clone not found for offline resolution of source "${source.id}"`
+        ) as Error & { code?: string };
+        err.code = 'OFFLINE_CACHE_MISS';
+        throw err;
+      }
+      if (source.commit) {
+        requestedRef = source.commit;
+        const { stdout: currentHead } = await runGit(['rev-parse', 'HEAD'], targetDir);
+        if (currentHead.trim() !== source.commit) {
+          await runGit(['checkout', source.commit, '--'], targetDir);
+        }
+      } else if (source.tag) {
+        requestedRef = source.tag;
+      } else if (source.branch) {
+        requestedRef = source.branch;
       }
     } else {
-      const defaultBranch = await getDefaultBranch(targetDir);
-      await runGit(['checkout', defaultBranch, '--'], targetDir);
-      try {
-        await runGit(['reset', '--hard', `origin/${defaultBranch}`], targetDir);
-      } catch {
-        // ignore
+      if (isExistingRepo) {
+        await runGit(['fetch', '--all', '--tags', '--prune'], targetDir);
+      } else {
+        await fs.promises.mkdir(path.dirname(targetDir), { recursive: true });
+        await runGit(['clone', '--', source.url!, targetDir]);
+      }
+
+      if (source.commit) {
+        requestedRef = source.commit;
+        await runGit(['checkout', source.commit, '--'], targetDir);
+      } else if (source.tag) {
+        requestedRef = source.tag;
+        await runGit(['checkout', source.tag, '--'], targetDir);
+      } else if (source.branch) {
+        requestedRef = source.branch;
+        await runGit(['checkout', source.branch, '--'], targetDir);
+        try {
+          await runGit(['reset', '--hard', `origin/${source.branch}`], targetDir);
+        } catch {
+          // ignore
+        }
+      } else {
+        const defaultBranch = await getDefaultBranch(targetDir);
+        await runGit(['checkout', defaultBranch, '--'], targetDir);
+        try {
+          await runGit(['reset', '--hard', `origin/${defaultBranch}`], targetDir);
+        } catch {
+          // ignore
+        }
       }
     }
 
@@ -378,7 +400,10 @@ export async function resolveArtifactContent(
       throw new Error(`Git cache directory not found or invalid: "${targetDir}"`);
     }
 
-    await runGit(['checkout', commit!, '--'], targetDir);
+    const { stdout: currentHead } = await runGit(['rev-parse', 'HEAD'], targetDir);
+    if (currentHead.trim() !== commit!) {
+      await runGit(['checkout', commit!, '--'], targetDir);
+    }
 
     const prefix = `${source.id}:`;
     const pathId = pkg.id.startsWith(prefix) ? pkg.id.slice(prefix.length) : '';
