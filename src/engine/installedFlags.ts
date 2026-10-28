@@ -10,8 +10,9 @@ import type {
   Scope,
   Source,
 } from '../domain/types';
-import { readManifest } from '../domain/registry';
-import { evaluateProvenanceCandidates } from './drift';
+import { readManifest, fromDesiredSource } from '../domain/registry';
+import { checkDriftForAll } from './drift';
+import type { DriftReport } from './types';
 
 export type { InstalledFlag };
 
@@ -52,6 +53,7 @@ export interface FlaggedItemLike {
   contentHash?: string;
   provenance?: string;
   provenanceReason?: string;
+  provenanceHint?: string;
   workspace?: string | null;
   match?:
     | 'identical'
@@ -71,6 +73,31 @@ export interface ComputeInstalledFlagsOptions {
   homeRoot?: string;
   workspaceRoot?: string;
   sources?: Source[];
+  reports?: DriftReport[];
+}
+
+function isOrphanReport(report: DriftReport): boolean {
+  if (report.status !== 'provenance-unknown') {
+    return false;
+  }
+  const provReason = report.installation?.provenanceReason;
+  if (provReason === 'artifact-not-in-source') {
+    return true;
+  }
+  if (
+    report.reason === 'artifact-not-in-source' ||
+    report.reason?.includes('artifact-not-in-source')
+  ) {
+    return true;
+  }
+  if (
+    report.details?.includes('artifact-not-in-source') ||
+    report.details?.includes('not found in source') ||
+    report.details?.includes('no longer in source')
+  ) {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -90,16 +117,30 @@ export async function computeInstalledFlags<T extends FlaggedItemLike>(
     return results;
   }
 
-  // 1. Gather all registered sources across scopes if not provided
-  let allSources = options?.sources;
-  if (!allSources) {
-    const gatheredSources: Source[] = [];
+  // 1. Gather registered sources across scopes if not provided
+  const globalSources: Source[] = [];
+  const workspaceSources: Source[] = [];
+
+  if (options?.sources) {
+    for (const s of options.sources) {
+      if (s.scope === 'global') {
+        globalSources.push(s);
+      } else {
+        workspaceSources.push(s);
+      }
+    }
+  } else {
     try {
       const gManifest = await readManifest('global', undefined, options?.homeRoot);
-      gatheredSources.push(...gManifest.sources);
+      globalSources.push(
+        ...gManifest.sources.map((d) =>
+          fromDesiredSource(d, undefined, options?.homeRoot)
+        )
+      );
     } catch {
       // ignore
     }
+
     const workspaces = new Set<string>();
     if (options?.workspaceRoot) {
       workspaces.add(options.workspaceRoot);
@@ -112,15 +153,74 @@ export async function computeInstalledFlags<T extends FlaggedItemLike>(
     for (const ws of workspaces) {
       try {
         const pManifest = await readManifest('project', ws, options?.homeRoot);
-        gatheredSources.push(...pManifest.sources);
+        workspaceSources.push(
+          ...pManifest.sources.map((d) =>
+            fromDesiredSource(d, ws, options?.homeRoot)
+          )
+        );
       } catch {
         // ignore
       }
     }
-    allSources = gatheredSources;
   }
 
-  const preResolved = new Map<string, any>();
+  const allSources = [...globalSources, ...workspaceSources];
+
+  // Build DriftReports for managed items using checkDriftForAll
+  const reportsByKey = new Map<string, DriftReport>();
+
+  if (options?.reports) {
+    for (const report of options.reports) {
+      const inst = report.installation;
+      const key = `${inst.assistant}:${inst.scope}:${inst.kind}:${inst.name}`;
+      reportsByKey.set(key, report);
+    }
+  } else {
+    const managedEntries: Array<{ item: T; inst: ManagedInstallation }> = [];
+    for (const item of items) {
+      if (item.membership === 'managed' || item.membership === undefined) {
+        managedEntries.push({
+          item,
+          inst: {
+            assistant: item.assistant,
+            scope: item.scope,
+            kind: item.kind,
+            name: item.name,
+            path: item.path,
+            sourceId: item.sourceId ?? '',
+            packageId: item.packageId ?? '',
+            artifactId: item.artifactId ?? item.name,
+            installedAt: '',
+            contentHash: item.contentHash,
+            source: item.source,
+            provenance: item.provenance as any,
+            provenanceReason: item.provenanceReason as any,
+            provenanceHint: item.provenanceHint,
+            projectPath: item.workspace ?? options?.workspaceRoot,
+          },
+        });
+      }
+    }
+
+    if (managedEntries.length > 0) {
+      try {
+        const driftReports = await checkDriftForAll(
+          managedEntries.map((e) => e.inst),
+          { globalSources, workspaceSources },
+          options?.homeRoot
+        );
+        for (let i = 0; i < managedEntries.length; i++) {
+          const entry = managedEntries[i];
+          const report = driftReports[i];
+          reportsByKey.set(entry.item.key, report);
+          const baseKey = `${entry.inst.assistant}:${entry.inst.scope}:${entry.inst.kind}:${entry.inst.name}`;
+          reportsByKey.set(baseKey, report);
+        }
+      } catch {
+        // ignore drift check errors
+      }
+    }
+  }
 
   // 2. Compute link, copy, broken-link, and orphan per item
   for (const item of items) {
@@ -175,39 +275,13 @@ export async function computeInstalledFlags<T extends FlaggedItemLike>(
     // Check orphan: managed item whose artifact no longer exists in its registered source
     const isManaged = item.membership === 'managed' || item.membership === undefined;
     if (isManaged) {
-      if (item.provenanceReason === 'artifact-not-in-source') {
+      const report =
+        reportsByKey.get(item.key) ??
+        reportsByKey.get(
+          `${item.assistant}:${item.scope}:${item.kind}:${item.name}`
+        );
+      if (report && isOrphanReport(report)) {
         flags.push('orphan');
-      } else if (item.sourceId && allSources) {
-        const hasSource = allSources.some((s) => s.id === item.sourceId);
-        if (hasSource) {
-          const inst: ManagedInstallation = {
-            assistant: item.assistant,
-            scope: item.scope,
-            kind: item.kind,
-            name: item.name,
-            path: item.path,
-            sourceId: item.sourceId,
-            artifactId: item.artifactId ?? item.name,
-            packageId: item.packageId ?? '',
-            installedAt: '',
-            contentHash: item.contentHash,
-            source: item.source,
-            provenance: item.provenance as any,
-            provenanceReason: item.provenanceReason,
-          };
-          try {
-            const evalResult = await evaluateProvenanceCandidates(inst, allSources, {
-              homeRoot: options?.homeRoot,
-              offline: true,
-              preResolved,
-            });
-            if (evalResult.outcome === 'unknown' && evalResult.reason === 'artifact-not-in-source') {
-              flags.push('orphan');
-            }
-          } catch {
-            // ignore resolution errors
-          }
-        }
       }
     }
 

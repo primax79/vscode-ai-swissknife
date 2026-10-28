@@ -6,7 +6,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { runInstalled } from './commands';
+import { runInstalled, runUpdates } from './commands';
 import { writeManifest, writeState, SCHEMA_VERSION } from '../domain/registry';
 import type { ManagedInstallation, Source } from '../domain/types';
 import { buildInstalledTree } from '../engine/installedTree';
@@ -130,8 +130,16 @@ describe('Installed Flags — link, copy, broken-link, orphan, duplicate (Task 4
     assert.strictEqual(brokenItem.linkTarget, brokenTargetDir);
   });
 
-  it('2. detects orphan: managed item whose artifact no longer exists in registered source', async () => {
-    // Register a source in manifest that does NOT contain the artifact
+  it('2. detects orphan: on a fixture with one artifact present in its source and one removed, orphan is set only on the removed one and equals updates provenance-unknown/artifact-not-in-source keys', async () => {
+    // Put "present-skill" in sourceDir, but NOT "removed-skill"
+    const srcPresentSkill = path.join(sourceDir, 'present-skill');
+    fs.mkdirSync(srcPresentSkill, { recursive: true });
+    fs.writeFileSync(
+      path.join(srcPresentSkill, 'SKILL.md'),
+      '---\nname: present-skill\ndescription: Present skill\n---\n# Present\n'
+    );
+
+    // Register source in project manifest
     const manifestSources: Source[] = [
       {
         id: 'team-source',
@@ -148,42 +156,107 @@ describe('Installed Flags — link, copy, broken-link, orphan, duplicate (Task 4
       tempHome
     );
 
-    // Source dir is empty (no artifact "orphan-skill" in sourceDir)
-    const skillPath = path.join(tempWorkspace, '.claude', 'skills', 'orphan-skill');
-    fs.mkdirSync(skillPath, { recursive: true });
+    // Install present-skill on disk and in state
+    const presentPath = path.join(tempWorkspace, '.claude', 'skills', 'present-skill');
+    fs.mkdirSync(presentPath, { recursive: true });
     fs.writeFileSync(
-      path.join(skillPath, 'SKILL.md'),
-      '---\nname: orphan-skill\ndescription: Orphan skill\n---\n# Orphan\n'
+      path.join(presentPath, 'SKILL.md'),
+      '---\nname: present-skill\ndescription: Present skill\n---\n# Present\n'
     );
-
-    const managed: ManagedInstallation = {
+    const presentManaged: ManagedInstallation = {
       assistant: 'claude-code',
       scope: 'project',
       projectPath: tempWorkspace,
       kind: 'skill',
-      name: 'orphan-skill',
-      path: skillPath,
+      name: 'present-skill',
+      path: presentPath,
       sourceId: 'team-source',
-      artifactId: 'orphan-skill',
-      packageId: 'team-source:pkg',
+      packageId: 'team-source:present-skill',
+      artifactId: 'team-source:present-skill:present-skill',
       installedAt: new Date().toISOString(),
     };
+
+    // Install removed-skill on disk and in state (source no longer has it)
+    const removedPath = path.join(tempWorkspace, '.claude', 'skills', 'removed-skill');
+    fs.mkdirSync(removedPath, { recursive: true });
+    fs.writeFileSync(
+      path.join(removedPath, 'SKILL.md'),
+      '---\nname: removed-skill\ndescription: Removed skill\n---\n# Removed\n'
+    );
+    const removedManaged: ManagedInstallation = {
+      assistant: 'claude-code',
+      scope: 'project',
+      projectPath: tempWorkspace,
+      kind: 'skill',
+      name: 'removed-skill',
+      path: removedPath,
+      sourceId: 'team-source',
+      packageId: 'team-source:removed-skill',
+      artifactId: 'team-source:removed-skill:removed-skill',
+      installedAt: new Date().toISOString(),
+    };
+
     await writeState(
       'project',
-      { schemaVersion: SCHEMA_VERSION, installations: [managed] },
+      { schemaVersion: SCHEMA_VERSION, installations: [presentManaged, removedManaged] },
       tempWorkspace,
       tempHome
     );
 
+    // 1. Run updates code path (with explain: true, json: true)
+    const updatesList = await runUpdates({
+      home: tempHome,
+      workspace: tempWorkspace,
+      explain: true,
+      json: true,
+    });
+    const updatesOrphanKeys = updatesList
+      .filter(
+        (u) =>
+          u.status === 'provenance-unknown' &&
+          u.reason.includes('artifact-not-in-source')
+      )
+      .map((u) => u.key)
+      .sort();
+
+    // 2. Run installed code path
     const installed = await runInstalled({
       home: tempHome,
       workspace: tempWorkspace,
     });
 
-    const item = installed.find((i) => i.name === 'orphan-skill');
-    assert.ok(item, 'orphan-skill must be found');
-    assert.ok(item.flags.includes('orphan'), `Expected "orphan" in flags, got: ${JSON.stringify(item.flags)}`);
-    assert.ok(item.flags.includes('copy'), 'Should also be a copy');
+    const presentItem = installed.find((i) => i.name === 'present-skill');
+    const removedItem = installed.find((i) => i.name === 'removed-skill');
+
+    assert.ok(presentItem, 'present-skill must be found');
+    assert.ok(removedItem, 'removed-skill must be found');
+
+    // orphan is set ONLY on the removed one
+    assert.strictEqual(
+      presentItem.flags.includes('orphan'),
+      false,
+      'present-skill must NOT be flagged as orphan'
+    );
+    assert.strictEqual(
+      removedItem.flags.includes('orphan'),
+      true,
+      'removed-skill must be flagged as orphan'
+    );
+
+    // the set of orphan keys equals the set of provenance-unknown/artifact-not-in-source keys from updates
+    const installedOrphanKeys = installed
+      .filter((i) => i.flags.includes('orphan'))
+      .map((i) => i.key)
+      .sort();
+
+    assert.deepStrictEqual(
+      installedOrphanKeys,
+      updatesOrphanKeys,
+      'Set of orphan keys must equal provenance-unknown/artifact-not-in-source keys from updates'
+    );
+    assert.deepStrictEqual(installedOrphanKeys, [
+      'claude-code:project:skill:removed-skill',
+    ]);
   });
 
   it('3. detects duplicate across global and project for same assistant', async () => {
