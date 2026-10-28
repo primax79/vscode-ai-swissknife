@@ -1,7 +1,14 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import type { AssistantId, ItemKind, Scope } from '../domain/types';
+import type {
+  AssistantId,
+  InstallationSourceIdentity,
+  InstalledFlag,
+  ItemKind,
+  Scope,
+} from '../domain/types';
 import { scanInstalledInventory } from './discovery';
+import { attachFlagsToItems } from './installedFlags';
 
 export const DEFAULT_IGNORE: readonly string[] = [
   'node_modules',
@@ -55,9 +62,19 @@ export interface ScannedInstalledItem {
   scope: Scope;
   membership: 'managed' | 'observed';
   path: string;
+  source?: InstallationSourceIdentity;
   sourceId?: string;
+  packageId?: string;
+  artifactId?: string;
+  contentHash?: string;
+  provenance?: 'unknown';
+  provenanceReason?: string;
+  provenanceHint?: string;
   match?: 'identical' | 'different';
   workspace: string | null;
+  flags: InstalledFlag[];
+  linkTarget?: string;
+  duplicateOf?: string[];
 }
 
 export interface ScanInventoryAcrossRootsResult {
@@ -297,8 +314,16 @@ export async function scanInventoryAcrossRoots(
           scope: m.scope,
           membership: 'managed',
           path: m.path,
+          ...(m.source ? { source: m.source } : {}),
           ...(m.sourceId ? { sourceId: m.sourceId } : {}),
+          ...(m.packageId ? { packageId: m.packageId } : {}),
+          ...(m.artifactId ? { artifactId: m.artifactId } : {}),
+          ...(m.contentHash ? { contentHash: m.contentHash } : {}),
+          ...(m.provenance ? { provenance: m.provenance } : {}),
+          ...(m.provenanceReason ? { provenanceReason: m.provenanceReason } : {}),
+          ...(m.provenanceHint ? { provenanceHint: m.provenanceHint } : {}),
           workspace: null,
+          flags: [],
         });
       }
 
@@ -320,8 +345,11 @@ export async function scanInventoryAcrossRoots(
           membership: 'observed',
           path: o.path,
           ...(o.match?.sourceId ? { sourceId: o.match.sourceId } : {}),
+          ...(o.match?.artifactId ? { artifactId: o.match.artifactId } : {}),
+          ...(o.contentHash ? { contentHash: o.contentHash } : {}),
           ...(matchedStatus ? { match: matchedStatus } : {}),
           workspace: null,
+          flags: [],
         });
       }
     } catch {
@@ -347,8 +375,16 @@ export async function scanInventoryAcrossRoots(
             scope: m.scope,
             membership: 'managed',
             path: m.path,
+            ...(m.source ? { source: m.source } : {}),
             ...(m.sourceId ? { sourceId: m.sourceId } : {}),
+            ...(m.packageId ? { packageId: m.packageId } : {}),
+            ...(m.artifactId ? { artifactId: m.artifactId } : {}),
+            ...(m.contentHash ? { contentHash: m.contentHash } : {}),
+            ...(m.provenance ? { provenance: m.provenance } : {}),
+            ...(m.provenanceReason ? { provenanceReason: m.provenanceReason } : {}),
+            ...(m.provenanceHint ? { provenanceHint: m.provenanceHint } : {}),
             workspace: ws,
+            flags: [],
           });
         }
 
@@ -370,8 +406,11 @@ export async function scanInventoryAcrossRoots(
             membership: 'observed',
             path: o.path,
             ...(o.match?.sourceId ? { sourceId: o.match.sourceId } : {}),
+            ...(o.match?.artifactId ? { artifactId: o.match.artifactId } : {}),
+            ...(o.contentHash ? { contentHash: o.contentHash } : {}),
             ...(matchedStatus ? { match: matchedStatus } : {}),
             workspace: ws,
+            flags: [],
           });
         }
       } catch {
@@ -379,6 +418,8 @@ export async function scanInventoryAcrossRoots(
       }
     }
   }
+
+  await attachFlagsToItems(items, { homeRoot });
 
   return { items, workspaces, skipped };
 }

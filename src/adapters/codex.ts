@@ -82,9 +82,9 @@ export class CodexAdapter implements Adapter {
       const entries = await fs.promises.readdir(skillsDir, { withFileTypes: true });
       const names: string[] = [];
       for (const entry of entries) {
-        if (entry.isDirectory()) {
+        if (entry.isDirectory() || entry.isSymbolicLink()) {
           const skillFile = path.join(skillsDir, entry.name, 'SKILL.md');
-          if (fs.existsSync(skillFile)) {
+          if (fs.existsSync(skillFile) || entry.isSymbolicLink()) {
             names.push(entry.name);
           }
         }
@@ -177,7 +177,7 @@ export class CodexAdapter implements Adapter {
     try {
       const entries = await fs.promises.readdir(dir, { withFileTypes: true });
       return entries
-        .filter((e) => e.isFile() && e.name.endsWith('.toml'))
+        .filter((e) => (e.isFile() || e.isSymbolicLink()) && e.name.endsWith('.toml'))
         .map((e) => e.name.replace(/\.toml$/, ''));
     } catch {
       return [];
@@ -231,7 +231,7 @@ export class CodexAdapter implements Adapter {
     try {
       const entries = await fs.promises.readdir(dir, { withFileTypes: true });
       return entries
-        .filter((e) => e.isFile() && e.name.endsWith('.md'))
+        .filter((e) => (e.isFile() || e.isSymbolicLink()) && e.name.endsWith('.md'))
         .map((e) => e.name.replace(/\.md$/, ''));
     } catch {
       return [];

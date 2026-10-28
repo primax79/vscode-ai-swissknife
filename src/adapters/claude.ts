@@ -502,7 +502,7 @@ export class ClaudeAdapter implements Adapter {
 
     const skillNames: string[] = [];
     for (const entry of entries) {
-      if (entry.isDirectory()) {
+      if (entry.isDirectory() || entry.isSymbolicLink()) {
         const skillFile = path.join(skillsDir, entry.name, 'SKILL.md');
         try {
           const stat = await fs.promises.stat(skillFile);
@@ -510,7 +510,9 @@ export class ClaudeAdapter implements Adapter {
             skillNames.push(entry.name);
           }
         } catch {
-          // ignore
+          if (entry.isSymbolicLink()) {
+            skillNames.push(entry.name);
+          }
         }
       }
     }
@@ -567,7 +569,7 @@ export class ClaudeAdapter implements Adapter {
     try {
       const entries = await fs.promises.readdir(agentsDir, { withFileTypes: true });
       return entries
-        .filter((e) => e.isFile() && e.name.endsWith('.md'))
+        .filter((e) => (e.isFile() || e.isSymbolicLink()) && e.name.endsWith('.md'))
         .map((e) => e.name.replace(/\.md$/, ''));
     } catch (err: unknown) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -627,7 +629,7 @@ export class ClaudeAdapter implements Adapter {
     try {
       const entries = await fs.promises.readdir(commandsDir, { withFileTypes: true });
       return entries
-        .filter((e) => e.isFile() && e.name.endsWith('.md'))
+        .filter((e) => (e.isFile() || e.isSymbolicLink()) && e.name.endsWith('.md'))
         .map((e) => e.name.replace(/\.md$/, ''));
     } catch (err: unknown) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -811,7 +813,7 @@ export class ClaudeAdapter implements Adapter {
     try {
       const entries = await fs.promises.readdir(hooksDir, { withFileTypes: true });
       return entries
-        .filter((e) => e.isFile() && e.name.endsWith('.json'))
+        .filter((e) => (e.isFile() || e.isSymbolicLink()) && e.name.endsWith('.json'))
         .map((e) => e.name.replace(/\.json$/, ''));
     } catch {
       return [];

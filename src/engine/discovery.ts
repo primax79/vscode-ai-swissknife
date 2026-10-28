@@ -194,7 +194,7 @@ export async function scanInstalledInventory(
 
           if (kind === 'skill') {
             for (const entry of entries) {
-              if (entry.isDirectory()) {
+              if (entry.isDirectory() || entry.isSymbolicLink()) {
                 const name = entry.name;
                 if (!managedSet.has(`${assistant}:${scope}:skill:${name}`)) {
                   const itemPath = path.join(disabledRoot, name);
@@ -203,7 +203,7 @@ export async function scanInstalledInventory(
                     const stat = await fs.promises.stat(skillFile);
                     if (!stat.isFile()) continue;
                   } catch {
-                    continue;
+                    if (!entry.isSymbolicLink()) continue;
                   }
                   let contentHash: string | undefined;
                   try {
@@ -228,7 +228,7 @@ export async function scanInstalledInventory(
             }
           } else if (kind === 'agent') {
             for (const entry of entries) {
-              if (entry.isFile() && entry.name.endsWith('.md')) {
+              if ((entry.isFile() || entry.isSymbolicLink()) && entry.name.endsWith('.md')) {
                 const name = entry.name.replace(/\.md$/, '');
                 if (!managedSet.has(`${assistant}:${scope}:agent:${name}`)) {
                   const itemPath = path.join(disabledRoot, entry.name);
@@ -259,7 +259,7 @@ export async function scanInstalledInventory(
             }
           } else if (kind === 'command') {
             for (const entry of entries) {
-              if (entry.isFile() && entry.name.endsWith('.md')) {
+              if ((entry.isFile() || entry.isSymbolicLink()) && entry.name.endsWith('.md')) {
                 const name = entry.name.replace(/\.md$/, '');
                 if (!managedSet.has(`${assistant}:${scope}:command:${name}`)) {
                   const itemPath = path.join(disabledRoot, entry.name);

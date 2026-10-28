@@ -758,7 +758,7 @@ export class KiloAdapter implements Adapter {
 
     const skillNames: string[] = [];
     for (const entry of entries) {
-      if (entry.isDirectory()) {
+      if (entry.isDirectory() || entry.isSymbolicLink()) {
         const skillFile = path.join(skillsDir, entry.name, 'SKILL.md');
         try {
           const stat = await fs.promises.stat(skillFile);
@@ -766,7 +766,9 @@ export class KiloAdapter implements Adapter {
             skillNames.push(entry.name);
           }
         } catch {
-          // ignore
+          if (entry.isSymbolicLink()) {
+            skillNames.push(entry.name);
+          }
         }
       }
     }
@@ -840,7 +842,7 @@ export class KiloAdapter implements Adapter {
       try {
         const entries = await fs.promises.readdir(dir, { withFileTypes: true });
         for (const e of entries) {
-          if (e.isFile() && e.name.endsWith('.md')) {
+          if ((e.isFile() || e.isSymbolicLink()) && e.name.endsWith('.md')) {
             agentNames.add(e.name.replace(/\.md$/, ''));
           }
         }
@@ -918,7 +920,7 @@ export class KiloAdapter implements Adapter {
       try {
         const entries = await fs.promises.readdir(dir, { withFileTypes: true });
         for (const e of entries) {
-          if (e.isFile() && e.name.endsWith('.md')) {
+          if ((e.isFile() || e.isSymbolicLink()) && e.name.endsWith('.md')) {
             commandNames.add(e.name.replace(/\.md$/, ''));
           }
         }
@@ -1164,7 +1166,7 @@ export class KiloAdapter implements Adapter {
     try {
       const entries = await fs.promises.readdir(hooksDir, { withFileTypes: true });
       return entries
-        .filter((e) => e.isFile() && e.name.endsWith('.json'))
+        .filter((e) => (e.isFile() || e.isSymbolicLink()) && e.name.endsWith('.json'))
         .map((e) => e.name.replace(/\.json$/, ''));
     } catch {
       return [];

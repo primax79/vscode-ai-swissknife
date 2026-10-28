@@ -160,4 +160,83 @@ describe('InstalledTreeDataProvider - moveItem', () => {
     assert.ok(tooltip.includes('Status: update-available'));
     assert.ok(tooltip.includes('Reason: source moved from 1234567 to 9876543 and the content changed'));
   });
+
+  it('getTreeItem renders flags as description badges and link target in tooltip (Task 48.2)', async () => {
+    // 1. Link item
+    const linkInst = {
+      assistant: 'claude-code' as const,
+      scope: 'project' as const,
+      kind: 'skill' as const,
+      name: 'link-badge-skill',
+      path: path.join(testTempDir, 'link-badge-skill'),
+      projectPath: testTempDir,
+      installedAt: new Date().toISOString(),
+      flags: ['link'] as any,
+      linkTarget: '/resolved/target/path',
+    };
+    const linkItem = new InstalledInstallationItem(linkInst);
+    const linkTreeItem = await provider.getTreeItem(linkItem);
+    assert.ok(
+      String(linkTreeItem.description).includes('[link]'),
+      `Expected [link] in description: "${linkTreeItem.description}"`
+    );
+    assert.ok(
+      String(linkTreeItem.tooltip).includes('Link target: /resolved/target/path'),
+      `Expected link target in tooltip: "${linkTreeItem.tooltip}"`
+    );
+
+    // 2. Broken link item
+    const brokenInst = {
+      assistant: 'claude-code' as const,
+      scope: 'project' as const,
+      kind: 'skill' as const,
+      name: 'broken-badge-skill',
+      path: path.join(testTempDir, 'broken-badge-skill'),
+      projectPath: testTempDir,
+      installedAt: new Date().toISOString(),
+      flags: ['link', 'broken-link'] as any,
+      linkTarget: '/nonexistent/target/path',
+    };
+    const brokenItem = new InstalledInstallationItem(brokenInst);
+    const brokenTreeItem = await provider.getTreeItem(brokenItem);
+    assert.ok(
+      String(brokenTreeItem.description).includes('[broken link]'),
+      `Expected [broken link] in description: "${brokenTreeItem.description}"`
+    );
+    assert.ok(
+      String(brokenTreeItem.tooltip).includes('Broken link: target does not exist'),
+      `Expected broken link in tooltip: "${brokenTreeItem.tooltip}"`
+    );
+
+    // 3. Orphan & duplicate item
+    const orphanDupInst = {
+      assistant: 'claude-code' as const,
+      scope: 'project' as const,
+      kind: 'skill' as const,
+      name: 'orphan-dup-skill',
+      path: path.join(testTempDir, 'orphan-dup-skill'),
+      projectPath: testTempDir,
+      installedAt: new Date().toISOString(),
+      flags: ['copy', 'orphan', 'duplicate'] as any,
+      duplicateOf: ['claude-code:global:skill:orphan-dup-skill'],
+    };
+    const orphanDupItem = new InstalledInstallationItem(orphanDupInst);
+    const orphanDupTreeItem = await provider.getTreeItem(orphanDupItem);
+    assert.ok(
+      String(orphanDupTreeItem.description).includes('[orphan]'),
+      `Expected [orphan] in description: "${orphanDupTreeItem.description}"`
+    );
+    assert.ok(
+      String(orphanDupTreeItem.description).includes('[duplicate]'),
+      `Expected [duplicate] in description: "${orphanDupTreeItem.description}"`
+    );
+    assert.ok(
+      String(orphanDupTreeItem.tooltip).includes('Orphan: artifact no longer exists in source'),
+      `Expected orphan in tooltip: "${orphanDupTreeItem.tooltip}"`
+    );
+    assert.ok(
+      String(orphanDupTreeItem.tooltip).includes('Duplicate of: claude-code:global:skill:orphan-dup-skill'),
+      `Expected duplicate in tooltip: "${orphanDupTreeItem.tooltip}"`
+    );
+  });
 });
