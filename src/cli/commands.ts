@@ -65,6 +65,12 @@ import {
   type RedistributePlan,
   type RedistributeResult,
 } from '../engine/redistribute';
+import {
+  explainInstallation,
+  formatExplainCliLine,
+  formatExplainCliJson,
+} from '../engine/explain';
+import type { DriftReport } from '../engine/types';
 import type {
   GlobalCliOptions,
   CliSource,
@@ -74,6 +80,7 @@ import type {
   CliInstalledItem,
   CliInstalledRootsResult,
   CliUpdateItem,
+  CliExplainedUpdateItem,
   CliItemDetail,
   CliPlanInstallSummary,
   CliRelinkOutput,
@@ -388,12 +395,67 @@ export async function runInstalled(
   return results;
 }
 
+interface ProcessedUpdateEntry {
+  inst: ManagedInstallation;
+  report: DriftReport;
+  key: string;
+  workspace: string | null;
+}
+
 export async function runUpdates(
-  opts: GlobalCliOptions & { scope?: string; assistant?: string; kind?: string }
-): Promise<CliUpdateItem[]> {
+  opts: GlobalCliOptions & {
+    scope?: string;
+    assistant?: string;
+    kind?: string;
+    explain: true;
+    json: true;
+    item?: string;
+  }
+): Promise<CliExplainedUpdateItem[]>;
+export async function runUpdates(
+  opts: GlobalCliOptions & {
+    scope?: string;
+    assistant?: string;
+    kind?: string;
+    explain: true;
+    json?: false;
+    item?: string;
+  }
+): Promise<string>;
+export async function runUpdates(
+  opts?: GlobalCliOptions & {
+    scope?: string;
+    assistant?: string;
+    kind?: string;
+    explain?: false;
+    json?: boolean;
+    item?: string;
+  }
+): Promise<CliUpdateItem[]>;
+export async function runUpdates(
+  opts: GlobalCliOptions & {
+    scope?: string;
+    assistant?: string;
+    kind?: string;
+    explain?: boolean;
+    json?: boolean;
+    item?: string;
+  }
+): Promise<CliUpdateItem[] | CliExplainedUpdateItem[] | string>;
+export async function runUpdates(
+  opts: GlobalCliOptions & {
+    scope?: string;
+    assistant?: string;
+    kind?: string;
+    explain?: boolean;
+    json?: boolean;
+    item?: string;
+  } = {}
+): Promise<CliUpdateItem[] | CliExplainedUpdateItem[] | string> {
   const filterScope = validateScope(opts.scope);
   const filterKind = validateKind(opts.kind);
   const filterAssistant = opts.assistant ? parseAssistantFilter(opts.assistant)?.[0] : undefined;
+  const entries: ProcessedUpdateEntry[] = [];
 
   // When --roots is specified: multi-root drift check
   if (opts.roots && opts.roots.length > 0) {
@@ -402,7 +464,6 @@ export async function runUpdates(
     const roots = Array.isArray(opts.roots) ? opts.roots : [opts.roots];
     const { workspaces } = await findWorkspaces(roots, scanOpts);
 
-    const updates: CliUpdateItem[] = [];
     let gSources: Source[] = [];
     try {
       const gManifest = await readManifest('global', undefined, homeRoot);
@@ -429,18 +490,10 @@ export async function runUpdates(
 
         for (const report of gReports) {
           const inst = report.installation;
-          updates.push({
+          entries.push({
+            inst,
+            report,
             key: `${inst.assistant}:${inst.scope}:${inst.kind}:${inst.name}`,
-            kind: inst.kind,
-            name: inst.name,
-            assistant: inst.assistant,
-            scope: inst.scope,
-            status: report.status,
-            ...(inst.sourceId ? { sourceId: inst.sourceId } : {}),
-            ...(report.installedCommit ? { installedCommit: report.installedCommit } : {}),
-            ...(report.currentCommit ? { currentCommit: report.currentCommit } : {}),
-            ...(report.commitsBehind !== undefined ? { commitsBehind: report.commitsBehind } : {}),
-            ...(report.details ? { details: report.details } : {}),
             workspace: null,
           });
         }
@@ -474,18 +527,10 @@ export async function runUpdates(
 
           for (const report of pReports) {
             const inst = report.installation;
-            updates.push({
+            entries.push({
+              inst,
+              report,
               key: `${inst.assistant}:${inst.scope}:${inst.kind}:${inst.name}${suffix}`,
-              kind: inst.kind,
-              name: inst.name,
-              assistant: inst.assistant,
-              scope: inst.scope,
-              status: report.status,
-              ...(inst.sourceId ? { sourceId: inst.sourceId } : {}),
-              ...(report.installedCommit ? { installedCommit: report.installedCommit } : {}),
-              ...(report.currentCommit ? { currentCommit: report.currentCommit } : {}),
-              ...(report.commitsBehind !== undefined ? { commitsBehind: report.commitsBehind } : {}),
-              ...(report.details ? { details: report.details } : {}),
               workspace: ws,
             });
           }
@@ -494,76 +539,100 @@ export async function runUpdates(
         }
       }
     }
+  } else {
+    const { homeRoot, workspaceRoot } = resolveRoots(opts);
 
-    return updates;
-  }
+    const allInstallations: Array<{ inst: ManagedInstallation; wsRoot?: string }> = [];
+    const globalSources: Source[] = [];
+    const workspaceSources: Source[] = [];
 
-  const { homeRoot, workspaceRoot } = resolveRoots(opts);
-
-  const allInstallations: Array<{ inst: ManagedInstallation; wsRoot?: string }> = [];
-  const globalSources: Source[] = [];
-  const workspaceSources: Source[] = [];
-
-  // Global state & manifest
-  try {
-    const gState = await readState('global', undefined, homeRoot);
-    for (const inst of gState.installations) {
-      allInstallations.push({ inst });
-    }
-    const gManifest = await readManifest('global', undefined, homeRoot);
-    globalSources.push(...gManifest.sources.map((d) => fromDesiredSource(d, undefined, homeRoot)));
-  } catch {
-    // ignore
-  }
-
-  // Workspace state & manifest
-  if (workspaceRoot) {
+    // Global state & manifest
     try {
-      const pState = await readState('project', workspaceRoot, homeRoot);
-      for (const inst of pState.installations) {
-        allInstallations.push({ inst, wsRoot: workspaceRoot });
+      const gState = await readState('global', undefined, homeRoot);
+      for (const inst of gState.installations) {
+        allInstallations.push({ inst });
       }
-      const pManifest = await readManifest('project', workspaceRoot, homeRoot);
-      workspaceSources.push(...pManifest.sources.map((d) => fromDesiredSource(d, workspaceRoot, homeRoot)));
+      const gManifest = await readManifest('global', undefined, homeRoot);
+      globalSources.push(...gManifest.sources.map((d) => fromDesiredSource(d, undefined, homeRoot)));
     } catch {
       // ignore
     }
+
+    // Workspace state & manifest
+    if (workspaceRoot) {
+      try {
+        const pState = await readState('project', workspaceRoot, homeRoot);
+        for (const inst of pState.installations) {
+          allInstallations.push({ inst, wsRoot: workspaceRoot });
+        }
+        const pManifest = await readManifest('project', workspaceRoot, homeRoot);
+        workspaceSources.push(...pManifest.sources.map((d) => fromDesiredSource(d, workspaceRoot, homeRoot)));
+      } catch {
+        // ignore
+      }
+    }
+
+    const filteredEntries = allInstallations.filter(({ inst }) => {
+      if (filterScope && inst.scope !== filterScope) return false;
+      if (filterAssistant && inst.assistant !== filterAssistant) return false;
+      if (filterKind && inst.kind !== filterKind) return false;
+      return true;
+    });
+
+    const reports = await checkDriftForAll(
+      filteredEntries.map((e) => e.inst),
+      { globalSources, workspaceSources },
+      homeRoot
+    );
+
+    for (let i = 0; i < reports.length; i++) {
+      const report = reports[i];
+      const { inst, wsRoot } = filteredEntries[i];
+      entries.push({
+        inst,
+        report,
+        key: `${inst.assistant}:${inst.scope}:${inst.kind}:${inst.name}`,
+        workspace: inst.scope === 'global' ? null : (wsRoot ?? null),
+      });
+    }
   }
 
-  const filteredEntries = allInstallations.filter(({ inst }) => {
-    if (filterScope && inst.scope !== filterScope) return false;
-    if (filterAssistant && inst.assistant !== filterAssistant) return false;
-    if (filterKind && inst.kind !== filterKind) return false;
-    return true;
-  });
+  let targetEntries = entries;
+  if (opts.item) {
+    targetEntries = entries.filter((e) => e.key === opts.item);
+    if (targetEntries.length === 0) {
+      throw new CliError('NOT_FOUND', `Item "${opts.item}" not found`);
+    }
+  }
 
-  const reports = await checkDriftForAll(
-    filteredEntries.map((e) => e.inst),
-    { globalSources, workspaceSources },
-    homeRoot
-  );
+  if (opts.explain) {
+    const explainedList = targetEntries.map((e) =>
+      explainInstallation(e.inst, e.report, { workspace: e.workspace, key: e.key })
+    );
+    if (opts.json) {
+      return explainedList.map((item) => formatExplainCliJson(item));
+    }
+    return explainedList.map((item) => formatExplainCliLine(item)).join('\n');
+  }
 
-  const updates: CliUpdateItem[] = [];
-
-  for (let i = 0; i < reports.length; i++) {
-    const report = reports[i];
-    const { inst, wsRoot } = filteredEntries[i];
-
-    updates.push({
-      key: `${inst.assistant}:${inst.scope}:${inst.kind}:${inst.name}`,
+  const updates: CliUpdateItem[] = targetEntries.map((e) => {
+    const { inst, report, key, workspace } = e;
+    const sourceId = inst.sourceId ?? inst.source?.id;
+    return {
+      key,
       kind: inst.kind,
       name: inst.name,
       assistant: inst.assistant,
       scope: inst.scope,
       status: report.status,
-      ...(inst.sourceId ? { sourceId: inst.sourceId } : {}),
+      ...(sourceId ? { sourceId } : {}),
       ...(report.installedCommit ? { installedCommit: report.installedCommit } : {}),
       ...(report.currentCommit ? { currentCommit: report.currentCommit } : {}),
       ...(report.commitsBehind !== undefined ? { commitsBehind: report.commitsBehind } : {}),
       ...(report.details ? { details: report.details } : {}),
-      workspace: inst.scope === 'global' ? null : (wsRoot ?? null),
-    });
-  }
+      workspace,
+    };
+  });
 
   return updates;
 }

@@ -23,6 +23,7 @@ import { uninstallInstallation } from '../engine/uninstall';
 import { getAdapter, getEnabledAdapters, ALL_ADAPTERS } from '../adapters/registry';
 import { getScopeLabel, getScopeIconName, getScopeQuickPickItems } from './scopeIcons';
 import type { DriftReport } from '../engine/types';
+import { explainInstallation, formatExplainTooltip } from '../engine/explain';
 import { getWorkspaceRoot } from './workspacePicker';
 import { getKindIconName } from './kindIcons';
 import {
@@ -340,9 +341,10 @@ export class InstalledTreeDataProvider {
         isDir ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
       );
       item.description = desc;
+      const explained = explainInstallation(inst, report);
       let tooltip = `Name: ${inst.name}\nKind: ${inst.kind}\nAssistant: ${inst.assistant}\nScope: ${inst.scope}\nPath: ${inst.path}\nInstalled at: ${inst.installedAt}${
         element.tooltipDescription ? `\nDescription: ${element.tooltipDescription}` : ''
-      }${report?.details ? `\nStatus: ${report.details}` : ''}${inst.sourceRevision?.commit ? `\nCommit: ${inst.sourceRevision.commit}` : ''}`;
+      }\n${formatExplainTooltip(explained)}`;
       if (inst.held) {
         tooltip += `\nHeld: skipped by Update all`;
       }

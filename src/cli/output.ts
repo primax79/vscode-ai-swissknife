@@ -20,6 +20,10 @@ export function formatError(code: ErrorCode, message: string): CliErrorResponse 
 }
 
 export function emit(data: unknown): void {
+  if (typeof data === 'string') {
+    process.stdout.write(data.endsWith('\n') ? data : data + '\n');
+    return;
+  }
   const jsonStr = JSON.stringify(data, null, 2);
   process.stdout.write(jsonStr + '\n');
 }

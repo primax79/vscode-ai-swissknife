@@ -661,6 +661,7 @@ export async function analyzeLocalDrift(
       status: 'modified-locally',
       hasLocalPatch,
       diskHash,
+      ...(installation.rebaselined ? { rebaselined: installation.rebaselined } : {}),
       details: hasLocalPatch
         ? 'Local adaptations applied (local.patch)'
         : 'Local content differs from installed version',
@@ -671,6 +672,7 @@ export async function analyzeLocalDrift(
     installation,
     status: 'up-to-date',
     diskHash,
+    ...(installation.rebaselined ? { rebaselined: installation.rebaselined } : {}),
   };
 }
 
@@ -2587,6 +2589,9 @@ export function applyProvenanceEvaluation(
   homeRoot?: string
 ): boolean {
   let hashChanged = false;
+  if (evalResult.rebaselined === 'codec') {
+    inst.rebaselined = 'codec';
+  }
   if (evalResult.rebaselined === 'codec' && evalResult.recomputedContentHash) {
     if (inst.contentHash !== evalResult.recomputedContentHash) {
       inst.contentHash = evalResult.recomputedContentHash;

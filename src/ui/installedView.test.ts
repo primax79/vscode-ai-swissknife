@@ -120,4 +120,44 @@ describe('InstalledTreeDataProvider - moveItem', () => {
     const targetSkill = await kiloAdapter.readSkill('move-skill', { scope: 'project', projectRoot: testTempDir });
     assert.ok(targetSkill, 'Target installation should be intact');
   });
+
+  it('getTreeItem includes explain fields and reason in tooltip', async () => {
+    const inst = {
+      assistant: 'claude-code' as const,
+      scope: 'project' as const,
+      kind: 'skill' as const,
+      name: 'tooltip-skill',
+      path: path.join(testTempDir, 'tooltip-skill'),
+      projectPath: testTempDir,
+      source: {
+        id: 'team-source',
+        scope: 'workspace' as const,
+        type: 'git-marketplace' as const,
+        location: 'https://github.com/org/team.git',
+      },
+      sourceRevision: {
+        commit: '1234567890abcdef1234567890abcdef12345678',
+      },
+      contentHash: 'abcdef1234567890abcdef1234567890abcdef12',
+      sourceContentHash: 'abcdef1234567890abcdef1234567890abcdef12',
+      installedAt: new Date().toISOString(),
+    };
+    const report = {
+      installation: inst,
+      status: 'update-available' as const,
+      installedCommit: '1234567890abcdef1234567890abcdef12345678',
+      currentCommit: '9876543210fedcba9876543210fedcba98765432',
+      diskHash: inst.contentHash,
+      sourceHash: '0000000000000000000000000000000000000000',
+    };
+    const item = new InstalledInstallationItem(inst, report);
+    const treeItem = await provider.getTreeItem(item);
+    const tooltip = String(treeItem.tooltip);
+    assert.ok(tooltip.includes('Source: workspace:team-source'));
+    assert.ok(tooltip.includes('Installed commit: 1234567'));
+    assert.ok(tooltip.includes('Current commit: 9876543'));
+    assert.ok(tooltip.includes('Installed hash: abcdef1'));
+    assert.ok(tooltip.includes('Status: update-available'));
+    assert.ok(tooltip.includes('Reason: source moved from 1234567 to 9876543 and the content changed'));
+  });
 });

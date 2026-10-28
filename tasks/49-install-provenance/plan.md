@@ -16,8 +16,9 @@ folders read from the live working tree, catalog vs check commit, artifact match
 
 ### 49.7 - Explain the state in UI and CLI
 
-- **Status:** `open` · **Short:** Explain state · **Size:** S · **Depends on:** 49.5
+- **Status:** `delivered` (2026-10-28) · **Short:** Explain state · **Size:** S · **Depends on:** 49.5
 - **Goal:** spec §4: tooltip/detail panel and `status --explain` show source, installed and current commit, both hashes, state and reason; owner validates by use (fresh install shows up to date; an edit in the working copy no longer flips items).
+- **Result:** Implementato il formatter condiviso `src/engine/explain.ts` (riutilizzato da CLI, tooltip e pannello di dettaglio) che espone identità sorgente, commit installato/corrente, hash installato/sorgente/disco, stato di drift e spiegazione discorsiva a riga singola per tutti gli 8 stati; `status --explain [<item>]` (e `updates --explain`) supporta output testuale e `--json`; il tooltip dell'albero installato e il pannello di dettaglio webview integrano i medesimi dati (valori abbreviati a 7 caratteri nel tooltip/CLI text, estesi nel pannello di dettaglio).
 
 ## Closed
 
