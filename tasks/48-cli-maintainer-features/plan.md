@@ -6,7 +6,7 @@
 
 ### 48.2 - Flag di `installed`: link vs copia, link interrotto, orfano (rimosso dalla sorgente), installato due volte
 
-- **Status:** `open` (solo bozza) · **Short:** Flag link e orfani installed · **Size:** M · **Depends on:** 46.1 · **Use cases:** UC034
+- **Status:** `in progress` (solo bozza; 2026-10-28; kilo) · **Short:** Flag link e orfani installed · **Size:** M · **Depends on:** 46.1 · **Use cases:** UC034
 - **Goal:** Aggiungere flag basati su `lstat` all'output di `installed` per distinguere symlink vs copia, link interrotti, installazioni duplicate tra ambiti e artefatti orfani rimossi dalla rispettiva sorgente a monte.
 
 ### 48.3 - Report di shadowing: identical / stale / ahead / unique, e protezione `--force` prima di eliminare copie ahead/unique
