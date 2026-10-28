@@ -29,7 +29,7 @@ $SWK_CLI <command> [options]
 | `sources` | Registered sources of both scopes |
 | `catalog` | Artifacts available from the sources (per-source failures are reported inside `diagnostics`, not as a global failure) |
 | `installed` | Managed and observed (unmanaged) items with assistant, scope, path and match against a source |
-| `updates` | Drift per managed item: `up-to-date`, `update-available`, `modified-locally`, `modified-and-update-available`, `missing-on-disk` |
+| `updates` | Drift per managed item: `up-to-date`, `update-available`, `modified-locally`, `modified-and-update-available`, `missing-on-disk`, `source-unavailable`, `provenance-unknown` |
 | `item` | Details of one item by key: origin, other places it is installed in, whether a diff exists (`--diff` includes a size-capped unified diff) |
 | `plan-install` | What installing an artifact would do per assistant and scope (new / conflict / unsupported). **Never applies anything.** |
 | `redistribute` | After you edit a skill/agent/command in a folder that is registered as a `local-folder` source, push the change to every installed copy that came from that folder (all assistants and scopes). **Plan only unless `--write`.** |
@@ -38,6 +38,7 @@ $SWK_CLI <command> [options]
 | `source add` | Register a source (`<type> <location>`, optional `--id --name --scope --replace`); the location is validated and an existing id is refused without `--replace`. |
 | `source remove` | Unregister a source (`<id> --scope`). |
 | `update` | Update one installed item by key, or `--all` (filters `--scope --assistant --source --kind`). Items modified locally are skipped unless `--include-modified` (their previous version goes to the trash). Reports `oldRevision`, `newRevision` and `changedFiles` per item. |
+| `relink` | Re-link a managed installation (`<item>`) to a specific registered source (`--source <scope>:<id>`), writing `source` and clearing `provenance: unknown`. **Plan only unless `--write`.** |
 | `trash list` | The trash, newest first, with where each item came from. |
 | `trash restore` | Restore one trash entry (`<id> [--to <path>]`); never overwrites an existing file. |
 | `trash empty` | Permanently delete what is in the trash (`--scope` to limit). |
