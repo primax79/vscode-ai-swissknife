@@ -29,7 +29,7 @@ $SWK_CLI <command> [options]
 | `sources` | Registered sources of both scopes |
 | `catalog` | Artifacts available from the sources (per-source failures are reported inside `diagnostics`, not as a global failure) |
 | `installed` | Managed and observed (unmanaged) items with assistant, scope, path and match against a source |
-| `updates` | Drift per managed item: `up-to-date`, `update-available`, `modified-locally`, `modified-and-update-available`, `missing-on-disk`, `source-unavailable`, `provenance-unknown` |
+| `updates` | Drift per managed item: `up-to-date`, `update-available`, `modified-locally`, `modified-and-update-available`, `missing-on-disk`, `source-unavailable`, `provenance-unknown` (`--explain` explains state with hashes and reasons; `status` is an alias) |
 | `item` | Details of one item by key: origin, other places it is installed in, whether a diff exists (`--diff` includes a size-capped unified diff) |
 | `plan-install` | What installing an artifact would do per assistant and scope (new / conflict / unsupported). **Never applies anything.** |
 | `redistribute` | After you edit a skill/agent/command in a folder that is registered as a `local-folder` source, push the change to every installed copy that came from that folder (all assistants and scopes). **Plan only unless `--write`.** |
@@ -52,6 +52,9 @@ $SWK_CLI installed --assistants claude-code --scope global
 
 # 2. What has an update?
 $SWK_CLI updates
+# Or explain drift state per item with source, commits, hashes and reasons:
+$SWK_CLI status --explain
+$SWK_CLI status --explain --json
 
 # 3. What would installing an artifact do in two assistants and both scopes?
 $SWK_CLI plan-install --source team-skills --artifact gitignore --assistants claude-code,kilo-code --scopes global,project
